@@ -112,3 +112,5 @@ M1 enrollment and provider bootstrap integration, 2026-09-07:
 No paid cloud resource has been created. Startup gates stay closed. Guestctl/image boot and sanitation, runtime readiness, renewal, operator recovery and the bounded live drill remain M1 work; M2–M7 are still open.
 
 The final configured gpt-5.6-sol trail check verified the four new decision rows and independently passed 21 focused enrollment/provisioning/transport tests plus the composed native enrollment smoke. The report corrects the precise renderer validation order. Formatting and customer-skill validation pass. No transcript directory was supplied, so this is an artifact/trail audit.
+
+Enrollment/provisioning checkpoint `12cee632fda2e86b655e052916e81f9bd69d98f4` is committed and pushed. [Linux CI run 34066756174](https://github.com/yahorbarkouski/agent-cloud/actions/runs/34066756174) passed frozen installation, the 94-test full check, formatting, fresh pinned Smallstep setup, all three native smokes and cleanup. M1 remains in progress.
