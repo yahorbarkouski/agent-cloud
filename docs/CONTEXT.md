@@ -6,7 +6,7 @@ Updated 2026-09-06. The active goal is the full agent-operated cloud in `docs/ar
 
 Customers bring Codex or Claude Code. Build their cloud interface, not an AI agent. Use TypeScript, ordinary Linux VMs, Docker Compose, SSH, and Hetzner. Keep cloud costs low, avoid expensive fallback types and provider benchmarking, and maintain AGENTS.md, customer skills, decisions, progress, and this summary. Useful authorized work must continue without repeatedly asking for approval.
 
-Repository: `/Users/yahorbarkouski/Documents/ChatGPT/learning/agent-cloud`, a standalone Git repository inside an unrelated parent workspace. Only work here. Branch `yahor/agent-cloud`, private origin `https://github.com/yahorbarkouski/agent-cloud.git`. Main has initial M0 commit `bbd33ad`; pricing checkpoint `df11926` and resource sketch `a5572db` are pushed on the working branch. Their Linux CI passed. Inspect current Git state for the resource implementation checkpoint rather than repeating setup.
+Repository: `/Users/yahorbarkouski/Documents/ChatGPT/learning/agent-cloud`, a standalone Git repository inside an unrelated parent workspace. Only work here. Branch `yahor/agent-cloud`, private origin `https://github.com/yahorbarkouski/agent-cloud.git`. Main has initial M0 commit `bbd33ad`; pricing checkpoint `df11926` and resource sketch `a5572db` are pushed on the working branch. Their Linux CI passed. Resource checkpoint `8f416ba194bab4b31229426873d4a91e1e2c253e` is also committed and pushed; Linux CI run `34061962745` passed frozen installation, all checks, and formatting. Inspect current Git state for later documentation or implementation changes rather than repeating setup.
 
 ## Implemented and verified
 
@@ -44,7 +44,7 @@ CUA previously had `hetznerTab`, tab 1/browser 2, at project security/tokens. Cr
 
 ## Next concrete work
 
-1. Commit/push the verified resource checkpoint if still uncommitted, then verify CI. The detailed review is `docs/research/m1-resources-review.md`; ensure its final configured-model audit and final formatting are included. Keep this context current with commit/CI results.
+1. The reviewed resource checkpoint `8f416ba` is committed and pushed, and CI run `34061962745` passed. Final formatting and customer-skill validation also passed. Resume M1 implementation rather than repeating the resource checkpoint. The detailed report and configured `gpt-5.6-sol` trail audit are in `docs/research/m1-resources-review.md`.
 2. Finish M1. Build guest cloud-init/image configuration, host identity and readiness verification; wire runtime catalog snapshots; implement explicit operator resolution for unknown/duplicate effects. Live API/worker activation intentionally rejects `PROVIDER=hetzner` until these paths and bounded spending/cleanup are ready. Verification is no longer externally blocked by the account.
 3. M2: device/browser auth without Stripe, CLI grant management, SSH CA/gateway and access revocation. Existing local token login is the development path.
 4. M3: transfers, durable command runs, Compose deploy, Caddy HTTPS routes/domains. M4: PostgreSQL/analytics recipes, off-VM backup and proven isolated restore. M5: usage/alerts/traffic and other cost limits. M6: self-hosting. M7: low-cost failure drills and end-to-end proof.

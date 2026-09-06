@@ -75,3 +75,5 @@ M1 provider-resource checkpoint, 2026-09-06:
 - The bounded review report is `docs/research/m1-resources-review.md`. Its reviewer independently passed 28 resource/transport/migration tests. No cloud mutation was used, and live guest boot/SSH behavior remains unverified.
 
 M1 still needs guest bootstrap and host identity, runtime API catalog refresh, operator resolution of blocked effects, and a bounded live cleanup drill. No paid resource has been created. M2–M7 remain open.
+
+Resource checkpoint `8f416ba194bab4b31229426873d4a91e1e2c253e` is committed and pushed. [Linux CI run 34061962745](https://github.com/yahorbarkouski/agent-cloud/actions/runs/34061962745) passed frozen install, full checks, and formatting. Local formatting and customer-skill validation passed. The configured `gpt-5.6-sol` audit verified the four resource decision rows and reran the two safety regressions; it found no additional issue.
