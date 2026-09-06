@@ -61,3 +61,5 @@ Review-driven changes in this checkpoint:
 - Migration 0004 marks reconstructed historical price components `legacy_estimate`. Original aggregate estimates stay unchanged. New simulated and live account prices have explicit provenance.
 - VM/IP prices now come from the same account-pricing response as their currency. The current credential-free live artifact is `docs/research/hetzner-catalog-check-2026-09-06.json`, captured at 20:56:14 UTC and validated against the current catalog schema. Counts remained zero.
 - The credential intake requires a real owner-only `.local` directory and rejects symlinks before starting a listener.
+
+Pricing checkpoint `df11926d54d23cee06f21f9705c83fdb3cba5345` is pushed on `yahor/agent-cloud`. [GitHub CI run 34059794570](https://github.com/yahorbarkouski/agent-cloud/actions/runs/34059794570) passed on Linux, including frozen installation, checks, and formatting. `docs/architecture/provider-resources.md` records the next implementation slice. It has not enabled live provisioning.
