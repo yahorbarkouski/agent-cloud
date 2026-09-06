@@ -1,62 +1,46 @@
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import {
   CloudError,
-  newId,
-  catalogItemSchema,
-  selectOffer,
-  attemptIdSchema,
   allocationIdSchema,
+  catalogItemSchema,
   lifecycleCommandSchema,
   providerCommandSchema,
+  effectResolutionSchema,
   attemptOutcomeSchema,
+  operationIntentSchema,
+  networkProfileSchema,
   isOperationTerminal,
   type Operation,
   type OperationId,
-  type ProviderCommand,
-  type MachineProvider,
-  type Failure,
-  type OperationProgress,
-  type ProviderServer,
   type Machine,
-  type Submission,
+  type MachineProvider,
+  type ProviderServer,
+  type Failure,
 } from '@agent-cloud/contracts';
 import {
   operations,
   machines,
   allocations,
   attempts,
-  accounts,
+  providerResources,
   auditEvents,
   operationRecord,
   machineRecord,
   withMachineLock,
-  type Connection,
   type Database,
+  type Connection,
 } from '@agent-cloud/db';
 import type { Config } from './config.js';
-import { loadPrincipal } from './auth.js';
-import { authorizeCommand } from './lifecycle.js';
-
-function ownership(operation: Operation) {
-  return {
-    managed_by: 'agent-cloud',
-    account_id: operation.accountId,
-    machine_id: operation.machineId,
-    operation_id: operation.id,
-  };
-}
-
-async function setProgress(db: Database, operation: Operation, progress: OperationProgress) {
-  await db.transaction(async (tx) => {
-    await tx.update(operations).set({ progress }).where(eq(operations.id, operation.id));
-    await tx.insert(auditEvents).values({
-      accountId: operation.accountId,
-      subjectId: operation.id,
-      event: `operation.${progress.kind}`,
-      details: progress,
-    });
-  });
-}
+import { journalEffect, resolveEffect, setProgress, type Attempt } from './effect-journal.js';
+import {
+  effectLabels,
+  ownedLabels,
+  ownedRef,
+  matchesLabels,
+  recordAbsence,
+  type Allocation,
+  type OwnedResource,
+} from './resource-journal.js';
 
 async function fail(input: {
   db: Database;
@@ -101,64 +85,6 @@ async function fail(input: {
   });
 }
 
-async function prepare(
-  db: Database,
-  operation: Operation,
-  machine: Machine,
-  command: ProviderCommand,
-  limits: Config['limits'],
-) {
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(78131025)`);
-    await tx.select().from(accounts).where(eq(accounts.id, operation.accountId)).for('update');
-    const principal = await loadPrincipal(tx, operation.grantId);
-    const [stored] = await tx.select().from(operations).where(eq(operations.id, operation.id));
-    if (!stored) throw new CloudError('internal_error', 'Operation disappeared before submission.');
-    authorizeCommand(principal, machine.projectId, lifecycleCommandSchema.parse(stored.command));
-    if (command.kind === 'create' || command.kind === 'resize') {
-      const offer = catalogItemSchema.parse(stored.offer);
-      const [account] = await tx
-        .select()
-        .from(accounts)
-        .where(eq(accounts.id, operation.accountId));
-      const global = await tx.select().from(allocations).where(isNull(allocations.retiredAt));
-      const active = global.filter((allocation) => allocation.accountId === operation.accountId);
-      if (
-        !account ||
-        limits.currency !== offer.currency ||
-        global.some((allocation) => allocation.currency !== offer.currency) ||
-        global.reduce((sum, allocation) => sum + allocation.hourlyMicros, 0) >
-          limits.maxHourlyMicros ||
-        global.length > limits.maxMachines ||
-        account.currency !== offer.currency ||
-        principal.policy.currency !== offer.currency ||
-        active.some((allocation) => allocation.currency !== offer.currency) ||
-        active.reduce((sum, allocation) => sum + allocation.hourlyMicros, 0) >
-          Math.min(account.maxHourlyMicros, principal.policy.maxHourlyMicros) ||
-        active.length > Math.min(account.maxMachines, principal.policy.maxMachines)
-      )
-        throw new CloudError(
-          'budget_exceeded',
-          'The current deployment, account, or credential limits no longer cover this reservation.',
-        );
-    }
-    const attemptId = newId.attempt();
-    await tx.insert(attempts).values({
-      id: attemptId,
-      accountId: operation.accountId,
-      operationId: operation.id,
-      sequence: 1,
-      command,
-      outcome: { kind: 'prepared' },
-    });
-    await tx
-      .update(operations)
-      .set({ progress: { kind: 'submitting', attemptId } })
-      .where(eq(operations.id, operation.id));
-    return attemptId;
-  });
-}
-
 async function complete(input: {
   db: Database;
   operation: Operation;
@@ -176,6 +102,20 @@ async function complete(input: {
     if (operation.kind === 'machine.destroy') {
       if (server)
         throw new CloudError('provider_outcome_unknown', 'Server still exists after deletion.');
+      const liveResources = await tx
+        .select()
+        .from(providerResources)
+        .where(
+          and(
+            eq(providerResources.allocationId, allocation.id),
+            isNull(providerResources.absentAt),
+          ),
+        );
+      if (liveResources.length)
+        throw new CloudError(
+          'provider_outcome_unknown',
+          'Owned resources remain after server deletion.',
+        );
       await tx
         .update(allocations)
         .set({ retiredAt: new Date() })
@@ -241,44 +181,72 @@ async function complete(input: {
   });
 }
 
-async function reconcile(input: {
+type Work = {
   db: Database;
   operation: Operation;
   machine: Machine;
-  command: ProviderCommand;
+  allocation: Allocation;
   provider: MachineProvider;
-}) {
-  const { db, operation, machine, command, provider } = input;
-  if (command.kind === 'create') {
-    const matches = await provider.findServers({ labels: ownership(operation) });
-    if (matches.length > 1) {
-      await setProgress(db, operation, { kind: 'blocked', reason: 'duplicate_provider_resources' });
+  limits: Config['limits'];
+  history: Attempt[];
+  resources: OwnedResource[];
+};
+function effectOf(history: Attempt[], kind: string) {
+  return history.find((row) => providerCommandSchema.parse(row.command).kind === kind);
+}
+async function beginFailure(work: Work, error: Failure) {
+  if (work.operation.kind === 'machine.create') {
+    const create = effectOf(work.history, 'create');
+    const possibleVm = create && attemptOutcomeSchema.parse(create.outcome).kind !== 'rejected';
+    const live = work.resources.filter((row) => !row.absentAt);
+    if (!possibleVm && live.length) {
+      await work.db
+        .update(operations)
+        .set({ intent: { kind: 'compensate', error } })
+        .where(eq(operations.id, work.operation.id));
+      await setProgress(work.db, work.operation, { kind: 'cleaning_up' });
       return;
     }
-    const server = matches[0];
-    if (
-      server &&
-      server.serverType === command.serverType &&
-      server.region === command.region &&
-      server.power === 'running'
-    ) {
-      await complete({ db, operation, machine, server });
-      return;
-    }
-  } else {
-    const server = await provider.getServer({ serverId: command.serverId });
-    if (
-      (command.kind === 'destroy' && server === null) ||
-      (command.kind === 'resize' && server?.serverType === command.serverType) ||
-      (command.kind === 'power_off' && server?.power === 'off') ||
-      (command.kind === 'power_on' && server?.power === 'running')
-    ) {
-      await complete({ db, operation, machine, server });
-      return;
-    }
-    // Running does not prove that an uncertain reboot actually happened.
+    await fail({ ...work, error, allocationAbsent: !possibleVm && live.length === 0 });
+  } else await fail({ ...work, error, allocationAbsent: false });
+}
+
+async function cleanupIp(work: Work): Promise<boolean> {
+  const resource = work.resources.find((row) => row.kind === 'primary_ip' && !row.absentAt);
+  if (!resource) return true;
+  const ip = await work.provider.getPrimaryIp({ primaryIpId: resource.providerId });
+  if (!ip) {
+    await recordAbsence(work.db, work.allocation, ownedRef(resource));
+    return false;
   }
-  await setProgress(db, operation, { kind: 'blocked', reason: 'provider_outcome_unknown' });
+  if (
+    ip.id !== resource.providerId ||
+    !matchesLabels(ip.labels, ownedLabels(resource)) ||
+    ip.assignment.kind !== 'unassigned'
+  ) {
+    await setProgress(work.db, work.operation, {
+      kind: 'blocked',
+      reason: 'provider_resource_mismatch',
+    });
+    return false;
+  }
+  const previous = work.history.find((row) => {
+    const command = providerCommandSchema.parse(row.command);
+    return command.kind === 'delete_primary_ip' && command.primaryIpId === ip.id;
+  });
+  if (previous) {
+    await setProgress(work.db, work.operation, {
+      kind: 'blocked',
+      reason: 'provider_outcome_unknown',
+    });
+    return false;
+  }
+  await journalEffect({
+    ...work,
+    command: { kind: 'delete_primary_ip', primaryIpId: ip.id },
+    authorization: 'cleanup',
+  });
+  return false;
 }
 
 async function advanceLocked(
@@ -296,162 +264,201 @@ async function advanceLocked(
   const machine = machineRecord(machineRow);
   if (machine.provider !== provider.kind)
     throw new CloudError('internal_error', 'Wrong provider for this machine.');
-  const lifecycle = lifecycleCommandSchema.parse(row.command);
-  const [previous] = await db
+  const [allocation] = await db
+    .select()
+    .from(allocations)
+    .where(and(eq(allocations.machineId, machine.id), isNull(allocations.retiredAt)));
+  if (!allocation) throw new CloudError('internal_error', 'Operation allocation is missing.');
+  const history = await db
     .select()
     .from(attempts)
     .where(eq(attempts.operationId, operation.id))
-    .orderBy(desc(attempts.sequence));
-
-  if (!previous) {
-    const [allocation] = await db
-      .select()
-      .from(allocations)
-      .where(and(eq(allocations.machineId, machine.id), isNull(allocations.retiredAt)));
-    const offer =
-      lifecycle.kind === 'create' || lifecycle.kind === 'resize'
-        ? catalogItemSchema.parse(row.offer)
-        : null;
-    let command: ProviderCommand;
-    if (lifecycle.kind === 'create') {
-      if (!offer) throw new CloudError('internal_error', 'Create offer is missing.');
-      command = {
-        kind: 'create',
-        name: machine.id.replaceAll('_', '-'),
-        serverType: offer.serverType,
-        region: lifecycle.spec.region,
-        labels: ownership(operation),
-      };
-    } else {
-      if (!allocation?.serverId)
-        throw new CloudError('internal_error', 'Provider allocation is missing.');
-      command =
-        lifecycle.kind === 'resize'
-          ? {
-              kind: 'resize',
-              serverId: allocation.serverId,
-              serverType: catalogItemSchema.parse(row.offer).serverType,
-            }
-          : { kind: lifecycle.kind, serverId: allocation.serverId };
-    }
-    let attemptId;
-    try {
-      if (offer) {
-        const catalog = await provider.getCatalog();
-        const current = selectOffer({ catalog, size: offer.size, region: offer.region });
-        if (
-          catalog.provider !== machine.provider ||
-          current.serverType !== offer.serverType ||
-          current.architecture !== offer.architecture ||
-          current.diskGb !== offer.diskGb
-        )
-          throw new CloudError(
-            'capacity_unavailable',
-            'The admitted provider offer changed; submit a new operation.',
-          );
-        if (current.currency !== offer.currency || current.hourlyMicros > offer.hourlyMicros)
-          throw new CloudError(
-            'budget_exceeded',
-            'Current provider price exceeds the admitted reservation.',
-          );
-      }
-      attemptId = await prepare(db, operation, machine, command, limits);
-    } catch (error) {
-      if (!(error instanceof CloudError)) throw error;
-      await fail({
-        db,
-        operation,
-        machine,
-        error: error.failure,
-        allocationAbsent: lifecycle.kind === 'create',
-      });
-      return;
-    }
-    let outcome;
-    try {
-      outcome = await provider.submit({ attemptId, command });
-    } catch {
-      // Transport exceptions never establish whether an external mutation took place.
-      outcome = {
-        kind: 'unknown',
-        reason: 'Provider submission failed without a definitive response.',
-      } satisfies Submission;
-    }
-    await db.transaction(async (tx) => {
-      await tx.update(attempts).set({ outcome }).where(eq(attempts.id, attemptId));
-      if (outcome.kind === 'accepted' || outcome.kind === 'completed') {
-        await tx
-          .update(allocations)
-          .set({ serverId: outcome.serverId })
-          .where(and(eq(allocations.machineId, machine.id), isNull(allocations.retiredAt)));
-      }
+    .orderBy(asc(attempts.sequence));
+  const resources = await db
+    .select()
+    .from(providerResources)
+    .where(eq(providerResources.allocationId, allocation.id));
+  const work: Work = { db, operation, machine, allocation, provider, limits, history, resources };
+  const pending = history.find(
+    (attempt) => effectResolutionSchema.parse(attempt.resolution).kind === 'pending',
+  );
+  if (pending) {
+    const command = providerCommandSchema.parse(pending.command);
+    const resource = resources.find((candidate) =>
+      command.kind === 'delete_primary_ip'
+        ? candidate.kind === 'primary_ip' && candidate.providerId === command.primaryIpId
+        : 'serverId' in command &&
+          candidate.kind === 'server' &&
+          candidate.providerId === command.serverId,
+    );
+    await resolveEffect({
+      ...work,
+      attempt: pending,
+      expectedLabels: resource ? ownedLabels(resource) : effectLabels(operation, allocation),
     });
     return;
   }
-
-  const outcome = attemptOutcomeSchema.parse(previous.outcome);
-  const command = providerCommandSchema.parse(previous.command);
-  switch (outcome.kind) {
-    case 'prepared':
-    case 'unknown':
-      await reconcile({ db, operation, machine, command, provider });
+  const intent = operationIntentSchema.parse(row.intent);
+  if (intent.kind === 'compensate') {
+    if (await cleanupIp(work)) await fail({ ...work, error: intent.error, allocationAbsent: true });
+    return;
+  }
+  for (const attempt of history) {
+    const resolution = effectResolutionSchema.parse(attempt.resolution);
+    if (resolution.kind === 'failed') {
+      if (providerCommandSchema.parse(attempt.command).kind === 'delete_primary_ip') {
+        // A later external cleanup can still establish absence without replaying this effect.
+        if (await cleanupIp(work)) await complete({ ...work, server: null });
+      } else await beginFailure(work, resolution.error);
       return;
-    case 'rejected':
-      await fail({
-        db,
-        operation,
-        machine,
-        error: outcome.error,
-        allocationAbsent: lifecycle.kind === 'create',
-      });
-      return;
-    case 'accepted': {
-      const action = await provider.getAction({ actionId: outcome.actionId });
-      if (action.kind === 'running') {
-        await setProgress(db, operation, {
-          kind: 'waiting_provider',
-          attemptId: attemptIdSchema.parse(previous.id),
-          actionId: outcome.actionId,
-          serverId: outcome.serverId,
+    }
+  }
+  const lifecycle = lifecycleCommandSchema.parse(row.command);
+  try {
+    if (lifecycle.kind === 'create') {
+      const profile = networkProfileSchema.parse(allocation.networkProfile);
+      const offer = catalogItemSchema.parse(row.offer);
+      const labels = effectLabels(operation, allocation);
+      const ipEffect = effectOf(history, 'create_primary_ip');
+      if (profile === 'managed_ipv4' && !ipEffect) {
+        await journalEffect({
+          ...work,
+          command: {
+            kind: 'create_primary_ip',
+            name: `${machine.id.replaceAll('_', '-')}-ipv4`,
+            region: offer.region,
+            labels,
+          },
+          authorization: 'fresh',
         });
         return;
       }
-      if (action.kind === 'failed') {
-        await fail({ db, operation, machine, error: action.error, allocationAbsent: false });
+      const create = effectOf(history, 'create');
+      if (!create) {
+        const ip = resources.find(
+          (candidate) => candidate.kind === 'primary_ip' && !candidate.absentAt,
+        );
+        if (profile === 'managed_ipv4') {
+          if (!ip) throw new CloudError('internal_error', 'Confirmed Primary IP is missing.');
+          const observed = await provider.getPrimaryIp({ primaryIpId: ip.providerId });
+          if (!observed) {
+            await recordAbsence(db, allocation, ownedRef(ip));
+            throw new CloudError('provider_rejected', 'Primary IP disappeared before VM creation.');
+          }
+          if (
+            observed.id !== ip.providerId ||
+            !matchesLabels(observed.labels, ownedLabels(ip)) ||
+            observed.assignment.kind !== 'unassigned' ||
+            !observed.autoDelete
+          ) {
+            await setProgress(db, operation, {
+              kind: 'blocked',
+              reason: 'provider_resource_mismatch',
+            });
+            return;
+          }
+        }
+        await journalEffect({
+          ...work,
+          command: {
+            kind: 'create',
+            name: machine.id.replaceAll('_', '-'),
+            serverType: offer.serverType,
+            region: offer.region,
+            labels,
+            network: ip ? { kind: 'primary_ip', id: ip.providerId } : { kind: 'legacy' },
+          },
+          authorization: 'fresh',
+        });
         return;
       }
-      break;
-    }
-    case 'completed':
-      break;
-  }
-  const server = await provider.getServer({ serverId: outcome.serverId });
-  if (
-    server &&
-    command.kind === 'create' &&
-    (server.serverType !== command.serverType ||
-      server.region !== command.region ||
-      Object.entries(ownership(operation)).some(([key, value]) => server.labels[key] !== value))
-  ) {
-    await setProgress(db, operation, { kind: 'blocked', reason: 'provider_resource_mismatch' });
-    return;
-  }
-  if (command.kind === 'destroy') {
-    if (server) {
-      await setProgress(db, operation, { kind: 'verifying', serverId: server.id });
+      const resolution = effectResolutionSchema.parse(create.resolution);
+      if (resolution.kind !== 'confirmed' || resolution.observation.kind !== 'server')
+        throw new CloudError('internal_error', 'Create has no verified server.');
+      await complete({ ...work, server: resolution.observation.server });
       return;
     }
-  } else if (
-    !server ||
-    (command.kind === 'resize' && server.serverType !== command.serverType) ||
-    ((command.kind === 'power_on' || command.kind === 'reboot' || command.kind === 'create') &&
-      server.power !== 'running') ||
-    (command.kind === 'power_off' && server.power !== 'off')
-  ) {
-    await setProgress(db, operation, { kind: 'verifying', serverId: outcome.serverId });
-    return;
+    const serverResource = resources.find(
+      (candidate) => candidate.kind === 'server' && !candidate.absentAt,
+    );
+    if (lifecycle.kind === 'destroy' && !serverResource) {
+      if (await cleanupIp(work)) await complete({ ...work, server: null });
+      return;
+    }
+    const effect = effectOf(history, lifecycle.kind);
+    if (effect) {
+      const resolution = effectResolutionSchema.parse(effect.resolution);
+      if (resolution.kind !== 'confirmed')
+        throw new CloudError('internal_error', 'Effect was not resolved.');
+      if (lifecycle.kind === 'destroy') {
+        if (await cleanupIp(work)) await complete({ ...work, server: null });
+      } else if (resolution.observation.kind === 'server')
+        await complete({ ...work, server: resolution.observation.server });
+      else throw new CloudError('internal_error', 'Machine operation has no verified server.');
+      return;
+    }
+    if (!serverResource || !allocation.serverId)
+      throw new CloudError('provider_rejected', 'Machine has no live provider server.');
+    const server = await provider.getServer({ serverId: allocation.serverId });
+    if (!server) {
+      if (lifecycle.kind === 'destroy') {
+        await recordAbsence(db, allocation, ownedRef(serverResource));
+        return;
+      }
+      throw new CloudError('provider_rejected', 'Provider server is absent.');
+    }
+    if (
+      server.id !== serverResource.providerId ||
+      !matchesLabels(server.labels, ownedLabels(serverResource))
+    ) {
+      await setProgress(db, operation, { kind: 'blocked', reason: 'provider_resource_mismatch' });
+      return;
+    }
+    if (
+      allocation.networkProfile === 'managed_ipv4' &&
+      !resources.some(
+        (resource) =>
+          resource.kind === 'primary_ip' &&
+          resource.providerId === server.primaryIpId &&
+          !resource.absentAt,
+      )
+    ) {
+      await setProgress(db, operation, { kind: 'blocked', reason: 'provider_resource_mismatch' });
+      return;
+    }
+    await journalEffect({
+      ...work,
+      command:
+        lifecycle.kind === 'resize'
+          ? {
+              kind: 'resize',
+              serverId: server.id,
+              serverType: catalogItemSchema.parse(row.offer).serverType,
+            }
+          : { kind: lifecycle.kind, serverId: server.id },
+      authorization: 'fresh',
+    });
+  } catch (error) {
+    if (!(error instanceof CloudError)) throw error;
+    // A failure after submission must not turn an uncertain effect into cleanup.
+    const currentHistory = await db
+      .select()
+      .from(attempts)
+      .where(eq(attempts.operationId, operation.id));
+    if (
+      currentHistory.some(
+        (attempt) => effectResolutionSchema.parse(attempt.resolution).kind === 'pending',
+      )
+    ) {
+      await setProgress(db, operation, { kind: 'blocked', reason: 'provider_resource_mismatch' });
+      return;
+    }
+    const current = await db
+      .select()
+      .from(providerResources)
+      .where(eq(providerResources.allocationId, allocation.id));
+    await beginFailure({ ...work, resources: current, history: currentHistory }, error.failure);
   }
-  await complete({ db, operation, machine, server });
 }
 
 export async function advanceOperation(input: {

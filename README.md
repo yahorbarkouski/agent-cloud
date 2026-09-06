@@ -86,7 +86,7 @@ PROVIDER_CURRENCY=USD pnpm hetzner:check
 
 Use your account currency. The operator can explicitly map `HCLOUD_SERVER_TYPE_SMALL`, `HCLOUD_SERVER_TYPE_MEDIUM`, and `HCLOUD_SERVER_TYPE_LARGE`; defaults are CX23/CX33/CX43. Unavailable configured types do not trigger automatic substitution. `HCLOUD_ARCHITECTURE` defaults to `x86` and excludes incompatible offers. The read-only check is also useful before choosing a bounded development VM.
 
-Stop the API and worker while applying the currency migration from M0, then rebuild and restart both. The migration retains historical EUR denominations, credential limits, and the original provider type mapping and aggregate estimates. Migrated offers are marked `legacy_estimate`; their reconstructed VM/IP split is synthetic. The obsolete `MAX_PROVIDER_HOURLY_EUR` variable fails with a migration message instead of silently changing its meaning.
+Stop the API and worker while applying migrations from an earlier checkpoint, then rebuild and restart both. The migration retains historical EUR denominations, credential limits, and the original provider type mapping and aggregate estimates. Migrated offers are marked `legacy_estimate`; their reconstructed VM/IP split is synthetic. Migration 0005 also upgrades server-only receipts and preserves legacy simulator allocations without inventing owned IPs. New allocations track the VM and IPv4 separately and release their reservation only after both are absent. The obsolete `MAX_PROVIDER_HOURLY_EUR` variable fails with a migration message instead of silently changing its meaning.
 
 ## Repository
 

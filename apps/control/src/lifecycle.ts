@@ -262,6 +262,7 @@ export async function admit(input: {
         accountId: principal.accountId,
         machineId: machine.id,
         provider: input.provider,
+        networkProfile: 'managed_ipv4',
         hourlyMicros: price,
         currency: offer.currency,
         offer,

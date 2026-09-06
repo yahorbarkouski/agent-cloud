@@ -29,6 +29,7 @@ export function createHetznerRequest(input: { token: string; transport?: typeof 
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
     });
+    if (response.status === 204 && response.ok) return null;
     const body: unknown = await response.json();
     if (!response.ok) {
       const parsed = errorSchema.safeParse(body);

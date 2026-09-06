@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
-import { eq, isNull } from 'drizzle-orm';
+import { eq, isNull, sql } from 'drizzle-orm';
 import {
   simulatedCatalog,
   operationResponseSchema,
@@ -111,23 +111,43 @@ it('blocks a queued price increase but reconciles submitted work after prices or
     operationId: second.id,
     provider,
   });
+  await advanceOperation({
+    connection: fixture.connection,
+    operationId: second.id,
+    provider,
+    limits: { currency: 'EUR', maxMachines: 100, maxHourlyMicros: 10000000 },
+  });
+  await advanceOperation({
+    connection: fixture.connection,
+    operationId: second.id,
+    provider,
+    limits: { currency: 'EUR', maxMachines: 100, maxHourlyMicros: 10000000 },
+  });
   catalog.items = [];
   await expect
-    .poll(async () => {
-      await advanceOperation({
-        limits: { currency: catalog.currency, maxMachines: 100, maxHourlyMicros: 10000000 },
-        connection: fixture.connection,
-        operationId: second.id,
-        provider,
-      });
-      const [stored] = await fixture.connection.db
-        .select()
-        .from(operations)
-        .where(eq(operations.id, second.id));
-      return operationProgressSchema.parse(stored?.progress).kind;
-    })
+    .poll(
+      async () => {
+        await advanceOperation({
+          limits: { currency: catalog.currency, maxMachines: 100, maxHourlyMicros: 10000000 },
+          connection: fixture.connection,
+          operationId: second.id,
+          provider,
+        });
+        const [stored] = await fixture.connection.db
+          .select()
+          .from(operations)
+          .where(eq(operations.id, second.id));
+        return operationProgressSchema.parse(stored?.progress).kind;
+      },
+      { timeout: 5000, interval: 20 },
+    )
     .toBe('succeeded');
-  expect(await fixture.connection.db.select().from(attempts)).toHaveLength(1);
+  expect(
+    await fixture.connection.db
+      .select()
+      .from(attempts)
+      .where(sql`${attempts.command}->>'kind' = 'create'`),
+  ).toHaveLength(1);
 });
 
 it('runs admission and usage in USD without interpreting the amounts as EUR', async () => {
@@ -145,16 +165,19 @@ it('runs admission and usage in USD without interpreting the amounts as EUR', as
   const { operation } = operationResponseSchema.parse(await response.json());
   const provider = new SimulatedProvider({ db: fixture.connection.db, catalog: () => catalog });
   await expect
-    .poll(async () => {
-      await advanceOperation({
-        limits: { currency: catalog.currency, maxMachines: 100, maxHourlyMicros: 10000000 },
-        connection: fixture.connection,
-        operationId: operation.id,
-        provider,
-      });
-      const [stored] = await fixture.connection.db.select().from(operations);
-      return operationProgressSchema.parse(stored?.progress).kind;
-    })
+    .poll(
+      async () => {
+        await advanceOperation({
+          limits: { currency: catalog.currency, maxMachines: 100, maxHourlyMicros: 10000000 },
+          connection: fixture.connection,
+          operationId: operation.id,
+          provider,
+        });
+        const [stored] = await fixture.connection.db.select().from(operations);
+        return operationProgressSchema.parse(stored?.progress).kind;
+      },
+      { timeout: 5000, interval: 20 },
+    )
     .toBe('succeeded');
   const usage = await app.request('/v1/usage', {
     headers: { Authorization: `Bearer ${account.token}` },
@@ -222,7 +245,7 @@ it.each(['type', 'region', 'ownership'])(
       }
     }
     const provider = new WrongServer({ db: fixture.connection.db });
-    for (let i = 0; i < 3; i++)
+    for (let i = 0; i < 5; i++)
       await advanceOperation({
         connection: fixture.connection,
         operationId: operation.id,
@@ -237,6 +260,11 @@ it.each(['type', 'region', 'ownership'])(
     expect(
       await fixture.connection.db.select().from(allocations).where(isNull(allocations.retiredAt)),
     ).toHaveLength(1);
-    expect(await fixture.connection.db.select().from(attempts)).toHaveLength(1);
+    expect(
+      await fixture.connection.db
+        .select()
+        .from(attempts)
+        .where(sql`${attempts.command}->>'kind' = 'create'`),
+    ).toHaveLength(1);
   },
 );

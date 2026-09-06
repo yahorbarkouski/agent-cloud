@@ -49,3 +49,9 @@ export const newId = {
   grant: (): GrantId => grantIdSchema.parse(`grant_${randomUUID()}`),
   attempt: (): AttemptId => attemptIdSchema.parse(`att_${randomUUID()}`),
 };
+
+export const resourceRefSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('server'), id: z.string().min(1) }),
+  z.object({ kind: z.literal('primary_ip'), id: z.string().min(1) }),
+]);
+export type ResourceRef = z.infer<typeof resourceRefSchema>;

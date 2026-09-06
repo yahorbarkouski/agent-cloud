@@ -16,6 +16,7 @@ Build an open-source cloud operated by customers' existing coding agents. We do 
 
 - Model states with discriminated unions. Derive transport types from validated schemas. Validate external input at boundaries; do not use `any`, non-null assertions, or unchecked casts.
 - Money carries an explicit currency. Reserve gross provider prices including IPv4 using integer micro-units. Pin the admitted offer; recheck before a fresh effect and never substitute types automatically. Catalog network refresh runs outside admission transactions.
+- The operation controller selects effects; `effect-journal.ts` owns submission/reconciliation and `resource-journal.ts` owns provider identity records. VM and Primary IP cleanup must both be observed before releasing a reservation. Never compensate an IP while a VM submission is uncertain.
 - Keep business decisions separate from provider I/O. Persist intent before external mutation. An unknown provider outcome must be reconciled before another create attempt.
 - Tenant authorization, idempotency, concurrency, revocation, and actual restore checks are required behavior. Tests must exercise failure modes rather than mirror implementation.
 - Prefer a small number of explicit modules to speculative frameworks. Runtime capabilities and documentation must reflect implemented behavior.

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { eq, isNull } from 'drizzle-orm';
+import { eq, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   operationResponseSchema,
@@ -81,6 +81,42 @@ async function tick(
   });
 }
 
+async function serverAttempts() {
+  return fixture.connection.db
+    .select()
+    .from(attempts)
+    .where(sql`${attempts.command}->>'kind' = 'create'`);
+}
+async function submitVm(
+  operation: Operation,
+  provider = new SimulatedProvider({ db: fixture.connection.db }),
+) {
+  await expect
+    .poll(
+      async () => {
+        await tick(operation, provider);
+        return (await serverAttempts()).length;
+      },
+      { timeout: 5000, interval: 20 },
+    )
+    .toBe(1);
+}
+async function settle(
+  operation: Operation,
+  provider = new SimulatedProvider({ db: fixture.connection.db }),
+  expected = 'succeeded',
+) {
+  await expect
+    .poll(
+      async () => {
+        await tick(operation, provider);
+        return (await readOperation(operation)).progress.kind;
+      },
+      { timeout: 5000, interval: 20 },
+    )
+    .toBe(expected);
+}
+
 async function readOperation(operation: Operation) {
   const [row] = await fixture.connection.db
     .select()
@@ -99,8 +135,7 @@ async function act(operation: Operation, command: MachineAction) {
   const response = await request(`/v1/machines/${operation.machineId}/actions`, command);
   expect(response.status).toBe(202);
   const action = operationResponseSchema.parse(await response.json()).operation;
-  await tick(action);
-  await tick(action);
+  await settle(action);
   expect((await readOperation(action)).progress.kind).toBe('succeeded');
   return action;
 }
@@ -202,7 +237,7 @@ describe('durable admission and API isolation', () => {
 describe('provider uncertainty and recovery', () => {
   it('recovers a lost create response after restart and grant revocation without resubmitting', async () => {
     const operation = await create();
-    await tick(
+    await submitVm(
       operation,
       new SimulatedProvider({
         db: fixture.connection.db,
@@ -213,15 +248,15 @@ describe('provider uncertainty and recovery', () => {
       .update(grants)
       .set({ revokedAt: new Date() })
       .where(eq(grants.id, account.principal.grantId));
-    await tick(operation);
+    await settle(operation);
     expect((await readOperation(operation)).progress.kind).toBe('succeeded');
-    expect(await fixture.connection.db.select().from(attempts)).toHaveLength(1);
+    expect(await serverAttempts()).toHaveLength(1);
     expect(await fixture.connection.db.select().from(simulatedServers)).toHaveLength(1);
   });
 
   it('retains the reservation while a created server is temporarily invisible', async () => {
     const operation = await create();
-    await tick(
+    await submitVm(
       operation,
       new SimulatedProvider({
         db: fixture.connection.db,
@@ -237,14 +272,14 @@ describe('provider uncertainty and recovery', () => {
       await fixture.connection.db.select().from(allocations).where(isNull(allocations.retiredAt)),
     ).toHaveLength(1);
     await fixture.connection.db.update(simulatedServers).set({ visibleAt: new Date() });
-    await tick(operation);
+    await settle(operation);
     expect((await readOperation(operation)).progress.kind).toBe('succeeded');
-    expect(await fixture.connection.db.select().from(attempts)).toHaveLength(1);
+    expect(await serverAttempts()).toHaveLength(1);
   });
 
   it('never treats an empty inventory as permission for another paid create', async () => {
     const operation = await create();
-    await tick(
+    await submitVm(
       operation,
       new SimulatedProvider({
         db: fixture.connection.db,
@@ -253,7 +288,7 @@ describe('provider uncertainty and recovery', () => {
     );
     for (let i = 0; i < 5; i++) await tick(operation);
     expect((await readOperation(operation)).progress.kind).toBe('blocked');
-    expect(await fixture.connection.db.select().from(attempts)).toHaveLength(1);
+    expect(await serverAttempts()).toHaveLength(1);
     expect(await fixture.connection.db.select().from(simulatedServers)).toHaveLength(0);
     expect(
       await fixture.connection.db.select().from(allocations).where(isNull(allocations.retiredAt)),
@@ -262,7 +297,7 @@ describe('provider uncertainty and recovery', () => {
 
   it('surfaces duplicate owned resources without choosing or deleting one', async () => {
     const operation = await create();
-    await tick(
+    await submitVm(
       operation,
       new SimulatedProvider({ db: fixture.connection.db, fault: { kind: 'duplicate_create' } }),
     );
@@ -272,7 +307,7 @@ describe('provider uncertainty and recovery', () => {
       reason: 'duplicate_provider_resources',
     });
     expect(await fixture.connection.db.select().from(simulatedServers)).toHaveLength(2);
-    expect(await fixture.connection.db.select().from(attempts)).toHaveLength(1);
+    expect(await serverAttempts()).toHaveLength(1);
   });
 
   it('recovers a crash after submission but before recording its response', async () => {
@@ -291,22 +326,25 @@ describe('provider uncertainty and recovery', () => {
         },
       ),
     ).rejects.toMatchObject({ code: 86 });
-    const [attempt] = await fixture.connection.db.select().from(attempts);
+    const [attempt] = await serverAttempts();
     const outcome = attemptOutcomeSchema.parse(attempt?.outcome);
     expect(outcome.kind).toBe('prepared');
     await expect
-      .poll(async () => {
-        await tick(operation);
-        return (await readOperation(operation)).progress.kind;
-      })
+      .poll(
+        async () => {
+          await tick(operation);
+          return (await readOperation(operation)).progress.kind;
+        },
+        { timeout: 5000, interval: 20 },
+      )
       .toBe('succeeded');
-    expect(await fixture.connection.db.select().from(attempts)).toHaveLength(1);
+    expect(await serverAttempts()).toHaveLength(1);
     expect(await fixture.connection.db.select().from(simulatedServers)).toHaveLength(1);
   });
 
   it('prevents unknown outcomes, commands and attempt history from being overwritten', async () => {
     const operation = await create();
-    await tick(
+    await submitVm(
       operation,
       new SimulatedProvider({
         db: fixture.connection.db,
@@ -322,7 +360,7 @@ describe('provider uncertainty and recovery', () => {
         .set({ command: { kind: 'destroy', serverId: 'different' } }),
     ).rejects.toThrow();
     await expect(fixture.connection.db.delete(attempts)).rejects.toThrow();
-    expect(await fixture.connection.db.select().from(attempts)).toHaveLength(1);
+    expect(await serverAttempts()).toHaveLength(1);
   });
 
   it('stops revoked queued work before submission and releases its unused reservation', async () => {
@@ -342,8 +380,8 @@ describe('provider uncertainty and recovery', () => {
   it('allows only one worker to submit an operation', async () => {
     const operation = await create();
     await Promise.all(Array.from({ length: 8 }, () => tick(operation)));
-    await tick(operation);
-    expect(await fixture.connection.db.select().from(attempts)).toHaveLength(1);
+    await settle(operation);
+    expect(await serverAttempts()).toHaveLength(1);
     expect(await fixture.connection.db.select().from(simulatedServers)).toHaveLength(1);
     expect((await readOperation(operation)).progress.kind).toBe('succeeded');
   });
@@ -352,8 +390,7 @@ describe('provider uncertainty and recovery', () => {
 describe('observable machine lifecycle', () => {
   it('creates, powers off, resizes, powers on, reboots and deletes with explicit versions', async () => {
     const operation = await create();
-    await tick(operation);
-    await tick(operation);
+    await settle(operation);
     let machine = await readMachine(operation);
     expect(machine.state).toMatchObject({
       kind: 'allocated',
@@ -405,8 +442,7 @@ describe('observable machine lifecycle', () => {
       db: fixture.connection.db,
       fault: { kind: 'action_failure' },
     });
-    await tick(operation, provider);
-    await tick(operation, provider);
+    await settle(operation, provider, 'failed');
     expect((await readOperation(operation)).progress.kind).toBe('failed');
     expect(
       await fixture.connection.db.select().from(allocations).where(isNull(allocations.retiredAt)),

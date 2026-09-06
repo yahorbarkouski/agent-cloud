@@ -44,7 +44,7 @@ export async function testDatabase(initialize?: (connection: Connection) => Prom
     databaseUrl: url.toString(),
     async reset() {
       await connection.pool.query(
-        'TRUNCATE accounts, simulated_servers, simulated_actions RESTART IDENTITY CASCADE',
+        'TRUNCATE accounts, simulated_servers, simulated_actions, simulated_primary_ips RESTART IDENTITY CASCADE',
       );
     },
     async close() {

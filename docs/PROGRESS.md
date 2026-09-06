@@ -63,3 +63,15 @@ Review-driven changes in this checkpoint:
 - The credential intake requires a real owner-only `.local` directory and rejects symlinks before starting a listener.
 
 Pricing checkpoint `df11926d54d23cee06f21f9705c83fdb3cba5345` is pushed on `yahor/agent-cloud`. [GitHub CI run 34059794570](https://github.com/yahorbarkouski/agent-cloud/actions/runs/34059794570) passed on Linux, including frozen installation, checks, and formatting. `docs/architecture/provider-resources.md` records the next implementation slice. It has not enabled live provisioning.
+
+M1 provider-resource checkpoint, 2026-09-06:
+
+- New allocations create a labelled IPv4 Primary IP before their VM. Both resources have account/allocation ownership records and share the immutable effect journal. Submission receipts identify resource kind and ID; resolutions are recorded once. The full VM/IP reservation remains until both are confirmed absent.
+- Revocation or a definitive VM rejection can trigger cleanup of an unused IP. Unknown VM submission keeps the IP and reservation for reconciliation. IP deletion continues after confirmed server deletion, including when provider auto-delete leaves an unassigned IP behind. Ownership, assignment, and identity mismatches block destructive work.
+- Post-submission exceptions now reload attempt history before any compensation decision. The provider receipt persists even if its ownership claim conflicts. Current Hetzner assignment parsing rejects both contradictory type/ID combinations. These cases have focused regression coverage.
+- The persistent simulator models independent IP effects and can retain IPs after server deletion. Transport fixtures verify explicit IP attachment without automatic IPv6, bodyless 204 deletion, inventory pagination, resource-specific absence, and uncertain responses.
+- `pnpm check` passes 67 tests in eight files, build/typecheck, and strict lint. The previous legacy resize coverage gap is closed. The migration matrix covers queued/prepared/accepted/completed creates and resizes from the M0 schema, including old receipt/progress shapes and known-server ownership backfill.
+- Migration 0005 applied to the local development DB with API/worker stopped. Restarted services passed `pnpm smoke:local` for `vm_3605fdec-d4f6-4fce-b77c-f53fb4173928`. A read-only database check confirmed its retired reservation and zero remaining live owned resources, simulator VMs, or simulator IPs. The updated customer skill passed validation.
+- The bounded review report is `docs/research/m1-resources-review.md`. Its reviewer independently passed 28 resource/transport/migration tests. No cloud mutation was used, and live guest boot/SSH behavior remains unverified.
+
+M1 still needs guest bootstrap and host identity, runtime API catalog refresh, operator resolution of blocked effects, and a bounded live cleanup drill. No paid resource has been created. M2–M7 remain open.

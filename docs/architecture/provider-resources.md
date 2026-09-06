@@ -1,6 +1,6 @@
-# Provider resource lifecycle, next M1 slice
+# Provider resource lifecycle
 
-This is the implementation sketch following pricing checkpoint `df11926`. These resource steps are not implemented yet. The running API and worker still reject Hetzner activation.
+The resource controller is implemented and verified with persisted simulator state and Hetzner transport fixtures. The running API and worker still reject Hetzner activation until guest boot, identity, runtime catalog refresh, and operational limits are ready.
 
 ## Choice
 
@@ -10,11 +10,11 @@ An automatic IP created by a VM request has no separately submitted ownership la
 
 ## Durable records
 
-Keep machines as stable identities and allocations as reservations. Add allocation-owned provider resource records for the VM and Primary IP. Each record binds account, allocation, resource kind, provider ID, ownership labels, and observed lifecycle state. Preserve original provider receipts.
+Keep machines as stable identities and allocations as reservations. Allocation-owned provider resource records track ownership for the VM and Primary IP. Each record binds account, allocation, resource kind, provider ID, ownership labels, and observed lifecycle state. Preserve original provider receipts.
 
-Generalize submission receipts to a discriminated resource reference, `server` or `primary_ip`, with its ID. Journal every external mutation before calling the provider. Use a deliberate format migration for existing server-only receipts if the wire shape changes; do not weaken attempt-history guards or silently rewrite the meaning of historical outcomes. Existing simulated allocations need an explicit legacy profile because they never owned real IPs.
+Submission receipts are generalized to a discriminated resource reference, `server` or `primary_ip`, with its ID. Journal every external mutation before calling the provider. Migration 0005 converts existing server-only receipts and progress, adds an explicit legacy network profile, and backfills known server ownership. It changes JSON shape inside one transaction while preserving provider outcomes. Database guards keep attempt commands and recorded receipts immutable. Resolution moves once from pending to confirmed or failed. Existing simulated allocations retain their legacy profile because they never owned Primary IPs.
 
-The operation controller should select the next required effect from durable records. Provider transport remains separate from that decision. Reuse the existing machine lock, admission/global/account locks, attempt journal, and unknown-outcome rules. Avoid a second independent ledger just for IPs.
+`advance-operation.ts` selects the next effect from durable attempts, allocation resources, and operation intent. `effect-journal.ts` checks fresh authorization and prices, journals submission, and reconciles receipts. `resource-journal.ts` binds ownership and records observed absence. They reuse the existing machine lock and admission locks. Provider transport handles external requests and observations.
 
 ## Create and cleanup
 
@@ -22,22 +22,22 @@ The operation controller should select the next required effect from durable rec
 2. Check current authorization, offer, and limits; journal and submit Primary IP creation with allocation/operation/attempt labels.
 3. Reconcile the IP result. One matching resource can be adopted. Zero inventory does not prove absence; multiple matches block for operator resolution. Never blindly repeat an uncertain create.
 4. Recheck before the VM effect. Journal creation with the owned IP ID, image, firewall and SSH identity. Record the returned VM and its attached IP IDs.
-5. Verify the returned resource identities, then verify guest boot and SSH identity before reporting guest readiness.
+5. Verify the returned resource IDs, labels, region, server type, attached IP, and power. Live guest readiness remains pending. Guest boot and SSH identity verification are the next implementation slice.
 
-If no VM effect was submitted, a revoked credential or rejected offer can stop provisioning and compensate the confirmed unassigned IP. Cleanup is part of the admitted operation and must not be blocked by a lowered spending ceiling. An uncertain VM outcome must be reconciled before touching its IP. A confirmed VM with possible data retains its allocation for explicit authorized deletion.
+If no VM effect was submitted, or the provider definitively rejected that request, a revoked credential or rejected offer can stop provisioning and compensate the confirmed unassigned IP. Cleanup is part of the admitted operation and must not be blocked by a lowered spending ceiling. An uncertain VM outcome must be reconciled before touching its IP. A confirmed VM with possible data retains its allocation for explicit authorized deletion. An error after submission cannot start compensation using stale history. The controller reloads attempts and keeps an unresolved effect blocked. A receipt is saved before the ownership claim so an ownership conflict cannot erase the provider result.
 
 Deletion journals the VM request and observes VM absence, then observes the Primary IP. Auto-delete is useful but is not proof that cleanup completed. If an owned IP remains unassigned, journal its deletion and observe absence. An IP assigned elsewhere or with mismatched ownership must block cleanup. Release the reservation only after every billable resource owned by the allocation is confirmed absent.
 
-## API details to encode
+## Hetzner transport
 
-The official spec saved during this run says Primary IP creation without an assignee may omit its `action`. A successful Primary IP delete returns HTTP 204 without a JSON body. The current shared HTTP transport always reads JSON, so it must support bodyless success before IP deletion is implemented.
+The official spec saved during this run says Primary IP creation without an assignee may omit its `action`. A successful Primary IP delete returns HTTP 204 without a JSON body. The shared HTTP transport now accepts that bodyless success. Absence requires a resource-specific 404 with `not_found`; authorization errors and malformed responses do not prove absence.
 
-The Primary IP `assignee_type` description says `unassigned` is returned from 1 August 2026, although the same spec's enum lists only `server`. Accept the documented unassigned form with a null assignee ID; validate contradictory assignment states instead of treating an omitted action or an empty 204 response as a failed mutation.
+The Primary IP `assignee_type` description says `unassigned` is returned from 1 August 2026, although the same spec's enum lists only `server`. The parser accepts the documented unassigned form with a null ID and server assignments with positive IDs. It rejects both contradictory combinations. The older server-plus-null form is not accepted for live cleanup after the documented transition date.
 
 Provider credentials stay in the control plane. Shared firewall/key/image configuration is not an allocation-owned resource and must not be deleted during customer cleanup.
 
 ## Verification
 
-Use the persistent simulator for IP and VM effects, with faults scoped by resource kind. Cover process exits after each provider commit, delayed inventory, duplicate IPs, revoked grants between effects, rejected VM creation after IP allocation, unknown VM creation, assigned or foreign IPs during cleanup, lost delete responses, and an empty HTTP 204. Existing create/resize/reboot and migration coverage must keep passing.
+The persistent simulator has faults scoped by resource kind. `tests/resources.test.ts` covers exits after IP creation/deletion, delayed inventory, duplicate IPs, revocation between effects, rejected and uncertain VM creation, foreign/assigned IPs, lost delete responses, conflicting receipts, reservation retention, immutable resolutions, and tenant ownership constraints. The original VM crash test still uses a separate exiting process. `tests/hetzner-transport.test.ts` checks outgoing IP/VM requests, HTTP 204, assignment consistency, pagination, error classification, and uncertain responses. Upgrade tests exercise queued, prepared, accepted, and completed create/resize operations from M0. None of these fixtures proves live provider behavior.
 
-Only then run a bounded inexpensive live test with a cleanup deadline and known resources. Current pricing evidence is USD 0.027798/hour for CPX12 plus IPv4, including VAT, but refresh it before provisioning. No paid resource has been created so far.
+After guest and operator recovery support is ready, run a bounded inexpensive live test with a cleanup deadline and known resources. Current pricing evidence is USD 0.027798/hour for CPX12 plus IPv4, including VAT, but refresh it before provisioning. No paid resource has been created so far.

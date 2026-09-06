@@ -36,6 +36,13 @@
       "when": 1788728119916,
       "tag": "0004_offer_price_basis",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788729120715,
+      "tag": "0005_provider_resources",
+      "breakpoints": true
     }
   ]
 }

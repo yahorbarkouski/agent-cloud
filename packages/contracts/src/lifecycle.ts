@@ -3,6 +3,7 @@ import { providerKindSchema, regionSchema, sizeSchema } from './catalog.js';
 import { failureSchema } from './errors.js';
 import {
   accountIdSchema,
+  resourceRefSchema,
   allocationIdSchema,
   attemptIdSchema,
   grantIdSchema,
@@ -67,9 +68,10 @@ export const operationProgressSchema = z.discriminatedUnion('kind', [
     kind: z.literal('waiting_provider'),
     attemptId: attemptIdSchema,
     actionId: z.string(),
-    serverId: z.string(),
+    resource: resourceRefSchema,
   }),
-  z.object({ kind: z.literal('verifying'), serverId: z.string() }),
+  z.object({ kind: z.literal('cleaning_up') }),
+  z.object({ kind: z.literal('verifying'), resource: resourceRefSchema }),
   z.object({
     kind: z.literal('blocked'),
     reason: z.enum([

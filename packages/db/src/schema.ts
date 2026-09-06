@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   pgTable,
+  primaryKey,
   text,
   integer,
   timestamp,
@@ -99,6 +100,7 @@ export const allocations = pgTable(
     machineId: text('machine_id').notNull(),
     provider: text('provider').notNull(),
     serverId: text('server_id'),
+    networkProfile: text('network_profile').notNull(),
     currency: text('currency').notNull(),
     hourlyMicros: integer('hourly_micros').notNull(),
     offer: jsonb('offer'),
@@ -119,6 +121,7 @@ export const allocations = pgTable(
       .on(t.machineId)
       .where(sql`${t.retiredAt} IS NULL`),
     unique().on(t.provider, t.serverId),
+    unique('allocation_account_identity').on(t.accountId, t.id),
     check('allocation_price', sql`${t.hourlyMicros} >= 0`),
   ],
 );
@@ -134,6 +137,7 @@ export const operations = pgTable(
     kind: text('kind').notNull(),
     command: jsonb('command').notNull(),
     offer: jsonb('offer'),
+    intent: jsonb('intent').notNull().default({ kind: 'run' }),
     progress: jsonb('progress').notNull(),
     createdAt: createdAt(),
   },
@@ -162,6 +166,7 @@ export const attempts = pgTable(
     sequence: integer('sequence').notNull(),
     command: jsonb('command').notNull(),
     outcome: jsonb('outcome').notNull(),
+    resolution: jsonb('resolution').notNull().default({ kind: 'pending' }),
     createdAt: createdAt(),
   },
   (t) => [
@@ -216,4 +221,32 @@ export const simulatedActions = pgTable('simulated_actions', {
   result: jsonb('result').notNull(),
   completedAt: timestamp('completed_at', { withTimezone: true }),
   readyAt: timestamp('ready_at', { withTimezone: true }).notNull(),
+});
+
+export const providerResources = pgTable(
+  'provider_resources',
+  {
+    provider: text('provider').notNull(),
+    kind: text('kind').notNull(),
+    providerId: text('provider_id').notNull(),
+    accountId: text('account_id').notNull(),
+    allocationId: text('allocation_id').notNull(),
+    labels: jsonb('labels').notNull(),
+    absentAt: timestamp('absent_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.provider, t.kind, t.providerId] }),
+    foreignKey({
+      columns: [t.accountId, t.allocationId],
+      foreignColumns: [allocations.accountId, allocations.id],
+    }),
+    check('provider_resource_kind', sql`${t.kind} IN ('server', 'primary_ip')`),
+  ],
+);
+
+export const simulatedPrimaryIps = pgTable('simulated_primary_ips', {
+  id: text('id').primaryKey(),
+  value: jsonb('value').notNull(),
+  visibleAt: timestamp('visible_at', { withTimezone: true }).notNull(),
 });

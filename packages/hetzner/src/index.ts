@@ -17,6 +17,7 @@ import {
   type ProviderServer,
   type ProviderAction,
   type Submission,
+  type ProviderPrimaryIp,
 } from '@agent-cloud/contracts';
 
 const numericId = z.int().positive();
@@ -28,8 +29,41 @@ const serverSchema = z.object({
   server_type: z.object({ name: z.string() }),
   location: z.object({ name: z.string() }),
   labels: z.record(z.string(), z.string()),
-  public_net: z.object({ ipv4: z.object({ ip: z.string() }).nullable() }),
+  public_net: z.object({ ipv4: z.object({ id: numericId, ip: z.string() }).nullable() }),
 });
+
+const primaryIpSchema = z
+  .object({
+    id: numericId,
+    name: z.string(),
+    type: z.enum(['ipv4', 'ipv6']),
+    ip: z.string(),
+    location: z.object({ name: z.string() }),
+    labels: z.record(z.string(), z.string()),
+    auto_delete: z.boolean(),
+    assignee_type: z.enum(['server', 'unassigned']),
+    assignee_id: numericId.nullable(),
+  })
+  .refine(
+    (value) => (value.assignee_type === 'unassigned') === (value.assignee_id === null),
+    'Primary IP assignment type and ID must agree.',
+  );
+function primaryIpRecord(value: z.infer<typeof primaryIpSchema>): ProviderPrimaryIp {
+  if (value.type !== 'ipv4')
+    throw new CloudError('provider_outcome_unknown', 'Expected an IPv4 Primary IP.');
+  return {
+    id: String(value.id),
+    name: value.name,
+    region: value.location.name,
+    ipv4: z.ipv4().parse(value.ip),
+    labels: value.labels,
+    autoDelete: value.auto_delete,
+    assignment:
+      value.assignee_id === null
+        ? { kind: 'unassigned' }
+        : { kind: 'server', serverId: String(value.assignee_id) },
+  };
+}
 
 function serverRecord(value: z.infer<typeof serverSchema>): ProviderServer {
   const power =
@@ -47,6 +81,7 @@ function serverRecord(value: z.infer<typeof serverSchema>): ProviderServer {
     power,
     labels: value.labels,
     ipv4: value.public_net.ipv4?.ip ?? null,
+    primaryIpId: value.public_net.ipv4 ? String(value.public_net.ipv4.id) : null,
   };
 }
 
@@ -88,7 +123,52 @@ export class HetznerProvider implements MachineProvider {
   async submit(input: Parameters<MachineProvider['submit']>[0]): Promise<Submission> {
     const { command } = input;
     try {
+      if (command.kind === 'create_primary_ip') {
+        const result = z
+          .object({ primary_ip: primaryIpSchema, action: actionSchema.nullable().optional() })
+          .parse(
+            await this.request({
+              path: '/primary_ips',
+              method: 'POST',
+              body: {
+                name: command.name,
+                type: 'ipv4',
+                location: command.region,
+                auto_delete: true,
+                labels: { ...command.labels, attempt_id: input.attemptId },
+              },
+            }),
+          );
+        const resource = { kind: 'primary_ip', id: String(result.primary_ip.id) } satisfies {
+          kind: 'primary_ip';
+          id: string;
+        };
+        return result.action
+          ? { kind: 'accepted', resource, actionId: String(result.action.id) }
+          : { kind: 'completed', resource };
+      }
+      if (command.kind === 'delete_primary_ip') {
+        const id = z
+          .string()
+          .regex(/^[1-9][0-9]*$/)
+          .parse(command.primaryIpId);
+        await this.request({ path: `/primary_ips/${id}`, method: 'DELETE' });
+        return { kind: 'completed', resource: { kind: 'primary_ip', id } };
+      }
       if (command.kind === 'create') {
+        if (command.network.kind === 'legacy')
+          return {
+            kind: 'rejected',
+            error: {
+              code: 'invalid_input',
+              message: 'Live creation requires an explicitly owned Primary IP.',
+              retryable: false,
+            },
+          };
+        const primaryIpId = z
+          .string()
+          .regex(/^[1-9][0-9]*$/)
+          .parse(command.network.id);
         const body = await this.request({
           path: '/servers',
           method: 'POST',
@@ -103,7 +183,7 @@ export class HetznerProvider implements MachineProvider {
             user_data: this.template.userData,
             start_after_create: true,
             automount: false,
-            public_net: { enable_ipv4: true, enable_ipv6: true },
+            public_net: { enable_ipv4: true, ipv4: Number(primaryIpId), enable_ipv6: false },
           },
         });
         const result = z
@@ -111,7 +191,7 @@ export class HetznerProvider implements MachineProvider {
           .parse(body);
         return {
           kind: 'accepted',
-          serverId: String(result.server.id),
+          resource: { kind: 'server', id: String(result.server.id) },
           actionId: String(result.action.id),
         };
       }
@@ -145,7 +225,11 @@ export class HetznerProvider implements MachineProvider {
         body,
       });
       const result = z.object({ action: actionSchema }).parse(response);
-      return { kind: 'accepted', serverId: id, actionId: String(result.action.id) };
+      return {
+        kind: 'accepted',
+        resource: { kind: 'server', id },
+        actionId: String(result.action.id),
+      };
     } catch (error) {
       if (
         error instanceof HttpError &&
@@ -208,6 +292,59 @@ export class HetznerProvider implements MachineProvider {
         return null;
       throw error;
     }
+  }
+
+  async getPrimaryIp(input: { primaryIpId: string }): Promise<ProviderPrimaryIp | null> {
+    const id = z
+      .string()
+      .regex(/^[1-9][0-9]*$/)
+      .parse(input.primaryIpId);
+    try {
+      const result = z
+        .object({ primary_ip: primaryIpSchema })
+        .parse(await this.request({ path: `/primary_ips/${id}` }));
+      return primaryIpRecord(result.primary_ip);
+    } catch (error) {
+      if (error instanceof HttpError && error.status === 404 && error.code === 'not_found')
+        return null;
+      throw error;
+    }
+  }
+  async findPrimaryIps(input: {
+    labels: Readonly<Record<string, string>>;
+  }): Promise<ProviderPrimaryIp[]> {
+    const selector = Object.entries(input.labels)
+      .map(([key, value]) => `${key}=${value}`)
+      .join(',');
+    const ips: ProviderPrimaryIp[] = [];
+    let page: number | null = 1;
+    const seen = new Set<number>();
+    while (page !== null) {
+      if (seen.has(page) || seen.size >= 1000)
+        throw new CloudError('provider_unavailable', 'Hetzner returned invalid pagination.', true);
+      seen.add(page);
+      const result = z
+        .object({
+          primary_ips: z.array(primaryIpSchema),
+          meta: z.object({ pagination: z.object({ next_page: z.int().positive().nullable() }) }),
+        })
+        .parse(
+          await this.request({
+            path: `/primary_ips?per_page=50&page=${page}&label_selector=${encodeURIComponent(selector)}`,
+          }),
+        );
+      ips.push(
+        ...result.primary_ips
+          .filter(
+            (ip) =>
+              ip.type === 'ipv4' &&
+              Object.entries(input.labels).every(([key, value]) => ip.labels[key] === value),
+          )
+          .map(primaryIpRecord),
+      );
+      page = result.meta.pagination.next_page;
+    }
+    return ips;
   }
 
   async findServers(input: {

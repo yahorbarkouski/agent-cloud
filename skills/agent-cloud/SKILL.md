@@ -25,7 +25,7 @@ acld machine inspect vm_...
 
 Use valid IDs returned by the service. Generate and retain one idempotency key of at least 12 characters for each intended mutation. Reuse it with the identical request after a timeout or interrupted response. Reusing it with different input produces a conflict.
 
-Mutation acceptance returns an operation, not a ready machine. Inspect or wait for that operation. JSON results go to stdout; errors go to stderr. `operation wait` exits 0 for success, 1 for failure, and 2 when blocked. A client timeout does not cancel server work.
+Mutation acceptance returns an operation, not a ready machine. Inspect or wait for that operation. JSON results go to stdout; errors go to stderr. `operation wait` exits 0 for success, 1 for failure, and 2 when blocked. A client timeout does not cancel server work. `cleaning_up` means provisioning stopped and the service is removing its unused IP before releasing the reservation; keep waiting on the same operation.
 
 If progress is `blocked`, retain the operation ID and report its reason. Empty provider inventory does not prove creation failed. Do not use a fresh key or a new machine name to work around an unknown outcome; that could duplicate paid infrastructure. Duplicate-resource resolution currently needs the operator.
 
@@ -50,4 +50,4 @@ acld machine inspect vm_...
 acld usage
 ```
 
-Check for `destroyed` and released usage reservations. A failed create can still leave an owned allocation that needs explicit cleanup. Report incomplete cleanup with resource and operation IDs.
+Check for `destroyed` and released usage reservations. Deletion completes only after the VM and its owned Primary IP are confirmed absent. A failed create can still leave an owned allocation that needs explicit cleanup. Report incomplete cleanup with resource and operation IDs.

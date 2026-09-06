@@ -23,8 +23,9 @@ Idempotency-Key: <stable request identity>
 - PostgreSQL is the durable source of desired state and owned external resources. Machine IDs survive replacement allocations.
 - A worker holds a per-machine advisory lock on one database connection, uses short transactions for state changes, and performs provider I/O outside transactions. A second worker cannot advance the same machine concurrently.
 - Every external mutation has a committed attempt row before submission. A crash after recording an attempt is treated as an unknown outcome until evidence resolves it, even if that conservatively blocks a call that was never sent.
-- Unknown create outcomes retain quota reservations. Inventory can attach exactly one matching owned server. No matches is inconclusive; multiple matches require operator attention. No blind create retry.
+- Unknown create outcomes retain quota reservations. Inventory can attach exactly one matching owned resource. No matches is inconclusive; multiple matches require operator attention. No blind create retry.
 - A grant is checked at admission and again before an unsubmitted external mutation. After a mutation was submitted, reconciliation and cleanup continue even if the grant is revoked, because stopping recovery would orphan resources.
+- Resource cleanup follows the implemented [VM and Primary IP lifecycle](provider-resources.md). A create may compensate its unused IP only when VM non-submission is established; deletion waits for both resources to disappear.
 - The simulated provider is an explicit development/testing adapter. It persists external-style state separately from lifecycle records and can lose responses, delay visibility, fail Actions, and expose duplicates. It never claims VM or SSH verification.
 - Hetzner is the first real provider. Expose a small typed interface for submitting and observing its supported actions, not a generic multi-cloud workflow engine.
 
@@ -62,4 +63,4 @@ Admission reads a synchronous catalog snapshot after resolving idempotency. A st
 
 Before a fresh create or resize effect, the worker fetches a current catalog outside its transaction. A changed type, architecture, disk size, currency, or higher price fails before submission. It then rechecks current deployment, account, and grant limits under the global admission and account locks before journaling the attempt. Already-submitted work reconciles from its durable attempt even if prices change or capacity disappears. Success uses the admitted price, not whatever the catalog says later.
 
-The live catalog adapter and read-only check work against Hetzner. API/worker live activation is still gated on guest verification, resource cleanup, an API snapshot refresh loop, and other ancillary spending limits. The hourly VM/IP reservation does not limit traffic overage or total lifetime spend.
+The live catalog adapter and read-only check work against Hetzner. API/worker live activation is still gated on guest verification, operator resolution, an API snapshot refresh loop, and other ancillary spending limits. The resource ownership and cleanup path is implemented, with live behavior still awaiting a bounded integration test. The hourly VM/IP reservation does not limit traffic overage or total lifetime spend.
