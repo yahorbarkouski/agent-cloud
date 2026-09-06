@@ -250,3 +250,45 @@ export const simulatedPrimaryIps = pgTable('simulated_primary_ips', {
   value: jsonb('value').notNull(),
   visibleAt: timestamp('visible_at', { withTimezone: true }).notNull(),
 });
+
+export const guestBootstraps = pgTable(
+  'guest_bootstraps',
+  {
+    accountId: text('account_id').notNull(),
+    allocationId: text('allocation_id').primaryKey(),
+    operationId: text('operation_id').notNull().unique(),
+    spec: jsonb('spec').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    sealedToken: jsonb('sealed_token'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('bootstrap_account_identity').on(t.accountId, t.allocationId),
+    foreignKey({
+      columns: [t.accountId, t.allocationId],
+      foreignColumns: [allocations.accountId, allocations.id],
+    }),
+    foreignKey({
+      columns: [t.accountId, t.operationId],
+      foreignColumns: [operations.accountId, operations.id],
+    }),
+  ],
+);
+
+export const guestIdentities = pgTable(
+  'guest_identities',
+  {
+    accountId: text('account_id').notNull(),
+    allocationId: text('allocation_id').primaryKey(),
+    identity: jsonb('identity').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.accountId, t.allocationId],
+      foreignColumns: [guestBootstraps.accountId, guestBootstraps.allocationId],
+    }),
+  ],
+);

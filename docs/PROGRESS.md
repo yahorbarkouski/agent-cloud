@@ -77,3 +77,23 @@ M1 provider-resource checkpoint, 2026-09-06:
 M1 still needs guest bootstrap and host identity, runtime API catalog refresh, operator resolution of blocked effects, and a bounded live cleanup drill. No paid resource has been created. M2–M7 remain open.
 
 Resource checkpoint `8f416ba194bab4b31229426873d4a91e1e2c253e` is committed and pushed. [Linux CI run 34061962745](https://github.com/yahorbarkouski/agent-cloud/actions/runs/34061962745) passed frozen install, full checks, and formatting. Local formatting and customer-skill validation passed. The configured `gpt-5.6-sol` audit verified the four resource decision rows and reran the two safety regressions; it found no additional issue.
+
+## Guest bootstrap implementation workflow
+
+- [x] Ground: traced admission, effect preparation, provider template, and completion boundaries in `research/guest-grounding.md`.
+- [x] Sketch: compared three isolated designs and cross-judged them. Selected A with the explicit secret-reference and provider-IP SSH proof in `architecture/guest-bootstrap.md`; implementation verification remains open.
+- [x] Agree: autonomous implementation is already authorized; no approval checkpoint requested.
+- [ ] Implement: guest identity, bootstrap artifacts, readiness verification, runtime catalog and operator recovery.
+- [ ] Scrap audit: revisit the design if implementation needs repeated exceptions.
+
+M1 guest bootstrap and local identity checkpoint, 2026-09-07:
+
+- The API refreshes complete provider catalogs outside transactions, coalesces requests, aborts on shutdown, rejects expired admission offers, and withdraws snapshots on currency disagreement. The private credential reader validates the opened no-follow file descriptor.
+- Migration 0006 adds allocation-owned encrypted bootstrap records and one-way claimed/issued guest identities. Metadata, key claims and issued certificates are immutable. Invalid issuance data cannot erase the encrypted token. Concurrent preparation, tampering, cross-account changes, expiry and token consumption have PostgreSQL coverage.
+- Pinned Smallstep CLI 0.30.6 and step-ca 0.30.2 run locally. Setup preserves the root identity and keeps its encrypted private root outside the CA container mount. The signer uses private temporary provisioner files, native tools and bounded subprocesses. SSH guest keys are Ed25519; TLS leaves use ECDSA P-256. Certificates are checked against exact keys, names, CA trust, permissions and expiry.
+- Internal probe credentials are issued explicitly and reused by read-only OpenSSH calls. The SSH certificate itself forces the identity command, with no forwarding/PTY extensions. The client ignores user SSH configuration and agents.
+- `pnpm check` passed 78 tests in 12 files, typecheck/build and strict lint. `pnpm smoke:pki` passed actual TLS issuance/connection and negative name, SAN, curve, returned-key and validity checks. `pnpm smoke:ssh` passed real raw-key and host-CA connections, wrong-key/CA/allocation rejection, and mismatched guest evidence. The independent gpt-5.6-sol reviewer reran both smokes and the focused inspector test. Report: `docs/research/m1-bootstrap-review.md`.
+- The SSH fixture copies bind-mounted trust into root-owned container files before startup so native Linux runner ownership does not violate OpenSSH StrictModes. Its updated smoke passed; temporary fixture containers and key directories were removed. CI now includes pinned tooling setup and both real local smokes. Remote CI verification is pending this commit.
+- Migration 0006 applied to the development DB after stopping owned services. Restarted API/worker passed `pnpm smoke:local` for `vm_a07cf525-ab4d-40f8-a4d0-a7de55ef49a0`. A read-only DB check returned zero active allocations, zero simulator VMs and zero simulator IPs. Customer-skill validation passed.
+
+This checkpoint does not complete M1. Bootstrap preparation, signing and SSH proof are not yet connected through an enrollment endpoint or VM create command. Image build/sanitation, provider reference rendering, readiness/renewal, bounded persisted probe issuance, snapshot cleanup and operator resolution remain. Preserve old provider-command forms during that integration. No paid cloud resource was created.

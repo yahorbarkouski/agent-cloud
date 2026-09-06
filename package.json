@@ -27,7 +27,13 @@
     "acld": "node --env-file-if-exists=.env apps/cli/dist/index.js",
     "smoke:local": "pnpm build && tsx scripts/smoke-local.ts",
     "setup:hetzner": "node scripts/receive-hetzner-token.ts",
-    "hetzner:check": "pnpm build && tsx scripts/check-hetzner.ts"
+    "hetzner:check": "pnpm build && tsx scripts/check-hetzner.ts",
+    "setup:step": "node scripts/install-step.ts",
+    "setup:pki": "node scripts/setup-pki.ts",
+    "pki:up": "docker compose --env-file .local/pki/compose.env -f infra/compose/pki-development.yaml up -d --wait",
+    "pki:down": "docker compose --env-file .local/pki/compose.env -f infra/compose/pki-development.yaml down",
+    "smoke:pki": "pnpm build && tsx scripts/smoke-pki.ts",
+    "smoke:ssh": "pnpm build && docker build -t agent-cloud-ssh-fixture:development tests/fixtures/ssh && tsx scripts/smoke-ssh.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

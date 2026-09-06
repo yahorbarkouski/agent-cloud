@@ -1,0 +1,32 @@
+name: agent-cloud-pki
+services:
+  ca:
+    image: smallstep/step-ca:0.30.2@sha256:a2b17872915c193259b75a5474c398326f41bd199f0842093e52cf4182bc8270
+    user: '${ACLD_UID:?Run pnpm setup:pki}:${ACLD_GID:?Run pnpm setup:pki}'
+    entrypoint: ['step-ca']
+    command: ['/home/step/config/ca.json', '--password-file', '/home/step/password']
+    ports:
+      - '127.0.0.1:9449:9000'
+    volumes:
+      - ../../.local/pki/issuer:/home/step
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'step',
+          'ca',
+          'health',
+          '--ca-url',
+          'https://localhost:9000',
+          '--root',
+          '/home/step/certs/root_ca.crt',
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    mem_limit: 256m
+    cpus: 0.5
+    security_opt: ['no-new-privileges:true']
+    cap_drop: ['ALL']
+    # The official binary carries this file capability and refuses exec without it.
+    cap_add: ['NET_BIND_SERVICE']

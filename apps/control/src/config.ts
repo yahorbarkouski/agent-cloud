@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { resolve } from 'node:path';
+import { offerConfigurationSchema } from '@agent-cloud/hetzner';
 import { currencySchema, decimalLimitToMicros } from '@agent-cloud/contracts';
 
 const environmentSchema = z.object({
@@ -24,12 +26,11 @@ export function readConfig(environment: NodeJS.ProcessEnv = process.env) {
     (!environment.PROVIDER_CURRENCY || !environment.MAX_PROVIDER_HOURLY)
   )
     throw new Error('Live operation requires an explicit currency and hourly limit.');
-  return {
+  const common = {
     databaseUrl: env.DATABASE_URL,
     host: env.HOST,
     port: env.PORT,
     publicUrl: env.PUBLIC_URL,
-    provider: env.PROVIDER,
     logLevel: env.LOG_LEVEL,
     limits: {
       maxMachines: env.MAX_LIVE_MACHINES,
@@ -37,5 +38,21 @@ export function readConfig(environment: NodeJS.ProcessEnv = process.env) {
       maxHourlyMicros: env.MAX_PROVIDER_HOURLY,
     },
   };
+  if (env.PROVIDER === 'hetzner')
+    return {
+      ...common,
+      provider: env.PROVIDER,
+      providerTokenFile: resolve(environment.HCLOUD_TOKEN_FILE ?? '.local/hcloud-token'),
+      offers: offerConfigurationSchema.parse({
+        currency: env.PROVIDER_CURRENCY,
+        architecture: environment.HCLOUD_ARCHITECTURE ?? 'x86',
+        serverTypes: {
+          small: environment.HCLOUD_SERVER_TYPE_SMALL ?? 'cx23',
+          medium: environment.HCLOUD_SERVER_TYPE_MEDIUM ?? 'cx33',
+          large: environment.HCLOUD_SERVER_TYPE_LARGE ?? 'cx43',
+        },
+      }),
+    };
+  return { ...common, provider: env.PROVIDER };
 }
 export type Config = ReturnType<typeof readConfig>;

@@ -11,12 +11,17 @@ export class HttpError extends Error {
   }
 }
 
-export function createHetznerRequest(input: { token: string; transport?: typeof fetch }) {
+export function createHetznerRequest(input: {
+  token: string;
+  transport?: typeof fetch;
+  signal?: AbortSignal;
+}) {
   const token = z
     .string()
     .regex(/^[A-Za-z0-9_-]{32,512}$/)
     .parse(input.token);
   const transport = input.transport ?? fetch;
+  const shutdownSignal = input.signal;
   return async (input: {
     path: string;
     method?: 'POST' | 'DELETE';
@@ -25,7 +30,9 @@ export function createHetznerRequest(input: { token: string; transport?: typeof 
     const response = await transport(`https://api.hetzner.cloud/v1${input.path}`, {
       method: input.method ?? 'GET',
       redirect: 'error',
-      signal: AbortSignal.timeout(15_000),
+      signal: shutdownSignal
+        ? AbortSignal.any([shutdownSignal, AbortSignal.timeout(15_000)])
+        : AbortSignal.timeout(15_000),
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
     });

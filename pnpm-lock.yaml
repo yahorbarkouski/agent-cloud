@@ -235,6 +235,27 @@ importers:
         specifier: 4.5.4
         version: 4.5.4
 
+  packages/pki:
+    dependencies:
+      '@agent-cloud/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      zod:
+        specifier: 4.5.4
+        version: 4.5.4
+
+  packages/remote:
+    dependencies:
+      '@agent-cloud/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-cloud/pki':
+        specifier: workspace:*
+        version: link:../pki
+      zod:
+        specifier: 4.5.4
+        version: 4.5.4
+
   packages/sdk:
     dependencies:
       '@agent-cloud/contracts':

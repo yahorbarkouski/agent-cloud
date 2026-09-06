@@ -61,6 +61,21 @@ Integration tests create a uniquely named temporary database on the development 
 
 The smoke test invokes the actual CLI against the HTTP server and Graphile worker. It requires the simulated provider and deletes the machine it creates. Tests cover quota races, tenant isolation, revoked grants, lost responses, delayed inventory, duplicate resources, worker crashes, and cleanup after a failed provider action.
 
+For real local certificate and SSH checks, install the pinned Smallstep CLI and initialize a dedicated development CA:
+
+```sh
+pnpm setup:step
+pnpm setup:pki
+pnpm pki:up
+pnpm smoke:pki
+pnpm smoke:ssh
+pnpm pki:down
+```
+
+The CA listens only on `127.0.0.1:9449`. Its state lives in ignored, owner-only `.local/pki`; repeated setup preserves its identity. The encrypted root key stays outside the container mount. The control signer receives a provisioner credential and public trust, never the CA's private signing keys. These are development keys, not a production recovery setup.
+
+The PKI smoke makes an actual TLS connection and checks allocation/hostname rejection. The SSH smoke starts one disposable local OpenSSH container and checks pinned host keys, CA trust, allocation-scoped user certificates and guest evidence. It removes the container and generated keys afterward. It does not boot a guest VM or deploy an application. CI runs both smokes without cloud credentials.
+
 ## What is enforced
 
 - Tenant keys and composite foreign keys keep records within their account and project.
@@ -72,7 +87,7 @@ The smoke test invokes the actual CLI against the HTTP server and Graphile worke
 
 Catalog entries specify the provider type, region, architecture, availability, and currency. Reservations include the VM and IPv4. `PROVIDER_CURRENCY` and `MAX_PROVIDER_HOURLY` define the deployment ceiling; use the currency returned by your provider account. There is no currency conversion. The simulator uses synthetic prices. An hourly reservation is not an invoice or a hard monthly cap; traffic and future ancillary services need separate limits before activation.
 
-Hetzner catalog reads have been verified against a real account. Live mutation remains disabled until guest verification, complete resource cleanup, and live catalog refresh are connected. No VM has been rented.
+Hetzner catalog reads have been verified against a real account. The API now refreshes catalog snapshots outside request transactions. Live mutation remains disabled until guest verification, operator recovery, and spending/cleanup checks are connected. No VM has been rented.
 
 ## Prepare Hetzner credentials
 
@@ -95,6 +110,8 @@ Stop the API and worker while applying migrations from an earlier checkpoint, th
 | `packages/contracts`     | Public schemas, IDs, lifecycle states, provider contract         |
 | `packages/db`            | Drizzle schema, migrations, connections, job insertion           |
 | `packages/hetzner`       | Hetzner transport; live activation remains gated                 |
+| `packages/pki`           | Smallstep signing and certificate identity checks                |
+| `packages/remote`        | Native SSH identity proof using explicit credentials             |
 | `packages/sdk`           | Typed HTTP client and operation waiting                          |
 | `apps/control`           | Auth, admission, API, simulator, worker, bootstrap               |
 | `apps/cli`               | JSON CLI and local credential storage                            |

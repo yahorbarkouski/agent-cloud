@@ -1,4 +1,4 @@
-import { readFile, lstat } from 'node:fs/promises';
+import { readPrivateFile } from '../apps/control/src/private-file.js';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 import {
@@ -9,10 +9,7 @@ import {
 
 // Read-only operator check; this command has no provider mutation path.
 const tokenPath = resolve(process.env.HCLOUD_TOKEN_FILE ?? '.local/hcloud-token');
-const info = await lstat(tokenPath);
-if (!info.isFile() || (info.mode & 0o077) !== 0)
-  throw new Error('Provider token must be an owner-only regular file.');
-const request = createHetznerRequest({ token: (await readFile(tokenPath, 'utf8')).trim() });
+const request = createHetznerRequest({ token: await readPrivateFile(tokenPath) });
 const configuration = offerConfigurationSchema.parse({
   currency: process.env.PROVIDER_CURRENCY,
   architecture: process.env.HCLOUD_ARCHITECTURE ?? 'x86',

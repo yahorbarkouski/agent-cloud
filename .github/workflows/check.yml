@@ -28,3 +28,13 @@ jobs:
       - run: npm exec --yes --package=pnpm@12.3.4 -- pnpm install --frozen-lockfile
       - run: npm exec --yes --package=pnpm@12.3.4 -- pnpm check
       - run: npm exec --yes --package=pnpm@12.3.4 -- pnpm format:check
+      - run: npm exec --yes --package=pnpm@12.3.4 -- pnpm setup:step
+      - run: npm exec --yes --package=pnpm@12.3.4 -- pnpm setup:pki
+      - run: npm exec --yes --package=pnpm@12.3.4 -- pnpm pki:up
+      - run: npm exec --yes --package=pnpm@12.3.4 -- pnpm smoke:pki
+      - run: npm exec --yes --package=pnpm@12.3.4 -- pnpm smoke:ssh
+      - if: always()
+        run: |
+          if [ -f .local/pki/compose.env ]; then
+            npm exec --yes --package=pnpm@12.3.4 -- pnpm pki:down
+          fi

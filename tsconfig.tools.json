@@ -19,6 +19,12 @@
       "path": "packages/hetzner"
     },
     {
+      "path": "packages/pki"
+    },
+    {
+      "path": "packages/remote"
+    },
+    {
       "path": "packages/sdk"
     },
     {

@@ -1,21 +1,27 @@
 import { serve } from '@hono/node-server';
-import { simulatedCatalog } from '@agent-cloud/contracts';
 import { connect } from '@agent-cloud/db';
 import { createApp } from './app.js';
 import { readConfig } from './config.js';
+import { createCatalogRuntime } from './catalog-runtime.js';
 
 const config = readConfig();
 if (config.provider !== 'simulated') {
   throw new Error(
-    'Live admission is not enabled until guest verification, current pricing, and IP cleanup are wired.',
+    'Live admission requires verified guest enrollment/readiness, operator recovery, and bounded spending.',
   );
 }
 const connection = connect(config.databaseUrl);
+const onCatalogFailure = () => {
+  process.stderr.write(JSON.stringify({ event: 'catalog.refresh_failed' }) + '\n');
+};
+const catalog = createCatalogRuntime(config, onCatalogFailure);
+await catalog.refresh().catch(onCatalogFailure);
+catalog.start();
 const app = createApp({
   db: connection.db,
   provider: config.provider,
   limits: config.limits,
-  catalog: () => simulatedCatalog(config.limits.currency),
+  catalog: catalog.snapshot,
 });
 const server = serve({ fetch: app.fetch, hostname: config.host, port: config.port }, () => {
   process.stdout.write(
@@ -29,6 +35,7 @@ const server = serve({ fetch: app.fetch, hostname: config.host, port: config.por
 });
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.once(signal, () => {
+    catalog.stop();
     server.close(() => {
       void connection.pool.end();
     });
