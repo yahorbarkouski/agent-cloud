@@ -1,0 +1,21 @@
+name: agent-cloud-dev
+services:
+  postgres:
+    image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    environment:
+      POSTGRES_USER: agentcloud
+      POSTGRES_PASSWORD: local-development-only
+      POSTGRES_DB: agentcloud
+    ports:
+      - '127.0.0.1:55439:5432'
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U agentcloud -d agentcloud']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    mem_limit: 512m
+    cpus: 1
+volumes:
+  database:

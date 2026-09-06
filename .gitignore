@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+.local/
+.cache/
+*.log
+*.tsbuildinfo
+.DS_Store
+infra/**/.terraform/
+infra/**/*.tfstate*
+infra/**/*.tfplan

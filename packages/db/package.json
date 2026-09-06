@@ -1,0 +1,28 @@
+{
+  "name": "@agent-cloud/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "migrations"
+  ],
+  "dependencies": {
+    "@agent-cloud/contracts": "workspace:*",
+    "pg": "8.23.0",
+    "drizzle-orm": "0.45.2",
+    "graphile-worker": "0.17.3"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1"
+  }
+}

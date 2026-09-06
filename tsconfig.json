@@ -1,0 +1,23 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "packages/contracts"
+    },
+    {
+      "path": "packages/db"
+    },
+    {
+      "path": "packages/hetzner"
+    },
+    {
+      "path": "packages/sdk"
+    },
+    {
+      "path": "apps/control"
+    },
+    {
+      "path": "apps/cli"
+    }
+  ]
+}

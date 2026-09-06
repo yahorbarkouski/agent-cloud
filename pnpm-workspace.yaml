@@ -1,0 +1,10 @@
+packages:
+  - apps/*
+  - packages/*
+
+allowBuilds:
+  esbuild@0.18.20: true
+  esbuild@0.25.12: true
+  esbuild@0.28.2: true
+
+strictPeerDependencies: true
