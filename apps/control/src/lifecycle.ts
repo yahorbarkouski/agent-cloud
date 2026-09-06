@@ -2,7 +2,10 @@ import { createHash } from 'node:crypto';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import {
   CloudError,
-  catalog,
+  selectOffer,
+  catalogItemSchema,
+  type CatalogSource,
+  type CatalogItem,
   newId,
   machineSchema,
   operationSchema,
@@ -101,17 +104,30 @@ async function assertReservation(input: {
   principal: Principal;
   additionalMachines: number;
   additionalPrice: number;
+  currency: string;
   account: typeof accounts.$inferSelect;
   limits: Config['limits'];
 }) {
   const active = await input.tx.select().from(allocations).where(isNull(allocations.retiredAt));
+  if (
+    [
+      input.account.currency,
+      input.principal.policy.currency,
+      input.limits.currency,
+      ...active.map((row) => row.currency),
+    ].some((currency) => currency !== input.currency)
+  )
+    throw new CloudError(
+      'budget_exceeded',
+      'Provider, account, credential, and active reservations must use the configured currency.',
+    );
   const owned = active.filter((row) => row.accountId === input.principal.accountId);
   const accountCount = owned.length + input.additionalMachines;
   const accountPrice =
-    owned.reduce((sum, row) => sum + row.hourlyMicroEur, 0) + input.additionalPrice;
+    owned.reduce((sum, row) => sum + row.hourlyMicros, 0) + input.additionalPrice;
   const globalCount = active.length + input.additionalMachines;
   const globalPrice =
-    active.reduce((sum, row) => sum + row.hourlyMicroEur, 0) + input.additionalPrice;
+    active.reduce((sum, row) => sum + row.hourlyMicros, 0) + input.additionalPrice;
   if (
     accountCount > Math.min(input.account.maxMachines, input.principal.policy.maxMachines) ||
     globalCount > input.limits.maxMachines
@@ -123,8 +139,8 @@ async function assertReservation(input: {
   }
   if (
     accountPrice >
-      Math.min(input.account.maxHourlyMicroEur, input.principal.policy.maxHourlyMicroEur) ||
-    globalPrice > input.limits.maxHourlyMicroEur
+      Math.min(input.account.maxHourlyMicros, input.principal.policy.maxHourlyMicros) ||
+    globalPrice > input.limits.maxHourlyMicros
   ) {
     throw new CloudError(
       'budget_exceeded',
@@ -139,6 +155,7 @@ export async function admit(input: {
   request: Admission;
   key: string;
   provider: MachineProvider['kind'];
+  catalog: CatalogSource;
   limits: Config['limits'];
 }): Promise<Operation> {
   return input.db.transaction(async (tx) => {
@@ -189,6 +206,13 @@ export async function admit(input: {
 
     const operationId = newId.operation();
     let machine;
+    let offer: CatalogItem | null = null;
+    function quote(size: MachineSpec['size'], region: MachineSpec['region']) {
+      const catalog = input.catalog();
+      if (catalog.provider !== input.provider)
+        throw new CloudError('provider_unavailable', 'Catalog belongs to another provider.');
+      return selectOffer({ catalog, size, region });
+    }
     if (input.request.kind === 'create') {
       const { projectId, spec } = input.request;
       authorizeCommand(principal, projectId, command);
@@ -208,7 +232,8 @@ export async function admit(input: {
           ),
         );
       if (sameName) throw new CloudError('resource_busy', 'A live machine already has this name.');
-      const price = catalog[spec.size].estimatedProviderHourlyMicroEur;
+      offer = quote(spec.size, spec.region);
+      const price = offer.hourlyMicros;
       await assertReservation({
         tx,
         principal,
@@ -216,6 +241,7 @@ export async function admit(input: {
         limits: input.limits,
         additionalMachines: 1,
         additionalPrice: price,
+        currency: offer.currency,
       });
       const allocationId = newId.allocation();
       machine = machineSchema.parse({
@@ -236,7 +262,9 @@ export async function admit(input: {
         accountId: principal.accountId,
         machineId: machine.id,
         provider: input.provider,
-        hourlyMicroEur: price,
+        hourlyMicros: price,
+        currency: offer.currency,
+        offer,
       });
     } else {
       const [row] = await tx
@@ -281,24 +309,26 @@ export async function admit(input: {
         if (machine.state.kind !== 'allocated' || machine.state.power !== 'off') {
           throw new CloudError('resource_busy', 'Power off the machine before resizing.');
         }
-        if (catalog[action.size].diskGb < catalog[machine.spec.size].diskGb) {
+        offer = quote(action.size, machine.spec.region);
+        const currentOffer = catalogItemSchema.parse(allocation.offer);
+        if (offer.architecture !== currentOffer.architecture)
+          throw new CloudError('invalid_input', 'Resizing cannot change CPU architecture.');
+        if (offer.diskGb < currentOffer.diskGb) {
           throw new CloudError('invalid_input', 'Disk shrinking is not supported.');
         }
-        const reserved = Math.max(
-          allocation.hourlyMicroEur,
-          catalog[action.size].estimatedProviderHourlyMicroEur,
-        );
+        const reserved = Math.max(allocation.hourlyMicros, offer.hourlyMicros);
         await assertReservation({
           tx,
           principal,
           account,
           limits: input.limits,
           additionalMachines: 0,
-          additionalPrice: reserved - allocation.hourlyMicroEur,
+          additionalPrice: reserved - allocation.hourlyMicros,
+          currency: offer.currency,
         });
         await tx
           .update(allocations)
-          .set({ hourlyMicroEur: reserved })
+          .set({ hourlyMicros: reserved })
           .where(eq(allocations.id, allocation.id));
       }
       await tx
@@ -319,7 +349,7 @@ export async function admit(input: {
     });
     await tx
       .insert(operations)
-      .values({ ...operation, command, createdAt: new Date(operation.createdAt) });
+      .values({ ...operation, command, offer, createdAt: new Date(operation.createdAt) });
     await tx.insert(idempotency).values({
       accountId: principal.accountId,
       scope,

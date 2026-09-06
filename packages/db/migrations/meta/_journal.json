@@ -15,6 +15,27 @@
       "when": 1788724830115,
       "tag": "0001_provider_attempt_guards",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788726811908,
+      "tag": "0002_account_currency_offers",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788727787818,
+      "tag": "0003_explicit_currency_guards",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788728119916,
+      "tag": "0004_offer_price_basis",
+      "breakpoints": true
     }
   ]
 }

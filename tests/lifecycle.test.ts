@@ -9,6 +9,7 @@ import {
   machineResponseSchema,
   operationSchema,
   newId,
+  simulatedCatalog,
   attemptOutcomeSchema,
   type Operation,
   type MachineAction,
@@ -24,7 +25,7 @@ import {
 import { createApp, SimulatedProvider, advanceOperation } from '../apps/control/src/index.js';
 import { testDatabase, seedAccount } from './database.js';
 
-const limits = { maxMachines: 100, maxHourlyMicroEur: 10_000_000 };
+const limits = { maxMachines: 100, currency: 'EUR', maxHourlyMicros: 10_000_000 };
 let fixture: Awaited<ReturnType<typeof testDatabase>>;
 let account: Awaited<ReturnType<typeof seedAccount>>;
 let app: ReturnType<typeof createApp>;
@@ -38,7 +39,12 @@ afterAll(async () => {
 beforeEach(async () => {
   await fixture.reset();
   account = await seedAccount(fixture.connection.db);
-  app = createApp({ db: fixture.connection.db, provider: 'simulated', limits });
+  app = createApp({
+    db: fixture.connection.db,
+    provider: 'simulated',
+    catalog: simulatedCatalog,
+    limits,
+  });
 });
 
 async function request(path: string, body?: unknown, token = account.token, key = randomUUID()) {
@@ -67,7 +73,12 @@ async function tick(
   operation: Operation,
   provider = new SimulatedProvider({ db: fixture.connection.db }),
 ) {
-  await advanceOperation({ connection: fixture.connection, operationId: operation.id, provider });
+  await advanceOperation({
+    limits: { currency: 'EUR', maxMachines: 100, maxHourlyMicros: 10000000 },
+    connection: fixture.connection,
+    operationId: operation.id,
+    provider,
+  });
 }
 
 async function readOperation(operation: Operation) {
@@ -176,7 +187,8 @@ describe('durable admission and API isolation', () => {
     app = createApp({
       db: fixture.connection.db,
       provider: 'simulated',
-      limits: { ...limits, maxHourlyMicroEur: 0 },
+      catalog: simulatedCatalog,
+      limits: { ...limits, currency: 'EUR', maxHourlyMicros: 0 },
     });
     const path = `/v1/projects/${account.projectId}/machines`;
     const body = { name: 'example', size: 'small', region: 'nbg1' };

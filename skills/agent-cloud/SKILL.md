@@ -13,7 +13,7 @@ Run `acld whoami`, `acld catalog`, and `acld project list`. The credential defin
 
 Credentials live in the CLI configuration file, or the path named by `ACLD_CREDENTIALS`. For initial token authentication, use `acld login --server <url> --token-stdin` with the token supplied on stdin. Do not include tokens in arguments, messages, application files, or Git. Provider credentials belong to the operator and never belong in a customer VM.
 
-Check the catalog's provider field. `simulated` means no real VM exists. Catalog prices are estimates. Powered-off VMs retain their reservations and remain billable on Hetzner.
+Check the catalog's provider field. `simulated` means no real VM exists. Inspect availability, architecture, currency, and the hourly reservation including IPv4. Simulated prices are synthetic; `account_gross` prices come from the provider account. Never interpret a different currency as equivalent or select a more expensive substitute without an allowed budget. Powered-off VMs retain their reservations and remain billable on Hetzner.
 
 ## Create and observe
 

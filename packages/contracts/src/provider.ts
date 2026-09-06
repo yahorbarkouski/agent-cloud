@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { failureSchema } from './errors.js';
 import type { attemptIdSchema } from './ids.js';
+import type { Catalog } from './catalog.js';
 import { powerSchema } from './lifecycle.js';
 
 export const providerCommandSchema = z.discriminatedUnion('kind', [
@@ -53,6 +54,7 @@ export type AttemptOutcome = z.infer<typeof attemptOutcomeSchema>;
 
 export interface MachineProvider {
   readonly kind: 'simulated' | 'hetzner';
+  getCatalog(): Promise<Catalog>;
   submit(input: {
     attemptId: z.infer<typeof attemptIdSchema>;
     command: ProviderCommand;

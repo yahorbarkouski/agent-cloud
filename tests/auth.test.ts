@@ -4,6 +4,7 @@ import {
   issuedGrantResponseSchema,
   grantPolicySchema,
   newId,
+  simulatedCatalog,
 } from '../packages/contracts/src/index.js';
 import { grants, projects } from '../packages/db/src/index.js';
 import { createApp } from '../apps/control/src/app.js';
@@ -24,7 +25,8 @@ beforeEach(async () => {
   app = createApp({
     db: fixture.connection.db,
     provider: 'simulated',
-    limits: { maxMachines: 100, maxHourlyMicroEur: 1_000_000 },
+    catalog: simulatedCatalog,
+    limits: { maxMachines: 100, currency: 'EUR', maxHourlyMicros: 1_000_000 },
   });
 });
 
@@ -46,7 +48,8 @@ async function delegate() {
     projects: { kind: 'selected', ids: [account.projectId] },
     sizes: ['small'],
     maxMachines: 1,
-    maxHourlyMicroEur: 12_000,
+    currency: 'EUR',
+    maxHourlyMicros: 12_000,
   });
   const response = await request({
     path: '/v1/grants',
@@ -64,9 +67,10 @@ it('prevents delegated credentials from broadening capabilities, projects, or sp
   const child = await delegate();
   for (const policy of [
     { ...child.policy, capabilities: ['machine:create'] },
+    { ...child.policy, currency: 'USD' },
     { ...child.policy, projects: { kind: 'all' } },
     { ...child.policy, maxMachines: 2 },
-    { ...child.policy, maxHourlyMicroEur: 20_000 },
+    { ...child.policy, currency: 'EUR', maxHourlyMicros: 20_000 },
   ]) {
     expect(
       (

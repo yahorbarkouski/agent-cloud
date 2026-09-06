@@ -75,6 +75,7 @@ export const operationProgressSchema = z.discriminatedUnion('kind', [
     reason: z.enum([
       'provider_outcome_unknown',
       'duplicate_provider_resources',
+      'provider_resource_mismatch',
       'guest_unreachable',
     ]),
   }),

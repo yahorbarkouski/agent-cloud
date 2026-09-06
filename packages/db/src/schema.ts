@@ -19,10 +19,15 @@ export const accounts = pgTable(
     id: text('id').primaryKey(),
     name: text('name').notNull(),
     maxMachines: integer('max_machines').notNull(),
-    maxHourlyMicroEur: integer('max_hourly_micro_eur').notNull(),
+    currency: text('currency').notNull(),
+    maxHourlyMicros: integer('max_hourly_micros').notNull(),
     createdAt: createdAt(),
   },
-  (t) => [check('account_limits', sql`${t.maxMachines} >= 0 AND ${t.maxHourlyMicroEur} >= 0`)],
+  (t) => [
+    check('account_limits', sql`${t.maxMachines} >= 0 AND ${t.maxHourlyMicros} >= 0`),
+    check('account_currency_format', sql`${t.currency} ~ '^[A-Z]{3}$'`),
+    unique('account_currency_identity').on(t.id, t.currency),
+  ],
 );
 
 export const projects = pgTable(
@@ -94,7 +99,9 @@ export const allocations = pgTable(
     machineId: text('machine_id').notNull(),
     provider: text('provider').notNull(),
     serverId: text('server_id'),
-    hourlyMicroEur: integer('hourly_micro_eur').notNull(),
+    currency: text('currency').notNull(),
+    hourlyMicros: integer('hourly_micros').notNull(),
+    offer: jsonb('offer'),
     retiredAt: timestamp('retired_at', { withTimezone: true }),
     createdAt: createdAt(),
   },
@@ -103,11 +110,16 @@ export const allocations = pgTable(
       columns: [t.accountId, t.machineId],
       foreignColumns: [machines.accountId, machines.id],
     }),
+    foreignKey({
+      name: 'allocation_account_currency',
+      columns: [t.accountId, t.currency],
+      foreignColumns: [accounts.id, accounts.currency],
+    }),
     uniqueIndex('one_live_allocation')
       .on(t.machineId)
       .where(sql`${t.retiredAt} IS NULL`),
     unique().on(t.provider, t.serverId),
-    check('allocation_price', sql`${t.hourlyMicroEur} >= 0`),
+    check('allocation_price', sql`${t.hourlyMicros} >= 0`),
   ],
 );
 
@@ -121,6 +133,7 @@ export const operations = pgTable(
     grantId: text('grant_id').notNull(),
     kind: text('kind').notNull(),
     command: jsonb('command').notNull(),
+    offer: jsonb('offer'),
     progress: jsonb('progress').notNull(),
     createdAt: createdAt(),
   },

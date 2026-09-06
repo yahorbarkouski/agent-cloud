@@ -85,11 +85,12 @@ export function assertPolicySubset(child: GrantPolicy, parent: GrantPolicy): voi
       ));
   if (
     !projectsAllowed ||
+    child.currency !== parent.currency ||
     child.capabilities.some((cap) => !parent.capabilities.includes(cap)) ||
     child.sizes.some((size) => !parent.sizes.includes(size)) ||
     child.regions.some((region) => !parent.regions.includes(region)) ||
     child.maxMachines > parent.maxMachines ||
-    child.maxHourlyMicroEur > parent.maxHourlyMicroEur
+    child.maxHourlyMicros > parent.maxHourlyMicros
   ) {
     throw new CloudError(
       'permission_denied',

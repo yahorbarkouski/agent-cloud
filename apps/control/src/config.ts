@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { currencySchema, decimalLimitToMicros } from '@agent-cloud/contracts';
 
 const environmentSchema = z.object({
   DATABASE_URL: z.url(),
@@ -8,11 +9,21 @@ const environmentSchema = z.object({
   PROVIDER: z.enum(['simulated', 'hetzner']).default('simulated'),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error', 'silent']).default('info'),
   MAX_LIVE_MACHINES: z.coerce.number().int().min(0).default(2),
-  MAX_PROVIDER_HOURLY_EUR: z.coerce.number().min(0).max(100).default(0.02),
+  PROVIDER_CURRENCY: currencySchema.default('EUR'),
+  MAX_PROVIDER_HOURLY: z.string().default('0.02').transform(decimalLimitToMicros),
 });
 
 export function readConfig(environment: NodeJS.ProcessEnv = process.env) {
+  if (environment.MAX_PROVIDER_HOURLY_EUR !== undefined)
+    throw new Error(
+      'Replace MAX_PROVIDER_HOURLY_EUR with PROVIDER_CURRENCY and MAX_PROVIDER_HOURLY.',
+    );
   const env = environmentSchema.parse(environment);
+  if (
+    env.PROVIDER === 'hetzner' &&
+    (!environment.PROVIDER_CURRENCY || !environment.MAX_PROVIDER_HOURLY)
+  )
+    throw new Error('Live operation requires an explicit currency and hourly limit.');
   return {
     databaseUrl: env.DATABASE_URL,
     host: env.HOST,
@@ -22,7 +33,8 @@ export function readConfig(environment: NodeJS.ProcessEnv = process.env) {
     logLevel: env.LOG_LEVEL,
     limits: {
       maxMachines: env.MAX_LIVE_MACHINES,
-      maxHourlyMicroEur: Math.floor(env.MAX_PROVIDER_HOURLY_EUR * 1_000_000),
+      currency: env.PROVIDER_CURRENCY,
+      maxHourlyMicros: env.MAX_PROVIDER_HOURLY,
     },
   };
 }

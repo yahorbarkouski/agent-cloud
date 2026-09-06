@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { currencySchema, microsSchema } from './money.js';
 import { accountIdSchema, grantIdSchema, projectIdSchema } from './ids.js';
 import { nameSchema } from './lifecycle.js';
 import { regionSchema, sizeSchema } from './catalog.js';
@@ -32,7 +33,8 @@ export const grantPolicySchema = z.object({
   sizes: z.array(sizeSchema).min(1),
   regions: z.array(regionSchema).min(1),
   maxMachines: z.int().min(0).max(1000),
-  maxHourlyMicroEur: z.int().min(0),
+  currency: currencySchema,
+  maxHourlyMicros: microsSchema,
 });
 export type GrantPolicy = z.infer<typeof grantPolicySchema>;
 

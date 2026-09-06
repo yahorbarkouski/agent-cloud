@@ -15,10 +15,11 @@ import {
   grants,
   projects,
   type Database,
+  type Connection,
 } from '../packages/db/src/index.js';
 import { generateToken, hashToken } from '../apps/control/src/auth.js';
 
-export async function testDatabase() {
+export async function testDatabase(initialize?: (connection: Connection) => Promise<void>) {
   const sourceUrl =
     process.env.TEST_DATABASE_URL ??
     'postgresql://agentcloud:local-development-only@127.0.0.1:55439/agentcloud';
@@ -30,7 +31,8 @@ export async function testDatabase() {
   url.pathname = `/${name}`;
   const connection = connect(url.toString());
   try {
-    await migrate(connection);
+    if (initialize) await initialize(connection);
+    else await migrate(connection);
   } catch (error) {
     await connection.pool.end();
     await admin.pool.query(`DROP DATABASE "${name}"`);
@@ -55,7 +57,7 @@ export async function testDatabase() {
 
 export async function seedAccount(
   db: Database,
-  options: { maxMachines?: number; policy?: GrantPolicy } = {},
+  options: { maxMachines?: number; currency?: string; policy?: GrantPolicy } = {},
 ) {
   const accountId = newId.account();
   const projectId = newId.project();
@@ -69,14 +71,16 @@ export async function seedAccount(
       sizes: sizeSchema.options,
       regions: regionSchema.options,
       maxMachines: options.maxMachines ?? 20,
-      maxHourlyMicroEur: 1_000_000,
+      currency: options.currency ?? 'EUR',
+      maxHourlyMicros: 1_000_000,
     });
   await db.transaction(async (tx) => {
     await tx.insert(accounts).values({
       id: accountId,
       name: 'test',
       maxMachines: options.maxMachines ?? 20,
-      maxHourlyMicroEur: 1_000_000,
+      currency: options.currency ?? 'EUR',
+      maxHourlyMicros: 1_000_000,
     });
     await tx.insert(projects).values({ id: projectId, accountId, name: 'default' });
     await tx.insert(grants).values({

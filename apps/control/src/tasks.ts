@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { Config } from './config.js';
 import { eq, sql } from 'drizzle-orm';
 import type { TaskList } from 'graphile-worker';
 import {
@@ -14,6 +15,7 @@ const payloadSchema = z.object({ operationId: operationIdSchema });
 export function createTasks(input: {
   connection: Connection;
   provider: MachineProvider;
+  limits: Config['limits'];
 }): TaskList {
   return {
     advance_operation: async (payload, helpers) => {

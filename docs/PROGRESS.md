@@ -35,11 +35,29 @@
 - All smoke allocations were cleaned up; the development account reported zero active reservations afterward.
 - Independent `gpt-5.6-sol` review and follow-up found no material regression after the journal guard fix; see `docs/research/m0-review.md`.
 - Initial migrations applied locally. Database/queue state persists across processes.
-- Private repository `yahorbarkouski/agent-cloud` exists and is configured as origin. First push and remote CI verification are pending.
-- Hetzner account verification was pending at the last browser inspection. No project, token, VM, or bucket has been created through this task. No cloud resources have been rented.
+- Private repository `yahorbarkouski/agent-cloud` contains implementation commit `bbd33ad` on `main`. [CI run 34056857441](https://github.com/yahorbarkouski/agent-cloud/actions/runs/34056857441) passed frozen installation, full checks, and formatting on Linux.
+- Hetzner project `agent-cloud-development` (`15945891`) and its read/write token `agent-cloud-local-development` were created. The token was saved through a one-use loopback form to ignored `.local/hcloud-token` with mode 0600, without printing it. Authenticated read-only API checks succeeded and reported zero servers and zero Primary IPs. No cloud resources have been rented.
+- The account's live catalog uses USD and 23% VAT. CX23/CX33/CX43 reported unavailable in fsn1/nbg1/hel1 at inspection. M1 must replace EUR-only estimates with account-currency pricing and current availability; do not silently choose an expensive substitute.
 
 M1 is in progress. A Hetzner HTTP transport exists, but live admission/worker activation is disabled. Before enabling it: verify account prices and availability; enforce reservation ceilings including ancillary charges; track Primary IP cleanup; verify the guest template; distinguish allocation from guest readiness; implement authoritative resolution of uncertain and duplicate resources.
 
 M2 has a JSON CLI, local token login, scoped grants through API/SDK, and revocation. Browser/device login, SSH certificates, gateway access, and CLI grant management remain.
 
 M3–M7 remain implementation work. Current passing tests do not establish real VM boot, SSH identity, routing, Compose deployment, database restore, or production availability.
+
+M1 pricing and credential checkpoint, 2026-09-06:
+
+- Account, grant, deployment, and allocation limits now use explicit currencies and integer micro-units. Migration 0002 preserved the local M0 account and its credentials. The CLI smoke passed after migration and restart, including cleanup.
+- Create/resize operations persist an exact admitted offer. Fresh effects recheck availability, price, architecture, and current deployment/account/grant limits. Accepted creates must return the recorded type, region, and ownership; mismatches block with slower reconciliation. Submitted effects reconcile without depending on the current catalog.
+- Hetzner catalog pagination, gross account prices, IPv4 charges, and explicit type selection are implemented. `PROVIDER_CURRENCY=USD HCLOUD_SERVER_TYPE_SMALL=cpx12 pnpm hetzner:check` succeeded against the account. At 20:40 UTC CPX12 was available in the three selected regions at USD 0.027798/hour including IPv4 and VAT. Project counts remained zero servers and zero Primary IPs.
+- The one-use credential intake now rejects a second in-flight submission after the first consumes the form. Tests use fake credentials and temporary directories, including a real overlapping HTTP request, wrong Origin/Host, body bounds, mode 0600, and overwrite refusal.
+- 41 tests in six files pass, as do typecheck, strict lint, formatting, and customer-skill validation. Legacy upgrade tests migrate queued and interrupted M0 creates, preserve authentication and original aggregate estimates, and finish with one provider attempt and one server. The focused review fixes are implemented. Migrations 0003–0004 applied locally; the restarted API/worker passed the real CLI smoke with cleanup. The report is `docs/research/m1-pricing-review.md`. Migrated create recovery is covered; the separate legacy resize migration branch has not been regression-tested.
+
+Live creates are still disabled. Primary IP ownership/cleanup, guest bootstrap/readiness, catalog refresh in the running API, traffic/other ancillary limits, and operator resolution remain M1 work.
+
+Review-driven changes in this checkpoint:
+
+- Migration 0003 removes implicit currency defaults and enforces account/allocation currency agreement in PostgreSQL. The generator put its foreign key before the referenced unique constraint; isolated tests caught error 42830. The unapplied migration was reordered, and all tests passed afterward.
+- Migration 0004 marks reconstructed historical price components `legacy_estimate`. Original aggregate estimates stay unchanged. New simulated and live account prices have explicit provenance.
+- VM/IP prices now come from the same account-pricing response as their currency. The current credential-free live artifact is `docs/research/hetzner-catalog-check-2026-09-06.json`, captured at 20:56:14 UTC and validated against the current catalog schema. Counts remained zero.
+- The credential intake requires a real owner-only `.local` directory and rejects symlinks before starting a listener.

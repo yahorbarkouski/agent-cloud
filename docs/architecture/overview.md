@@ -51,3 +51,15 @@ Reject all sketches' optional-field command bags: schemas will distinguish resiz
 Stripe is deferred. Administrative account policies supply resource limits without payments. Start local-first. A normal container can verify HTTP/process behavior but does not prove systemd, full VM boot, SSH host identity, or real provider recovery. Live tests are separate and must be cheap, labeled, time-limited, and cleaned up.
 
 Unknown outcomes can delay a request. That is preferable to guessing whether a paid server exists. The operator resolution path must display evidence and preserve the audit history.
+
+## Account prices and admitted offers
+
+M1 replaces the initial EUR-only estimates with explicit currencies. Account, grant, deployment, and allocation limits carry currency codes and integer micro-units. Admission rejects a mismatch rather than converting currencies. Provider decimal prices are parsed with integer arithmetic and rounded upward only below one micro-unit. Operator limits must be exactly representable.
+
+A catalog snapshot records observation and expiry times. Offers bind size, exact provider type, region, architecture, availability, VM price, and IPv4 price. The provider uses explicit operator type mappings with no fallback. Missing or ambiguous prices exclude an offer. Catalog reads follow pagination and reject loops. VM and IP gross prices come from the same response as the account currency, including its tax treatment. Each stored offer records `priceBasis`: `account_gross`, `simulated`, or `legacy_estimate`. M0 stored only combined estimates; migrations preserve their totals but mark the reconstructed VM/IP split as a legacy estimate.
+
+Admission reads a synchronous catalog snapshot after resolving idempotency. A stale catalog cannot prevent replay of an existing request or deletion of an existing machine. The selected offer is persisted on create and resize operations; allocations retain their current offer. Resizing compares the existing disk and architecture with the proposed offer. Reservations hold the greater amount until successful observation.
+
+Before a fresh create or resize effect, the worker fetches a current catalog outside its transaction. A changed type, architecture, disk size, currency, or higher price fails before submission. It then rechecks current deployment, account, and grant limits under the global admission and account locks before journaling the attempt. Already-submitted work reconciles from its durable attempt even if prices change or capacity disappears. Success uses the admitted price, not whatever the catalog says later.
+
+The live catalog adapter and read-only check work against Hetzner. API/worker live activation is still gated on guest verification, resource cleanup, an API snapshot refresh loop, and other ancillary spending limits. The hourly VM/IP reservation does not limit traffic overage or total lifetime spend.

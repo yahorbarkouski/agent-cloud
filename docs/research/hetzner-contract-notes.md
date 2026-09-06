@@ -12,5 +12,6 @@ Observed spec SHA-256: `9ca6b542a057b002804b9f4f45ccfdb8b9a28c92b7e5bf5ae1b7f46b
 - Resize uses `change_type` with `server_type` and `upgrade_disk`. Initial policy requires an off machine and forbids disk shrinking.
 - Pricing includes account currency, net/gross amounts, Primary IP prices, backup percentage, and server-type prices. A static catalog cannot establish live total costs.
 - Server types list per-location availability and deprecation details. A type existing does not imply regional capacity.
+- Server deletion detaches attached resources. Explicit Primary IP creation defaults `auto_delete` to false. A deleted server therefore does not, by itself, prove that all paid resources have been released. Record IP ownership and verify absence or separately journal cleanup before releasing the complete reservation.
 
 Before live activation: account-price admission, ancillary-resource ownership/cleanup, guest bootstrap and host verification, and live failure drills. A transport that can send requests is not a complete provisioning implementation.

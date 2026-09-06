@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { currencySchema } from './money.js';
 import { grantIdSchema } from './ids.js';
 
 export const apiUrlSchema = z.url().superRefine((value, ctx) => {
@@ -33,9 +34,9 @@ export const revokedResponseSchema = z.object({ revoked: z.literal(true) });
 export const usageResponseSchema = z.object({
   usage: z.object({
     activeReservations: z.int().min(0),
-    hourlyMicroEur: z.int().min(0),
-    currency: z.literal('EUR'),
-    pricing: z.literal('estimate'),
+    hourlyMicros: z.int().min(0),
+    currency: currencySchema,
+    pricing: z.literal('reservation'),
     poweredOffMachinesRemainBillable: z.literal(true),
   }),
 });

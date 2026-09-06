@@ -7,8 +7,7 @@ import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import {
   CloudError,
   errorStatus,
-  catalog,
-  regionSchema,
+  type CatalogSource,
   projectIdSchema,
   machineIdSchema,
   operationIdSchema,
@@ -39,6 +38,7 @@ import type { Config } from './config.js';
 export function createApp(input: {
   db: Database;
   provider: MachineProvider['kind'];
+  catalog: CatalogSource;
   limits: Config['limits'];
 }) {
   const app = new Hono<{ Variables: { principal: Principal; requestId: string } }>();
@@ -94,15 +94,7 @@ export function createApp(input: {
     await next();
   });
   app.get('/v1/whoami', (c) => c.json({ principal: c.get('principal') }));
-  app.get('/v1/catalog', (c) =>
-    c.json({
-      provider: input.provider,
-      currency: 'EUR',
-      pricing: 'estimate',
-      items: Object.values(catalog),
-      regions: regionSchema.options,
-    }),
-  );
+  app.get('/v1/catalog', (c) => c.json(input.catalog()));
   app.get('/v1/projects', async (c) => {
     const principal = c.get('principal');
     authorize(principal, 'project:read');
@@ -237,12 +229,17 @@ export function createApp(input: {
       .select()
       .from(allocations)
       .where(and(eq(allocations.accountId, principal.accountId), isNull(allocations.retiredAt)));
+    if (rows.some((row) => row.currency !== principal.policy.currency))
+      throw new CloudError(
+        'internal_error',
+        'Stored reservations do not match the credential currency.',
+      );
     return c.json({
       usage: {
         activeReservations: rows.length,
-        hourlyMicroEur: rows.reduce((sum, row) => sum + row.hourlyMicroEur, 0),
-        currency: 'EUR',
-        pricing: 'estimate',
+        hourlyMicros: rows.reduce((sum, row) => sum + row.hourlyMicros, 0),
+        currency: principal.policy.currency,
+        pricing: 'reservation',
         poweredOffMachinesRemainBillable: true,
       },
     });

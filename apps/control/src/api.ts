@@ -1,4 +1,5 @@
 import { serve } from '@hono/node-server';
+import { simulatedCatalog } from '@agent-cloud/contracts';
 import { connect } from '@agent-cloud/db';
 import { createApp } from './app.js';
 import { readConfig } from './config.js';
@@ -10,7 +11,12 @@ if (config.provider !== 'simulated') {
   );
 }
 const connection = connect(config.databaseUrl);
-const app = createApp({ db: connection.db, provider: config.provider, limits: config.limits });
+const app = createApp({
+  db: connection.db,
+  provider: config.provider,
+  limits: config.limits,
+  catalog: () => simulatedCatalog(config.limits.currency),
+});
 const server = serve({ fetch: app.fetch, hostname: config.host, port: config.port }, () => {
   process.stdout.write(
     JSON.stringify({

@@ -1,4 +1,16 @@
 import { z } from 'zod';
+import { createHetznerRequest, HttpError } from './http.js';
+export { createHetznerRequest } from './http.js';
+import {
+  readHetznerCatalog,
+  offerConfigurationSchema,
+  type OfferConfiguration,
+} from './catalog.js';
+export {
+  readHetznerCatalog,
+  offerConfigurationSchema,
+  type OfferConfiguration,
+} from './catalog.js';
 import {
   CloudError,
   type MachineProvider,
@@ -18,17 +30,6 @@ const serverSchema = z.object({
   labels: z.record(z.string(), z.string()),
   public_net: z.object({ ipv4: z.object({ ip: z.string() }).nullable() }),
 });
-const errorSchema = z.object({ error: z.object({ code: z.string() }) });
-
-class HttpError extends Error {
-  readonly status: number;
-  readonly code: string;
-  constructor(status: number, code: string) {
-    super(`Hetzner request failed with HTTP ${status}.`);
-    this.status = status;
-    this.code = code;
-  }
-}
 
 function serverRecord(value: z.infer<typeof serverSchema>): ProviderServer {
   const power =
@@ -62,41 +63,26 @@ const templateSchema = z.object({
 /** Transport adapter only. Activating live work also requires the control-plane guest and cleanup checks. */
 export class HetznerProvider implements MachineProvider {
   readonly kind = 'hetzner';
-  private readonly token: string;
-  private readonly transport: typeof fetch;
+  private readonly request: ReturnType<typeof createHetznerRequest>;
+  private readonly offers: OfferConfiguration;
   private readonly template: z.infer<typeof templateSchema>;
 
   constructor(input: {
     token: string;
+    offers: OfferConfiguration;
     template: z.infer<typeof templateSchema>;
     transport?: typeof fetch;
   }) {
-    this.token = z.string().min(32).parse(input.token);
+    this.offers = offerConfigurationSchema.parse(input.offers);
+    this.request = createHetznerRequest(input);
     this.template = templateSchema.parse(input.template);
-    this.transport = input.transport ?? fetch;
   }
 
-  private async request(input: {
-    path: string;
-    method?: 'POST' | 'DELETE';
-    body?: unknown;
-  }): Promise<unknown> {
-    const response = await this.transport(`https://api.hetzner.cloud/v1${input.path}`, {
-      method: input.method ?? 'GET',
-      redirect: 'error',
-      signal: AbortSignal.timeout(15_000),
-      headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' },
-      ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
+  getCatalog() {
+    return readHetznerCatalog({
+      request: (input) => this.request(input),
+      configuration: this.offers,
     });
-    const body: unknown = await response.json();
-    if (!response.ok) {
-      const parsed = errorSchema.safeParse(body);
-      throw new HttpError(
-        response.status,
-        parsed.success ? parsed.data.error.code : 'invalid_response',
-      );
-    }
-    return body;
   }
 
   async submit(input: Parameters<MachineProvider['submit']>[0]): Promise<Submission> {

@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { and, eq, lte } from 'drizzle-orm';
 import {
   providerActionSchema,
+  simulatedCatalog,
+  type CatalogSource,
   providerCommandSchema,
   providerServerSchema,
   type MachineProvider,
@@ -21,13 +23,24 @@ export type SimulationFault =
 export class SimulatedProvider implements MachineProvider {
   readonly kind = 'simulated';
   readonly db: Database;
+  readonly catalog: CatalogSource;
   readonly fault: SimulationFault;
   readonly actionDelayMs: number;
 
-  constructor(input: { db: Database; fault?: SimulationFault; actionDelayMs?: number }) {
+  constructor(input: {
+    db: Database;
+    fault?: SimulationFault;
+    actionDelayMs?: number;
+    catalog?: CatalogSource;
+  }) {
     this.db = input.db;
+    this.catalog = input.catalog ?? simulatedCatalog;
     this.fault = input.fault ?? { kind: 'none' };
     this.actionDelayMs = input.actionDelayMs ?? 0;
+  }
+
+  getCatalog() {
+    return Promise.resolve(this.catalog());
   }
 
   async submit(input: Parameters<MachineProvider['submit']>[0]): Promise<Submission> {

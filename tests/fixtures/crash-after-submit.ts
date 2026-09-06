@@ -26,6 +26,7 @@ class CrashAfterSubmit extends SimulatedProvider {
 }
 
 await advanceOperation({
+  limits: { currency: 'EUR', maxMachines: 100, maxHourlyMicros: 10000000 },
   connection,
   operationId,
   provider: new CrashAfterSubmit({ db: connection.db }),
