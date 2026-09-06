@@ -6,7 +6,7 @@ Updated 2026-09-07. The goal is the full agent-operated cloud in `docs/archive/o
 
 Customers bring their existing coding agents. Build the cloud interface, not an agent. Use TypeScript, Linux VMs, Docker Compose, SSH and Hetzner. Keep infrastructure cheap, avoid costly fallback types or provider benchmarks, and maintain AGENTS.md, customer skills, decisions, progress and this summary. Continue authorized work without repeated approval.
 
-Repo `/Users/yahorbarkouski/Documents/ChatGPT/learning/agent-cloud` is a standalone Git repository inside an unrelated parent workspace. Only work here. Branch `yahor/agent-cloud`; private origin `https://github.com/yahorbarkouski/agent-cloud.git`. Resource commit `8f416ba` passed Linux CI `34061962745`; HEAD before this checkpoint is docs commit `7a3f6f6`. Current guest/catalog/PKI/SSH changes are verified locally but not yet committed or pushed. Inspect Git state before repeating work.
+Repo `/Users/yahorbarkouski/Documents/ChatGPT/learning/agent-cloud` is a standalone Git repository inside an unrelated parent workspace. Only work here. Branch `yahor/agent-cloud`; private origin `https://github.com/yahorbarkouski/agent-cloud.git`. Resource commit `8f416ba` passed Linux CI `34061962745`; HEAD before this checkpoint is docs commit `7a3f6f6`. Guest/catalog/PKI/SSH checkpoint `d70d80f68eae9ba69482e3824b462214f3077967` is committed and pushed. Linux CI `34064759704` passed frozen installation, full checks, fresh Smallstep setup, both native identity smokes and cleanup. Inspect Git state before repeating work.
 
 ## Implemented and verified
 
@@ -24,7 +24,7 @@ The new guest slice stores one encrypted token bound to immutable allocation/ima
 
 Latest full check passes 78 tests in 12 files, typecheck/build and strict lint. Real local `smoke:pki` and `smoke:ssh` pass, including wrong allocation/name/key/CA, extra SAN, wrong TLS curve, malformed certificate response and mismatched guest evidence. Configured gpt-5.6-sol independently reran both smokes and inspector test; report `docs/research/m1-bootstrap-review.md`. No real guest VM, application deployment or restore is verified.
 
-Migration 0006 applied locally after stopping owned services. Restarted CLI/API/DB/worker smoke passed for `vm_a07cf525-ab4d-40f8-a4d0-a7de55ef49a0`. SQL confirmed zero active allocations, simulator VMs and simulator IPs. Disposable SSH containers were removed. Customer skill validation passed. CI now includes Smallstep setup and both smokes; push and remote verification remain.
+Migration 0006 applied locally after stopping owned services. Restarted CLI/API/DB/worker smoke passed for `vm_a07cf525-ab4d-40f8-a4d0-a7de55ef49a0`. SQL confirmed zero active allocations, simulator VMs and simulator IPs. Disposable SSH containers were removed. Customer skill validation passed. Linux CI now verifies Smallstep setup and both smokes; run `34064759704` passed on the implementation commit.
 
 ## Runtime and secrets
 
@@ -47,7 +47,7 @@ Read-only check: `PROVIDER_CURRENCY=USD HCLOUD_SERVER_TYPE_SMALL=cpx12 pnpm hetz
 
 ## Next concrete work
 
-1. Finish current checkpoint: decision trail audit, formatting, commit/push and Linux CI, including real local PKI/SSH smokes. Do not claim M1 completion.
+1. The reviewed guest/catalog/PKI/SSH implementation checkpoint `d70d80f` is pushed and Linux CI `34064759704` passed. Resume enrollment and guest integration rather than repeating this checkpoint. Do not claim M1 completion.
 2. Connect bootstrap preparation/reference-only provider commands and a narrow enrollment service. Preserve old attempts, including unknown outcomes, without re-submission. Enrollment must verify immutable token/allocation state and direct pinned-key SSH proof at the provider-recorded IP, then claim keys and persist the first certificates. Bound credential issuance with persisted attempts; reuse short-lived credentials within a run. Never trust proxy source headers.
 3. Build/sanitize the actual guest image and guestctl, implement runtime readiness and ongoing certificate renewal. Add owned snapshot cleanup before a bounded cheap image-build/boot test. Implement explicit operator resolution for unknown/duplicate provider effects. Only then enable a bounded live drill.
 4. M2: device/browser auth, CLI grants and customer SSH/gateway access/revocation. M3: transfers, durable command runs, Compose deployments and Caddy HTTPS routes. M4: recipes, off-VM backups and isolated restore. M5: usage/traffic/alerts and other cost limits. M6 self-hosting, M7 failure drills and end-to-end proof.
