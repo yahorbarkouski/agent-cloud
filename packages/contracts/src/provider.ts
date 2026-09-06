@@ -3,6 +3,7 @@ import { failureSchema } from './errors.js';
 import { resourceRefSchema, type attemptIdSchema } from './ids.js';
 import type { Catalog } from './catalog.js';
 import { powerSchema } from './lifecycle.js';
+import { bootstrapReferenceSchema } from './guest.js';
 
 export const networkProfileSchema = z.enum(['legacy', 'managed_ipv4']);
 export const providerNetworkSchema = z.discriminatedUnion('kind', [
@@ -26,6 +27,15 @@ export const providerCommandSchema = z.discriminatedUnion('kind', [
     labels: z.record(z.string(), z.string()),
     network: providerNetworkSchema,
   }),
+  z.strictObject({
+    kind: z.literal('create_guest'),
+    name: z.string().min(1),
+    serverType: z.string().min(1),
+    region: z.string().min(1),
+    labels: z.record(z.string(), z.string()),
+    network: z.strictObject({ kind: z.literal('primary_ip'), id: z.string().min(1) }),
+    bootstrap: bootstrapReferenceSchema,
+  }),
   z.object({ kind: z.literal('reboot'), serverId: z.string() }),
   z.object({ kind: z.literal('power_off'), serverId: z.string() }),
   z.object({ kind: z.literal('power_on'), serverId: z.string() }),
@@ -33,6 +43,12 @@ export const providerCommandSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('destroy'), serverId: z.string() }),
 ]);
 export type ProviderCommand = z.infer<typeof providerCommandSchema>;
+
+export function isServerCreateCommand(
+  command: ProviderCommand,
+): command is Extract<ProviderCommand, { kind: 'create' | 'create_guest' }> {
+  return command.kind === 'create' || command.kind === 'create_guest';
+}
 
 export const submissionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('accepted'), resource: resourceRefSchema, actionId: z.string() }),

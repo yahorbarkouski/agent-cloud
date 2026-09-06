@@ -1,6 +1,6 @@
-import { expect, it } from 'vitest';
-import { HetznerProvider } from '../packages/hetzner/src/index.js';
-import { newId } from '../packages/contracts/src/index.js';
+import { expect, it, vi } from 'vitest';
+import { HetznerProvider, type GuestRenderer } from '../packages/hetzner/src/index.js';
+import { newId, type ProviderCommand } from '../packages/contracts/src/index.js';
 
 const ip = {
   id: 23,
@@ -13,7 +13,12 @@ const ip = {
   assignee_type: 'unassigned',
   assignee_id: null,
 };
-function provider(transport: typeof fetch) {
+function provider(
+  transport: typeof fetch,
+  renderGuest = vi
+    .fn<GuestRenderer>()
+    .mockResolvedValue({ image: 'pinned-image', userData: '#cloud-config\n' }),
+) {
   return new HetznerProvider({
     token: 'fake-test-token'.padEnd(64, 'x'),
     offers: {
@@ -21,12 +26,11 @@ function provider(transport: typeof fetch) {
       architecture: 'x86',
       serverTypes: { small: 'cpx12', medium: 'cx33', large: 'cx43' },
     },
-    template: {
-      image: 'ubuntu-24.04',
+    access: {
       firewallIds: [1],
       sshKeys: ['test-key'],
-      userData: '#cloud-config\n',
     },
+    renderGuest,
     transport,
   });
 }
@@ -64,7 +68,8 @@ it('creates explicitly owned IPv4, attaches it without automatic IPv6, and accep
     await source.submit({
       attemptId: newId.attempt(),
       command: {
-        kind: 'create',
+        kind: 'create_guest',
+        bootstrap: { version: 1, allocationId: newId.allocation() },
         name: 'owned-vm',
         serverType: 'cpx12',
         region: 'nbg1',
@@ -75,6 +80,8 @@ it('creates explicitly owned IPv4, attaches it without automatic IPv6, and accep
   ).toMatchObject({ kind: 'accepted', resource: { kind: 'server', id: '42' } });
   expect(await requests[1]?.json()).toMatchObject({
     public_net: { enable_ipv4: true, ipv4: 23, enable_ipv6: false },
+    image: 'pinned-image',
+    user_data: '#cloud-config\n',
   });
   expect(
     await source.submit({
@@ -171,4 +178,33 @@ it('keeps transport errors and malformed successful mutation responses uncertain
       command: { kind: 'create_primary_ip', name: 'owned', region: 'nbg1', labels: ip.labels },
     }),
   ).toMatchObject({ kind: 'rejected', error: { code: 'capacity_unavailable' } });
+});
+
+it('rejects legacy live creates and local rendering failures without a network mutation', async () => {
+  const transport = vi.fn<typeof fetch>();
+  const render = vi.fn<GuestRenderer>().mockRejectedValue(new Error('sensitive local data'));
+  const source = provider(transport, render);
+  const command = {
+    name: 'guest',
+    serverType: 'cpx12',
+    region: 'nbg1',
+    labels: {},
+    network: { kind: 'primary_ip', id: '23' },
+  } satisfies Omit<Extract<ProviderCommand, { kind: 'create' }>, 'kind'>;
+  expect(
+    await source.submit({ attemptId: newId.attempt(), command: { ...command, kind: 'create' } }),
+  ).toMatchObject({ kind: 'rejected' });
+  expect(render).not.toHaveBeenCalled();
+  const result = await source.submit({
+    attemptId: newId.attempt(),
+    command: {
+      ...command,
+      kind: 'create_guest',
+      bootstrap: { version: 1, allocationId: newId.allocation() },
+    },
+  });
+  expect(result).toMatchObject({ kind: 'rejected' });
+  expect(JSON.stringify(result)).not.toContain('sensitive');
+  expect(render).toHaveBeenCalledTimes(1);
+  expect(transport).not.toHaveBeenCalled();
 });

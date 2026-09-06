@@ -4,6 +4,7 @@ import {
   providerActionSchema,
   simulatedCatalog,
   providerCommandSchema,
+  isServerCreateCommand,
   providerServerSchema,
   providerPrimaryIpSchema,
   type CatalogSource,
@@ -120,7 +121,7 @@ export class SimulatedProvider implements MachineProvider {
       return this.submitIp(command);
     if (this.fault.kind === 'timeout_before_submit') return uncertain;
     if (this.fault.kind === 'reject') return rejection;
-    const serverId = command.kind === 'create' ? randomUUID() : command.serverId;
+    const serverId = isServerCreateCommand(command) ? randomUUID() : command.serverId;
     const actionId = randomUUID();
     const visibleAt = new Date(
       Date.now() + (this.fault.kind === 'lose_response' ? this.fault.visibilityDelayMs : 0),
@@ -137,7 +138,7 @@ export class SimulatedProvider implements MachineProvider {
           }
         : { kind: 'succeeded' };
     const submitted = await this.db.transaction(async (tx) => {
-      if (command.kind === 'create') {
+      if (isServerCreateCommand(command)) {
         let primaryIp: ProviderPrimaryIp | null = null;
         if (command.network.kind === 'primary_ip') {
           const [stored] = await tx
@@ -247,6 +248,7 @@ export class SimulatedProvider implements MachineProvider {
                 .where(eq(simulatedServers.id, row.serverId));
               break;
             case 'create':
+            case 'create_guest':
             case 'reboot':
             case 'power_on':
             case 'power_off':

@@ -18,6 +18,7 @@ import {
   type ProviderAction,
   type Submission,
   type ProviderPrimaryIp,
+  type ProviderCommand,
 } from '@agent-cloud/contracts';
 
 const numericId = z.int().positive();
@@ -85,32 +86,41 @@ function serverRecord(value: z.infer<typeof serverSchema>): ProviderServer {
   };
 }
 
-const templateSchema = z.object({
-  image: z.string().min(1),
+const accessSchema = z.strictObject({
   firewallIds: z.array(numericId).min(1),
   sshKeys: z.array(z.string().min(1)).min(1),
+});
+const renderedGuestSchema = z.strictObject({
+  image: z.string().min(1),
   userData: z
     .string()
     .min(1)
     .refine((value) => Buffer.byteLength(value) <= 32768, 'Cloud-init must fit 32 KiB.'),
 });
+export type GuestRenderer = (input: {
+  attemptId: Parameters<MachineProvider['submit']>[0]['attemptId'];
+  command: Extract<ProviderCommand, { kind: 'create_guest' }>;
+}) => Promise<z.infer<typeof renderedGuestSchema>>;
 
 /** Transport adapter only. Activating live work also requires the control-plane guest and cleanup checks. */
 export class HetznerProvider implements MachineProvider {
   readonly kind = 'hetzner';
   private readonly request: ReturnType<typeof createHetznerRequest>;
   private readonly offers: OfferConfiguration;
-  private readonly template: z.infer<typeof templateSchema>;
+  private readonly access: z.infer<typeof accessSchema>;
+  private readonly renderGuest: GuestRenderer;
 
   constructor(input: {
     token: string;
     offers: OfferConfiguration;
-    template: z.infer<typeof templateSchema>;
+    access: z.infer<typeof accessSchema>;
+    renderGuest: GuestRenderer;
     transport?: typeof fetch;
   }) {
     this.offers = offerConfigurationSchema.parse(input.offers);
     this.request = createHetznerRequest(input);
-    this.template = templateSchema.parse(input.template);
+    this.access = accessSchema.parse(input.access);
+    this.renderGuest = input.renderGuest;
   }
 
   getCatalog() {
@@ -155,16 +165,32 @@ export class HetznerProvider implements MachineProvider {
         await this.request({ path: `/primary_ips/${id}`, method: 'DELETE' });
         return { kind: 'completed', resource: { kind: 'primary_ip', id } };
       }
-      if (command.kind === 'create') {
-        if (command.network.kind === 'legacy')
+      if (command.kind === 'create')
+        return {
+          kind: 'rejected',
+          error: {
+            code: 'invalid_input',
+            message: 'New live VMs require an allocation bootstrap reference.',
+            retryable: false,
+          },
+        };
+      if (command.kind === 'create_guest') {
+        let guest: z.infer<typeof renderedGuestSchema>;
+        try {
+          guest = renderedGuestSchema.parse(
+            await this.renderGuest({ attemptId: input.attemptId, command }),
+          );
+        } catch {
+          // No provider request has happened. Do not classify a local preparation failure as uncertain.
           return {
             kind: 'rejected',
             error: {
-              code: 'invalid_input',
-              message: 'Live creation requires an explicitly owned Primary IP.',
+              code: 'provider_rejected',
+              message: 'Guest bootstrap could not be prepared for submission.',
               retryable: false,
             },
           };
+        }
         const primaryIpId = z
           .string()
           .regex(/^[1-9][0-9]*$/)
@@ -176,11 +202,11 @@ export class HetznerProvider implements MachineProvider {
             name: command.name,
             server_type: command.serverType,
             location: command.region,
-            image: this.template.image,
+            image: guest.image,
             labels: { ...command.labels, attempt_id: input.attemptId },
-            firewalls: this.template.firewallIds.map((firewall) => ({ firewall })),
-            ssh_keys: this.template.sshKeys,
-            user_data: this.template.userData,
+            firewalls: this.access.firewallIds.map((firewall) => ({ firewall })),
+            ssh_keys: this.access.sshKeys,
+            user_data: guest.userData,
             start_after_create: true,
             automount: false,
             public_net: { enable_ipv4: true, ipv4: Number(primaryIpId), enable_ipv6: false },

@@ -6,6 +6,7 @@ import {
   selectOffer,
   lifecycleCommandSchema,
   providerCommandSchema,
+  isServerCreateCommand,
   attemptOutcomeSchema,
   effectResolutionSchema,
   attemptIdSchema,
@@ -74,7 +75,9 @@ export async function journalEffect(input: {
 }) {
   const { db, operation, allocation, command, provider, limits } = input;
   const monetary =
-    command.kind === 'create_primary_ip' || command.kind === 'create' || command.kind === 'resize';
+    command.kind === 'create_primary_ip' ||
+    isServerCreateCommand(command) ||
+    command.kind === 'resize';
   if (monetary) {
     const [stored] = await db.select().from(operations).where(eq(operations.id, operation.id));
     const offer = catalogItemSchema.parse(stored?.offer);
@@ -173,7 +176,7 @@ export async function journalEffect(input: {
     if (
       (outcome.kind === 'accepted' || outcome.kind === 'completed') &&
       outcome.resource.kind === resourceKind(command) &&
-      (command.kind === 'create' || command.kind === 'create_primary_ip')
+      (isServerCreateCommand(command) || command.kind === 'create_primary_ip')
     )
       await claimResource(tx, { allocation, resource: outcome.resource, labels: command.labels });
   });
@@ -202,11 +205,10 @@ async function evaluate(input: {
   const uncertain = outcome.kind === 'prepared' || outcome.kind === 'unknown';
   let resource: ResourceRef;
   if (uncertain) {
-    if (command.kind === 'create' || command.kind === 'create_primary_ip') {
-      const matches =
-        command.kind === 'create'
-          ? await provider.findServers({ labels: command.labels })
-          : await provider.findPrimaryIps({ labels: command.labels });
+    if (isServerCreateCommand(command) || command.kind === 'create_primary_ip') {
+      const matches = isServerCreateCommand(command)
+        ? await provider.findServers({ labels: command.labels })
+        : await provider.findPrimaryIps({ labels: command.labels });
       if (matches.length > 1) return blocked('duplicate_provider_resources');
       const match = matches[0];
       if (!match) return blocked('provider_outcome_unknown');
@@ -267,10 +269,13 @@ async function evaluate(input: {
   if (server && server.id !== resource.id) return blocked('provider_resource_mismatch');
   if (command.kind === 'destroy' && !server) return verified({ kind: 'absent', resource });
   if (!server) return pending();
-  if (!matchesLabels(server.labels, command.kind === 'create' ? command.labels : expectedLabels))
+  if (
+    !matchesLabels(server.labels, isServerCreateCommand(command) ? command.labels : expectedLabels)
+  )
     return blocked('provider_resource_mismatch');
   switch (command.kind) {
     case 'create':
+    case 'create_guest':
       if (
         server.serverType !== command.serverType ||
         server.region !== command.region ||
@@ -329,7 +334,7 @@ export async function resolveEffect(input: {
                 ? { kind: 'server', id: observed.server.id }
                 : { kind: 'primary_ip', id: observed.primaryIp.id },
             labels:
-              command.kind === 'create' || command.kind === 'create_primary_ip'
+              isServerCreateCommand(command) || command.kind === 'create_primary_ip'
                 ? command.labels
                 : input.expectedLabels,
           });

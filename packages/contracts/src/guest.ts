@@ -58,15 +58,17 @@ const identityFields = guestEnrollmentInputSchema.pick({
   imageVersion: true,
 }).shape;
 const certificate = z.string().min(1).max(16384).regex(/\S/);
+export const issuedGuestIdentitySchema = z.strictObject({
+  kind: z.literal('issued'),
+  ...identityFields,
+  sshHostCertificate: certificate,
+  tlsCertificate: certificate,
+  issuedAt: z.iso.datetime(),
+});
+export type IssuedGuestIdentity = z.infer<typeof issuedGuestIdentitySchema>;
 export const guestIdentitySchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('claimed'), ...identityFields }),
-  z.strictObject({
-    kind: z.literal('issued'),
-    ...identityFields,
-    sshHostCertificate: certificate,
-    tlsCertificate: certificate,
-    issuedAt: z.iso.datetime(),
-  }),
+  issuedGuestIdentitySchema,
 ]);
 export type GuestIdentity = z.infer<typeof guestIdentitySchema>;
 export const guestProofSchema = z.strictObject({

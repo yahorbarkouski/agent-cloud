@@ -15,6 +15,34 @@ import type { AllocationId } from '@agent-cloud/contracts';
 import { inspectIssuedSsh } from './ssh-certificate.js';
 import { inspectIssuedTls } from './tls-certificate.js';
 
+async function readCsrKey(run: (args: string[]) => Promise<string>, request: string, name: string) {
+  const details = z
+    .object({
+      Subject: z.strictObject({ common_name: z.tuple([z.literal(name)]) }),
+      DNSNames: z.tuple([z.literal(name)]),
+      EmailAddresses: z.array(z.never()).nullish(),
+      IPAddresses: z.array(z.never()).nullish(),
+      URIs: z.array(z.never()).nullish(),
+      Extensions: z.array(z.object({ id: z.literal('2.5.29.17') })).max(1),
+      PublicKeyAlgorithm: z.object({ name: z.literal('ECDSA') }),
+      RawSubjectPublicKeyInfo: z.string(),
+    })
+    .safeParse(JSON.parse(await run(['certificate', 'inspect', request, '--format', 'json'])));
+  if (!details.success)
+    throw new CloudError(
+      'invalid_input',
+      'Guest CSR must request only its allocation name with an ECDSA key.',
+    );
+  const key = createPublicKey({
+    key: Buffer.from(details.data.RawSubjectPublicKeyInfo, 'base64'),
+    format: 'der',
+    type: 'spki',
+  });
+  if (key.asymmetricKeyType !== 'ec' || key.asymmetricKeyDetails?.namedCurve !== 'prime256v1')
+    throw new CloudError('invalid_input', 'Guest TLS keys must use ECDSA P-256.');
+  return key;
+}
+
 export function guestName(allocationId: AllocationId): string {
   return `${allocationIdSchema.parse(allocationId).replace('alloc_', 'alloc-')}.guest.agent-cloud.internal`;
 }
@@ -146,36 +174,26 @@ export function createSigner(configuration: SignerConfiguration) {
     });
   }
 
+  async function validateTlsRequest(input: {
+    allocationId: AllocationId;
+    csr: string;
+  }): Promise<void> {
+    const name = guestName(input.allocationId);
+    const csr = guestEnrollmentInputSchema.shape.tlsCsr.parse(input.csr);
+    await inWorkspace(async (directory, run) => {
+      const request = join(directory, 'guest.csr');
+      await writeFile(request, csr, { flag: 'wx', mode: 0o600 });
+      await readCsrKey(run, request, name);
+    });
+  }
+
   async function signTls(input: { allocationId: AllocationId; csr: string }) {
     const name = guestName(input.allocationId);
     const csr = guestEnrollmentInputSchema.shape.tlsCsr.parse(input.csr);
     return inWorkspace(async (directory, run, flags) => {
       const request = join(directory, 'guest.csr');
       await writeFile(request, csr, { flag: 'wx', mode: 0o600 });
-      const details = z
-        .object({
-          Subject: z.strictObject({ common_name: z.tuple([z.literal(name)]) }),
-          DNSNames: z.tuple([z.literal(name)]),
-          EmailAddresses: z.array(z.never()).nullish(),
-          IPAddresses: z.array(z.never()).nullish(),
-          URIs: z.array(z.never()).nullish(),
-          Extensions: z.array(z.object({ id: z.literal('2.5.29.17') })).max(1),
-          PublicKeyAlgorithm: z.object({ name: z.literal('ECDSA') }),
-          RawSubjectPublicKeyInfo: z.string(),
-        })
-        .safeParse(JSON.parse(await run(['certificate', 'inspect', request, '--format', 'json'])));
-      if (!details.success)
-        throw new CloudError(
-          'invalid_input',
-          'Guest CSR must request only its allocation name with an ECDSA key.',
-        );
-      const key = createPublicKey({
-        key: Buffer.from(details.data.RawSubjectPublicKeyInfo, 'base64'),
-        format: 'der',
-        type: 'spki',
-      });
-      if (key.asymmetricKeyType !== 'ec' || key.asymmetricKeyDetails?.namedCurve !== 'prime256v1')
-        throw new CloudError('invalid_input', 'Guest TLS keys must use ECDSA P-256.');
+      const key = await readCsrKey(run, request, name);
       const output = join(directory, 'guest.crt');
       const startedAt = Date.now();
       await run(['ca', 'sign', request, output, '--not-after', '1h', ...flags]);
@@ -216,11 +234,13 @@ export function createSigner(configuration: SignerConfiguration) {
       return { allocationId, privateKey: await readFile(path, 'utf8'), ...signed };
     });
   }
-  return {
+  return Object.freeze({
+    trust: Object.freeze({ tlsRoot: root.toString(), sshHostCa: hostCa, sshUserCa: userCa }),
     signHost: async (input: { allocationId: AllocationId; publicKey: string }) =>
       (await signSsh({ ...input, kind: 'host' })).certificate,
     issueProbeCredential,
+    validateTlsRequest,
     signTls,
-  };
+  });
 }
 export type Signer = ReturnType<typeof createSigner>;

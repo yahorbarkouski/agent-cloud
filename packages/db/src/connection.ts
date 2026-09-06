@@ -27,11 +27,11 @@ export type Database = NodePgDatabase<typeof schema>;
 export type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 export type Executor = Database | Transaction;
 
-export async function withMachineLock(input: {
+export async function withMachineLock<T>(input: {
   pool: pg.Pool;
   machineId: string;
-  work: (db: Database) => Promise<void>;
-}): Promise<boolean> {
+  work: (db: Database) => Promise<T>;
+}): Promise<{ kind: 'acquired'; value: T } | { kind: 'busy' }> {
   const client = await input.pool.connect();
   let acquired = false;
   try {
@@ -40,9 +40,8 @@ export async function withMachineLock(input: {
       [`machine:${input.machineId}`],
     );
     acquired = result.rows[0]?.acquired === true;
-    if (!acquired) return false;
-    await input.work(drizzle(client, { schema }));
-    return true;
+    if (!acquired) return { kind: 'busy' };
+    return { kind: 'acquired', value: await input.work(drizzle(client, { schema })) };
   } finally {
     let discard = false;
     if (acquired) {

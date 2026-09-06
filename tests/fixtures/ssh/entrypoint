@@ -3,9 +3,15 @@ set -eu
 # Bind mounts retain the developer/CI uid. sshd requires root-owned trust files.
 mkdir -p /run/agent-cloud
 chmod 755 /run/agent-cloud
-for name in host_key host_key-cert.pub user_ca.pub principals; do
+for name in host_key user_ca.pub principals; do
   cp "/fixture/$name" "/run/agent-cloud/$name"
 done
 chmod 600 /run/agent-cloud/host_key
-chmod 644 /run/agent-cloud/host_key-cert.pub /run/agent-cloud/user_ca.pub /run/agent-cloud/principals
+chmod 644 /run/agent-cloud/user_ca.pub /run/agent-cloud/principals
+if test -f /fixture/host_key-cert.pub; then
+  cp /fixture/host_key-cert.pub /run/agent-cloud/host_key-cert.pub
+  chmod 644 /run/agent-cloud/host_key-cert.pub
+else
+  sed -i '/^HostCertificate /d' /etc/ssh/sshd_config
+fi
 exec /usr/sbin/sshd -D -e

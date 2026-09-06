@@ -25,7 +25,9 @@
     "pg": "8.23.0",
     "drizzle-orm": "0.45.2",
     "graphile-worker": "0.17.3",
-    "pino": "10.3.1"
+    "pino": "10.3.1",
+    "@agent-cloud/pki": "workspace:*",
+    "@agent-cloud/remote": "workspace:*"
   },
   "devDependencies": {
     "@types/pg": "8.23.1"

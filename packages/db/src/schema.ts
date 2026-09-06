@@ -292,3 +292,25 @@ export const guestIdentities = pgTable(
     }),
   ],
 );
+
+export const guestSigningAttempts = pgTable(
+  'guest_signing_attempts',
+  {
+    accountId: text('account_id').notNull(),
+    allocationId: text('allocation_id').notNull(),
+    purpose: text('purpose').notNull(),
+    sequence: integer('sequence').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.allocationId, t.purpose, t.sequence] }),
+    foreignKey({
+      columns: [t.accountId, t.allocationId],
+      foreignColumns: [guestBootstraps.accountId, guestBootstraps.allocationId],
+    }),
+    check(
+      'guest_signing_attempt_budget',
+      sql`(${t.purpose} = 'probe' AND ${t.sequence} BETWEEN 1 AND 12) OR (${t.purpose} = 'identity' AND ${t.sequence} BETWEEN 1 AND 4)`,
+    ),
+  ],
+);

@@ -17,6 +17,7 @@ import {
   idempotencyKeySchema,
   projectInputSchema,
   grantInputSchema,
+  guestEnrollmentInputSchema,
   newId,
   type Principal,
   type MachineProvider,
@@ -34,12 +35,14 @@ import {
 import { authenticate, authorize, issueGrant, loadPrincipal, revokeGrant } from './auth.js';
 import { admit, lockAccount } from './lifecycle.js';
 import type { Config } from './config.js';
+import type { EnrollmentService } from './guest-enrollment.js';
 
 export function createApp(input: {
   db: Database;
   provider: MachineProvider['kind'];
   catalog: CatalogSource;
   limits: Config['limits'];
+  enrollment?: EnrollmentService;
 }) {
   const app = new Hono<{ Variables: { principal: Principal; requestId: string } }>();
   app.use('*', async (c, next) => {
@@ -89,6 +92,13 @@ export function createApp(input: {
     ),
   );
   app.get('/healthz', (c) => c.json({ status: 'ok' }));
+  const enrollment = input.enrollment;
+  if (enrollment)
+    app.post('/guest/enroll', async (c) =>
+      c.json(
+        await enrollment.enroll(guestEnrollmentInputSchema.parse(await c.req.json<unknown>())),
+      ),
+    );
   app.use('/v1/*', async (c, next) => {
     c.set('principal', await authenticate(input.db, c.req.header('Authorization')));
     await next();

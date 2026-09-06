@@ -73,6 +73,11 @@ export const operationProgressSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('cleaning_up') }),
   z.object({ kind: z.literal('verifying'), resource: resourceRefSchema }),
   z.object({
+    kind: z.literal('waiting_guest'),
+    serverId: z.string(),
+    stage: z.enum(['enrollment', 'runtime']),
+  }),
+  z.object({
     kind: z.literal('blocked'),
     reason: z.enum([
       'provider_outcome_unknown',

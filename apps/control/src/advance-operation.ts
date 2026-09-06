@@ -5,10 +5,12 @@ import {
   catalogItemSchema,
   lifecycleCommandSchema,
   providerCommandSchema,
+  isServerCreateCommand,
   effectResolutionSchema,
   attemptOutcomeSchema,
   operationIntentSchema,
   networkProfileSchema,
+  guestIdentitySchema,
   isOperationTerminal,
   type Operation,
   type OperationId,
@@ -16,6 +18,8 @@ import {
   type MachineProvider,
   type ProviderServer,
   type Failure,
+  type GuestImage,
+  type ProviderCommand,
 } from '@agent-cloud/contracts';
 import {
   operations,
@@ -24,6 +28,7 @@ import {
   attempts,
   providerResources,
   auditEvents,
+  guestIdentities,
   operationRecord,
   machineRecord,
   withMachineLock,
@@ -31,6 +36,8 @@ import {
   type Connection,
 } from '@agent-cloud/db';
 import type { Config } from './config.js';
+import type { BootstrapSeal } from './bootstrap-seal.js';
+import { prepareGuestBootstrap } from './guest-bootstrap.js';
 import { journalEffect, resolveEffect, setProgress, type Attempt } from './effect-journal.js';
 import {
   effectLabels,
@@ -181,6 +188,10 @@ async function complete(input: {
   });
 }
 
+export type GuestProvisioning =
+  | { kind: 'disabled' }
+  | { kind: 'enabled'; image: GuestImage; seal: BootstrapSeal; enrollmentUrl: string };
+
 type Work = {
   db: Database;
   operation: Operation;
@@ -190,9 +201,13 @@ type Work = {
   limits: Config['limits'];
   history: Attempt[];
   resources: OwnedResource[];
+  guest: GuestProvisioning;
 };
 function effectOf(history: Attempt[], kind: string) {
-  return history.find((row) => providerCommandSchema.parse(row.command).kind === kind);
+  return history.find((row) => {
+    const command = providerCommandSchema.parse(row.command);
+    return kind === 'create' ? isServerCreateCommand(command) : command.kind === kind;
+  });
 }
 async function beginFailure(work: Work, error: Failure) {
   if (work.operation.kind === 'machine.create') {
@@ -254,6 +269,7 @@ async function advanceLocked(
   operationId: OperationId,
   provider: MachineProvider,
   limits: Config['limits'],
+  guest: GuestProvisioning,
 ) {
   const [row] = await db.select().from(operations).where(eq(operations.id, operationId));
   if (!row) return;
@@ -278,7 +294,17 @@ async function advanceLocked(
     .select()
     .from(providerResources)
     .where(eq(providerResources.allocationId, allocation.id));
-  const work: Work = { db, operation, machine, allocation, provider, limits, history, resources };
+  const work: Work = {
+    db,
+    operation,
+    machine,
+    allocation,
+    provider,
+    limits,
+    history,
+    resources,
+    guest,
+  };
   const pending = history.find(
     (attempt) => effectResolutionSchema.parse(attempt.resolution).kind === 'pending',
   );
@@ -319,6 +345,9 @@ async function advanceLocked(
       const profile = networkProfileSchema.parse(allocation.networkProfile);
       const offer = catalogItemSchema.parse(row.offer);
       const labels = effectLabels(operation, allocation);
+      const create = effectOf(history, 'create');
+      if (!create && provider.kind === 'hetzner' && guest.kind !== 'enabled')
+        throw new CloudError('provider_rejected', 'Live guest provisioning is not configured.');
       const ipEffect = effectOf(history, 'create_primary_ip');
       if (profile === 'managed_ipv4' && !ipEffect) {
         await journalEffect({
@@ -333,7 +362,6 @@ async function advanceLocked(
         });
         return;
       }
-      const create = effectOf(history, 'create');
       if (!create) {
         const ip = resources.find(
           (candidate) => candidate.kind === 'primary_ip' && !candidate.absentAt,
@@ -358,23 +386,56 @@ async function advanceLocked(
             return;
           }
         }
-        await journalEffect({
-          ...work,
-          command: {
+        const details = {
+          name: machine.id.replaceAll('_', '-'),
+          serverType: offer.serverType,
+          region: offer.region,
+          labels,
+        };
+        let command: ProviderCommand;
+        if (provider.kind === 'hetzner' && guest.kind === 'enabled') {
+          if (!ip || profile !== 'managed_ipv4')
+            throw new CloudError(
+              'provider_rejected',
+              'Guest creation requires an owned Primary IP.',
+            );
+          const bootstrap = await db.transaction((tx) =>
+            prepareGuestBootstrap(tx, { allocation, operation, ...guest }),
+          );
+          command = {
+            ...details,
+            kind: 'create_guest',
+            network: { kind: 'primary_ip', id: ip.providerId },
+            bootstrap,
+          };
+        } else
+          command = {
+            ...details,
             kind: 'create',
-            name: machine.id.replaceAll('_', '-'),
-            serverType: offer.serverType,
-            region: offer.region,
-            labels,
             network: ip ? { kind: 'primary_ip', id: ip.providerId } : { kind: 'legacy' },
-          },
-          authorization: 'fresh',
-        });
+          };
+        await journalEffect({ ...work, command, authorization: 'fresh' });
         return;
       }
       const resolution = effectResolutionSchema.parse(create.resolution);
       if (resolution.kind !== 'confirmed' || resolution.observation.kind !== 'server')
         throw new CloudError('internal_error', 'Create has no verified server.');
+      if (provider.kind === 'hetzner') {
+        const [identity] = await db
+          .select()
+          .from(guestIdentities)
+          .where(eq(guestIdentities.allocationId, allocation.id));
+        const stage =
+          identity && guestIdentitySchema.parse(identity.identity).kind === 'issued'
+            ? 'runtime'
+            : 'enrollment';
+        await setProgress(db, operation, {
+          kind: 'waiting_guest',
+          serverId: resolution.observation.server.id,
+          stage,
+        });
+        return;
+      }
       await complete({ ...work, server: resolution.observation.server });
       return;
     }
@@ -466,6 +527,7 @@ export async function advanceOperation(input: {
   operationId: OperationId;
   provider: MachineProvider;
   limits: Config['limits'];
+  guest?: GuestProvisioning;
 }): Promise<void> {
   const [row] = await input.connection.db
     .select()
@@ -475,6 +537,13 @@ export async function advanceOperation(input: {
   await withMachineLock({
     pool: input.connection.pool,
     machineId: row.machineId,
-    work: (db) => advanceLocked(db, input.operationId, input.provider, input.limits),
+    work: (db) =>
+      advanceLocked(
+        db,
+        input.operationId,
+        input.provider,
+        input.limits,
+        input.guest ?? { kind: 'disabled' },
+      ),
   });
 }

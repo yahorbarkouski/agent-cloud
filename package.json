@@ -33,7 +33,8 @@
     "pki:up": "docker compose --env-file .local/pki/compose.env -f infra/compose/pki-development.yaml up -d --wait",
     "pki:down": "docker compose --env-file .local/pki/compose.env -f infra/compose/pki-development.yaml down",
     "smoke:pki": "pnpm build && tsx scripts/smoke-pki.ts",
-    "smoke:ssh": "pnpm build && docker build -t agent-cloud-ssh-fixture:development tests/fixtures/ssh && tsx scripts/smoke-ssh.ts"
+    "smoke:ssh": "pnpm build && docker build -t agent-cloud-ssh-fixture:development tests/fixtures/ssh && tsx scripts/smoke-ssh.ts",
+    "smoke:enrollment": "pnpm build && docker build -t agent-cloud-ssh-fixture:development tests/fixtures/ssh && tsx scripts/smoke-enrollment.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
