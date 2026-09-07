@@ -148,6 +148,13 @@
       "when": 1788795823283,
       "tag": "0020_access_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788812842839,
+      "tag": "0021_customer_identity",
+      "breakpoints": true
     }
   ]
 }

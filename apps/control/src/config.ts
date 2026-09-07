@@ -31,6 +31,9 @@ export function readConfig(environment: NodeJS.ProcessEnv = process.env) {
     host: env.HOST,
     port: env.PORT,
     publicUrl: env.PUBLIC_URL,
+    ...(environment.ACLD_GITHUB_CONFIG
+      ? { githubConfigFile: resolve(environment.ACLD_GITHUB_CONFIG) }
+      : {}),
     ...(environment.ACLD_ACCESS_CONFIG
       ? { accessConfigFile: resolve(environment.ACLD_ACCESS_CONFIG) }
       : {}),

@@ -29,6 +29,8 @@ import {
   newId,
   type Principal,
   type MachineProvider,
+  githubTokenSchema,
+  loginRequestSchema,
 } from '@agent-cloud/contracts';
 import {
   projects,
@@ -41,6 +43,7 @@ import {
   type Database,
 } from '@agent-cloud/db';
 import type { InternalReference } from './internal-reference.js';
+import type { CustomerLogin } from './customer-login.js';
 import type { AccessService } from './access-sessions.js';
 import {
   authenticate,
@@ -69,6 +72,7 @@ export function createApp(input: {
   customerAccess?: 'enabled' | 'disabled';
   internalReference?: InternalReference;
   access?: AccessService;
+  login?: CustomerLogin;
 }) {
   const app = new Hono<{ Variables: { principal: Principal; requestId: string } }>();
   app.use('*', async (c, next) => {
@@ -118,6 +122,21 @@ export function createApp(input: {
     ),
   );
   app.get('/healthz', (c) => c.json({ status: 'ok' }));
+  if (input.login && input.customerAccess !== 'disabled') {
+    const login = input.login;
+    app.get('/auth/config', (c) => c.json(login.config));
+    app.post('/auth/github', async (c) => {
+      const authorization = c.req.header('Authorization');
+      if (!authorization?.startsWith('Bearer '))
+        throw new CloudError('unauthenticated', 'GitHub sign-in is required.');
+      return c.json(
+        await login.login(
+          githubTokenSchema.parse(authorization.slice(7)),
+          loginRequestSchema.parse(await c.req.json<unknown>()),
+        ),
+      );
+    });
+  }
   const enrollment = input.enrollment;
   if (enrollment)
     app.post('/guest/enroll', async (c) =>

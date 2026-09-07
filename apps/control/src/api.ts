@@ -4,6 +4,8 @@ import { createApp } from './app.js';
 import { readConfig } from './config.js';
 import { createCatalogRuntime } from './catalog-runtime.js';
 import { createOperatorRuntime } from './operator-runtime.js';
+import { createCustomerLogin } from './customer-login.js';
+import { readGithubConfig, githubIdentityVerifier } from './github-identity.js';
 
 const config = readConfig();
 const connection = connect(config.databaseUrl);
@@ -16,11 +18,24 @@ const onCatalogFailure = () => {
 const catalog = createCatalogRuntime(config, onCatalogFailure);
 await catalog.refresh().catch(onCatalogFailure);
 catalog.start();
+const github =
+  config.githubConfigFile && runtime?.mode !== 'image_factory'
+    ? await readGithubConfig(config.githubConfigFile)
+    : undefined;
 const app = createApp({
   db: connection.db,
   provider: config.provider,
   limits: config.limits,
   catalog: catalog.snapshot,
+  ...(github
+    ? {
+        login: createCustomerLogin({
+          db: connection.db,
+          clientId: github.clientId,
+          verify: githubIdentityVerifier(github),
+        }),
+      }
+    : {}),
   ...(runtime?.mode === 'image_factory'
     ? { imageEnrollment: runtime.enrollment, customerAccess: 'disabled' }
     : {}),

@@ -20,3 +20,4 @@ export * from './access.js';
 export * from './reference.js';
 export * from './runs.js';
 export * from './compose.js';
+export * from './login.js';

@@ -191,7 +191,8 @@ export async function issueGrant(
 }
 
 export async function revokeGrant(db: Executor, input: { principal: Principal; grantId: GrantId }) {
-  authorize(input.principal, 'grant:manage');
+  // Any credential may revoke itself; revoking another still requires delegation authority.
+  if (input.grantId !== input.principal.grantId) authorize(input.principal, 'grant:manage');
   let currentId: string | null = input.grantId;
   let descendant = false;
   for (let depth = 0; currentId && depth < 32; depth++) {

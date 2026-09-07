@@ -1,7 +1,6 @@
 #!/usr/bin/env node
-import { mkdir, readFile, writeFile, rename, rm } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
-import { dirname, join, resolve } from 'node:path';
+import { readFile, open } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { Command, CommanderError } from 'commander';
 import { z } from 'zod';
@@ -21,6 +20,8 @@ import { registerGrants } from './grants.js';
 import { registerSsh } from './ssh.js';
 import { registerRuns } from './runs.js';
 import { registerCompose } from './compose.js';
+import { loginWithDevice, logout } from './login.js';
+import { syncCredentialDirectories, withCredentialLock } from './credential-file.js';
 
 const program = new Command()
   .name('acld')
@@ -45,11 +46,17 @@ registerCompose({ program, client, output });
 
 program
   .command('login')
-  .description('Validate a token from stdin and save it with owner-only permissions.')
+  .description('Sign in with a GitHub device code, or validate an existing token from stdin.')
   .requiredOption('--server <url>')
-  .requiredOption('--token-stdin')
+  .option('--token-stdin', 'Use an existing cloud token instead of GitHub sign-in')
   .action(async (raw: unknown) => {
-    const options = z.object({ server: apiUrlSchema, tokenStdin: z.literal(true) }).parse(raw);
+    const options = z
+      .object({ server: apiUrlSchema, tokenStdin: z.literal(true).optional() })
+      .parse(raw);
+    if (!options.tokenStdin) {
+      output(await loginWithDevice(options.server, credentialsPath()));
+      return;
+    }
     let token = '';
     process.stdin.setEncoding('utf8');
     for await (const chunk of process.stdin) {
@@ -59,19 +66,27 @@ program
     const credentials = credentialsSchema.parse({ server: options.server, token: token.trim() });
     const result = await new CloudClient(credentials).whoami();
     const path = credentialsPath();
-    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-    const temporary = `${path}.${randomUUID()}.tmp`;
-    try {
-      await writeFile(temporary, JSON.stringify(credentials) + '\n', { mode: 0o600, flag: 'wx' });
-      await rename(temporary, path);
-    } finally {
-      await rm(temporary, { force: true });
-    }
+    await withCredentialLock(path, async (lockedPath) => {
+      const file = await open(lockedPath, 'wx', 0o600);
+      try {
+        await file.writeFile(JSON.stringify(credentials) + '\n');
+        await file.sync();
+      } finally {
+        await file.close();
+      }
+      await syncCredentialDirectories(lockedPath);
+    });
     output({ principal: result.principal, credentialsFile: path });
   });
 program.command('whoami').action(async () => {
   output(await (await client()).whoami());
 });
+program
+  .command('logout')
+  .description('Revoke this credential and descendants, then remove its local file.')
+  .action(async () => {
+    output(await logout(credentialsPath()));
+  });
 program.command('catalog').action(async () => {
   output(await (await client()).catalog());
 });

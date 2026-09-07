@@ -5,13 +5,13 @@ description: Operate agent-cloud machines through its JSON CLI, inspect durable 
 
 # Agent-cloud
 
-Use the installed `acld` CLI. In a source checkout, use `pnpm acld`. Run `acld --help` when unsure about available commands. The current release supports machine lifecycle, scoped delegation, SSH, single-file transfer, durable commands and Compose deployment/recovery. Managed routes, protected backups and browser login are still being implemented.
+Use the installed `acld` CLI. In a source checkout, use `pnpm acld`. Run `acld --help` when unsure about available commands. The current release supports GitHub device sign-in, machine lifecycle, scoped delegation, SSH, single-file transfer, durable commands and Compose deployment/recovery. Managed routes and protected backups are still being implemented.
 
 ## Establish context
 
 Run `acld whoami`, `acld catalog`, and `acld project list`. The credential defines capabilities, project scope, permitted sizes/regions, and resource limits. This skill does not expand those permissions or the user's task.
 
-Credentials live in the CLI configuration file, or the path named by `ACLD_CREDENTIALS`. For initial token authentication, use `acld login --server <url> --token-stdin` with the token supplied on stdin. Do not include tokens in arguments, messages, application files, or Git. Provider credentials belong to the operator and never belong in a customer VM.
+Credentials live in the CLI configuration file, or the path named by `ACLD_CREDENTIALS`. For customer sign-in, run `acld login --server <url>` and have the customer authorize the code at the printed GitHub URL. Only operator-admitted identities can sign in. Retry an interrupted login with the same credential file. Never print or copy its token. A leftover `.lock` directory must only be removed after verifying its recorded process has exited. `acld logout` revokes this credential and descendants before removing the file; read-only agents may revoke themselves. For existing token authentication, use `acld login --server <url> --token-stdin` with the token supplied on stdin. Do not include tokens in arguments, messages, application files, or Git. Provider credentials belong to the operator and never belong in a customer VM.
 
 Check the catalog's provider field. `simulated` means no real VM exists. Inspect availability, architecture, currency, and the hourly reservation including IPv4. Simulated prices are synthetic; `account_gross` prices come from the provider account. Never interpret a different currency as equivalent or select a more expensive substitute without an allowed budget. Powered-off VMs retain their reservations and remain billable on Hetzner.
 

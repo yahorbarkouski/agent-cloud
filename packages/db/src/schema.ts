@@ -191,6 +191,47 @@ export const grants = pgTable(
   ],
 );
 
+/** Operator-admitted stable GitHub identity; its root grant is never delivered to a customer. */
+export const customerIdentities = pgTable(
+  'customer_identities',
+  {
+    githubUserId: text('github_user_id').primaryKey(),
+    accountId: text('account_id').notNull().unique(),
+    anchorGrantId: text('anchor_grant_id').notNull().unique(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.accountId, t.anchorGrantId],
+      foreignColumns: [grants.accountId, grants.id],
+    }),
+    unique().on(t.githubUserId, t.accountId),
+    check('github_user_id_format', sql`${t.githubUserId} ~ '^[1-9][0-9]{0,19}$'`),
+  ],
+);
+
+export const customerLogins = pgTable(
+  'customer_logins',
+  {
+    id: text('id').primaryKey(),
+    githubUserId: text('github_user_id').notNull(),
+    accountId: text('account_id').notNull(),
+    grantId: text('grant_id').notNull().unique(),
+    tokenHash: text('token_hash').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.githubUserId, t.accountId],
+      foreignColumns: [customerIdentities.githubUserId, customerIdentities.accountId],
+    }),
+    foreignKey({
+      columns: [t.accountId, t.grantId],
+      foreignColumns: [grants.accountId, grants.id],
+    }),
+  ],
+);
+
 export const machines = pgTable(
   'machines',
   {
