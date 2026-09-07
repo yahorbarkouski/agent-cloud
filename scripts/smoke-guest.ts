@@ -273,10 +273,10 @@ try {
       '/mnt/mac' + join(scratch, file),
       '/var/lib/cloud/seed/nocloud/' + file,
     ]);
-  // OrbStack owns the fixture's network. Hetzner guests retain normal cloud-init networking.
+  // OrbStack owns fixture networking and disk sizing; keep both provider defaults in production.
   await writeFile(
     join(scratch, 'datasource.cfg'),
-    'datasource_list: [NoCloud]\nnetwork:\n  config: disabled\n',
+    'datasource_list: [NoCloud]\nnetwork:\n  config: disabled\ngrowpart:\n  mode: "off"\nresize_rootfs: false\n',
     { mode: 0o600 },
   );
   await vm([
@@ -287,6 +287,7 @@ try {
     '/etc/cloud/cloud.cfg.d/91-agent-cloud-smoke.cfg',
   ]);
   progress('booting actual cloud-init and systemd enrollment');
+  await vm(['cloud-init', 'schema', '--config-file', '/var/lib/cloud/seed/nocloud/user-data']);
   await command('orb', ['restart', owner.name], 120_000);
   const deadline = Date.now() + 180_000;
   let enrolled = false;

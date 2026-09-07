@@ -1,0 +1,126 @@
+{
+  "verifiedAt": "2026-09-07T05:20:27.370Z",
+  "baselineCommit": "79efc9b",
+  "command": "pnpm smoke:builder",
+  "session": "63643",
+  "provider": "Local OrbStack Ubuntu 24.04 amd64 with simulated SQL/provider observations",
+  "cloudResourcesCreated": 0,
+  "manifestDigest": "6d80433f9917a0b07dd8a1d024a1fcf3d77bbdac1f9e54478a1ce322940ace71",
+  "imageVersion": "dev-e6b5cca9af9463c76a98a68e",
+  "publicInputsDigest": "e6b5cca9af9463c76a98a68e749e96ace8fe54939fda4f269497c7926d1a8da5",
+  "checksumDigest": "361129ee91605ead073ce10693cbaa6c4be988f94910bd4a059a105d073f5243",
+  "verified": [
+    "Real cloud-init schema and first boot with prepared builder host key",
+    "Pinned native SSH rejects wrong host key and wrong boot effect identity",
+    "Expired upload rejected before transfer",
+    "Actual SFTP transfer of validated public inputs",
+    "Changed uploaded installer rejected before execution or installation-start marker",
+    "Concurrent installation requests use one installation-start marker",
+    "Completed receipt recovered after the uploaded installer is removed",
+    "Upload refused after installation",
+    "Sanitation removes builder access, sudo rule, SSH drop-in, boot record and install state",
+    "Sanitized builder private-key fragment absent from bounded file and journal scan",
+    "Two fresh clones have distinct machine IDs and SSH/TLS identities",
+    "Both clones pass cloud-init enrollment, native SSH/TLS, runtime service/disk failures, reboot and bootstrap-token erasure",
+    "Owned VMs, records and private fixture directories removed"
+  ],
+  "builderKeyScan": {
+    "files": 64,
+    "bytes": 94289,
+    "matches": []
+  },
+  "clones": [
+    {
+      "machineId": "b2eecfd569e543138e708ed7e739de9e",
+      "sshIdentity": "20b4d55bd90e71f46d47e4d828d4793893a94ff52d51a77ccc588e5face81705",
+      "tlsIdentity": "f2e1769481ee8db609e4807f92643a303f9b188168f7fc5b597260288d176dab",
+      "allocationId": "alloc_d5e7a30a-9893-4033-bb58-ce53edaa17af",
+      "bootstrapScan": {
+        "files": 125,
+        "bytes": 601302,
+        "matches": []
+      }
+    },
+    {
+      "machineId": "268234e44ecf46fcad5b89e2d94aaa1c",
+      "sshIdentity": "9fa02c303ec7c5611b4f3295114d4c85a087694a1e42c3237584680e29fa8d8d",
+      "tlsIdentity": "2145c444c704f099991e1e4d44d4c22adb2408ecb57ce706f08a161a0ff05480",
+      "allocationId": "alloc_e47c08c5-e3cd-4458-83e1-75a7a4b62a98",
+      "bootstrapScan": {
+        "files": 125,
+        "bytes": 600091,
+        "matches": []
+      }
+    }
+  ],
+  "regressionChecks": {
+    "full": {
+      "session": "29948",
+      "testFiles": 24,
+      "tests": 256,
+      "typecheck": true,
+      "lint": true
+    },
+    "format": {
+      "session": "2331",
+      "passed": true
+    },
+    "pki": {
+      "session": "61632",
+      "passed": true
+    },
+    "ssh": {
+      "session": "21584",
+      "passed": true
+    },
+    "enrollment": {
+      "session": "58558",
+      "command": "pnpm exec tsx scripts/smoke-enrollment.ts",
+      "passed": true
+    },
+    "shellSyntax": {
+      "command": "sh -n images/install.sh",
+      "passed": true
+    }
+  },
+  "correctedNativeFindings": [
+    {
+      "session": "25078",
+      "finding": "Invalid empty ssh_genkeytypes; OrbStack disk-resize modules failed",
+      "correction": "Explicit SSH key maps; real schema validation; fixture-only growpart/resizefs disable"
+    },
+    {
+      "session": "13494",
+      "finding": "Builder primary group name differs from user name",
+      "correction": "Use numeric primary GID from the account"
+    },
+    {
+      "session": "89933",
+      "finding": "Restricted SSH PATH cannot find newly installed local tools",
+      "correction": "Invoke /usr/local/bin/node, caddy and step explicitly"
+    },
+    {
+      "session": "61632",
+      "finding": "Shared helper incorrectly rejected the existing ECDSA host CA",
+      "correction": "Reuse distinct pinned-host and CA contract schemas"
+    }
+  ],
+  "cleanup": {
+    "checkedAt": "2026-09-07T05:20:27.370Z",
+    "session": "dea8c1",
+    "localVmInventory": [],
+    "absentOwnershipRecords": [
+      ".local/guest-image-builder.json",
+      ".local/guest-image-refusal.json",
+      ".local/guest-image-machine.json"
+    ],
+    "builderAccessDirectories": []
+  },
+  "limitations": [
+    "No paid Hetzner resource, snapshot or provider boot was tested",
+    "The operator phase runner, verifier lifecycle, promotion and retained-release cleanup remain unfinished",
+    "Terminal operator key deletion is not wired; native fixture keys were removed after VM cleanup",
+    "Local filesystem scans are bounded residual-secret checks, not forensic disk erasure",
+    "The VM clone smoke requires macOS OrbStack and is not part of Linux GitHub CI"
+  ]
+}

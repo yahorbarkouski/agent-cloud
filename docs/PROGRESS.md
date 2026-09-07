@@ -41,6 +41,15 @@
 
 ## Verification ledger
 
+M1 authenticated builder installation, 2026-09-07:
+
+- Added independent Ed25519 key preparation, owner-only atomic local storage and admission-bound recovery. Prepared builder boot rendering checks exact effect identity, dependencies, cancellation and expiry. `image:build prepare` returns public admission configuration without DB/provider credentials.
+- Added native pinned SSH/SFTP and a durable installation-start marker. Verified source hashes run before uploaded code; only one concurrent request can execute the installer. Completed receipts are recoverable. Partial installation remains recorded and cannot be blindly retried.
+- Sanitation removes the builder sudo rule, SSH drop-in, installation state and boot record before erasing keys and homes. The runtime probe uses the shared SSH setup with its original read-only command and certificate scope.
+- Native attempts exposed invalid cloud-init configuration, local disk-sizing assumptions, differing user/group names, installed tools missing from a restricted PATH, and an overly narrow CA-key validator. All were corrected at their owning boundary. PKI61632, SSH21584 and enrollment58558 passed after the trust fix.
+- Full check29948 passed256tests/24files, typecheck and lint. Formatting2331 passed after a second pass on one method chain. `smoke:builder`63643 passed actual boot/SSH/SFTP, tamper rejection, concurrent installation/recovery, sanitation and a64-file/94289-byte key scan with no matches. Both fresh clones passed enrollment, restricted runtime checks, service/disk failure recovery, reboot and bootstrap erasure with distinct machine/SSH/TLS identities. Native cleanup removed every recorded VM, ownership record and private fixture directory. Evidence: `research/m1-image-access-verification.json`.
+- No paid resource was created. The full operator runner, durable phase SQL, verifier lifecycle, snapshot/retention/promotion and terminal local-key deletion remain unfinished. The gpt-5.6-sol reviewer completed the code/artifact/trail review without a remaining blocker in `research/m1-image-access-review.md`. Commit, push and Linux CI remain pending.
+
 M1 image/access transport and expired-action recovery, 2026-09-07:
 
 - Added the narrow Hetzner image/access HTTP adapter, exact resource decoding, prepared-effect renderer identity, separate IP/key/firewall requests and server/snapshot lifecycle requests. No CLI advancement or paid resource submission is exposed yet.

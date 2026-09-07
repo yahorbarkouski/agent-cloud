@@ -288,6 +288,9 @@ importers:
       '@agent-cloud/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@agent-cloud/images':
+        specifier: workspace:*
+        version: link:../images
       '@agent-cloud/pki':
         specifier: workspace:*
         version: link:../pki

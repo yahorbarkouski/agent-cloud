@@ -82,13 +82,13 @@ DOCKER
 systemctl daemon-reload
 systemctl enable docker.service agent-cloud-enroll.service agent-cloud-proxy.service
 systemctl restart docker.service
-[ "$(node --version)" = "v$(jq -r .components.node "$image_input/image.json")" ]
+[ "$(/usr/local/bin/node --version)" = "v$(jq -r .components.node "$image_input/image.json")" ]
 [ "$(docker version --format '{{.Server.Version}}')" = "$(jq -r .components.docker "$image_input/image.json")" ]
 [ "$(docker compose version --short)" = "$(jq -r .components.compose "$image_input/image.json")" ]
-caddy version
-step version
+/usr/local/bin/caddy version
+/usr/local/bin/step version
 dpkg-query --show > /usr/lib/agent-cloud/os-packages.txt
-node --input-type=module -e '
+/usr/local/bin/node --input-type=module -e '
   import { readFileSync, writeFileSync, readdirSync, lstatSync } from "node:fs";
   import { createHash } from "node:crypto";
   const manifest = JSON.parse(readFileSync("/usr/lib/agent-cloud/image.json", "utf8"));

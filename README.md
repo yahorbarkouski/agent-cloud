@@ -83,11 +83,14 @@ For an actual local Ubuntu first-boot check on macOS with OrbStack installed, ke
 pnpm build:guest
 pnpm smoke:guest
 pnpm smoke:image
+pnpm smoke:builder
 ```
 
 The image build stages checksum-verified public inputs in `.local/guest-builds/<manifest-digest>`. `.local/guest-build.json` selects the latest build; each smoke captures and verifies its selection once. The VM smoke records one owned local machine in `.local/guest-image-machine.json` and deletes it after successful enrollment, secret scanning and reboot checks. It also verifies restricted runtime inspection and keeps creation pending with stopped Docker, a stopped proxy or insufficient disk space. Reboot completion requires a changed Linux boot ID. A failure preserves that machine for inspection. Read its recorded name, inspect it with `orb info`, then delete exactly that VM with `orb delete --force <recorded-name>` and remove the record before starting fresh. No Hetzner resource is created. See [guest image architecture](docs/architecture/guest-image.md) and [runtime readiness](docs/architecture/guest-runtime.md) for proof boundaries and unfinished activation/renewal work.
 
 The image smoke sanitizes a separate disposable builder, checks refusal of allocation and Docker data, and boots two clones through the guest checks. It compares their machine IDs and SSH/TLS public keys. Builder ownership is in `.local/guest-image-builder.json`; a temporary refusal clone uses `.local/guest-image-refusal.json`. Failures preserve these records for the same targeted inspection and deletion procedure. Run VM smokes sequentially, and leave their selected input directories unchanged until they finish. The [sanitation design](docs/architecture/image-sanitation.md) describes retry limits and the remaining Hetzner snapshot proof.
+
+The builder smoke installs through the actual pinned SSH and SFTP transport. It checks rejection of changed uploaded code, concurrent installation requests, receipt recovery, removal of builder access and two fresh clone identities. It shares the builder/guest ownership records above and keeps private fixture access under `.local/image-builder-access/<builderId>`. On failure, remove that exact access directory only after deleting the recorded VMs. Both boot fixtures validate cloud-init's schema; local network and disk settings do not test Hetzner behavior.
 
 ## Operator image builds
 
@@ -98,9 +101,11 @@ pnpm image:build inspect <build-id>
 pnpm image:build cancel <build-id>
 ```
 
-`pnpm image:build admit <config.json>` verifies the selected local image inputs, reads Hetzner pricing and reserves an operator allowance without creating resources. The configuration supplies a stable build UUID, input directory/digest, pinned base-image ID, exact offer mapping, public access keys plus their secret reference, gross spending caps and deadline. Its schema is in `scripts/image-build.ts`. Reusing the same configuration returns its recorded admission; changed intent needs a new build ID. `cancel` records a full abort request; it does not claim cloud deletion has run.
+`pnpm image:build prepare <config.json>` verifies public image inputs and generates independent management and host SSH keys. The input supplies a stable build UUID, input directory/digest, pinned base-image ID, exact offer mapping, management IPv4 address, gross spending caps and deadline. Its schema is in `scripts/image-build.ts`. The JSON result is the complete public configuration for admission. Private keys stay in owner-only `.local/image-access/<buildId>`, configurable with `IMAGE_ACCESS_DIRECTORY`; preserve that directory for retries and recovery. Preparation needs neither a database nor a provider token.
 
-The SQL journal and cleanup planner have PostgreSQL/protocol tests. Provider advancement, management-key generation, authenticated builder SSH, platform verifier enrollment and release promotion are still being connected. There is no live image build command yet. See [image publication](docs/architecture/image-release.md).
+`pnpm image:build admit <prepared-config.json>` checks the matching local key store, reads Hetzner pricing and reserves an operator allowance without creating resources. Reusing the same configuration returns its recorded admission; changed intent needs a new build ID. `cancel` records a full abort request; it does not claim cloud deletion or local key erasure has run.
+
+The SQL journal, cleanup planner, key preparation, boot renderer and builder transport are implemented. Provider advancement, durable installation phases, platform verifier enrollment, release promotion and terminal key cleanup are still being connected. There is no live image build command yet. See [image publication](docs/architecture/image-release.md).
 
 ## What is enforced
 

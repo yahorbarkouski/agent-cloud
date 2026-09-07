@@ -24,6 +24,7 @@ import {
   requestImageCleanup,
 } from '../apps/control/dist/image-builds.js';
 import { readPrivateFile } from '../apps/control/dist/private-file.js';
+import { createImageAccessStore } from '../apps/control/dist/image-access.js';
 
 const configSchema = z.strictObject({
   id: imageBuildIdSchema,
@@ -38,21 +39,45 @@ const configSchema = z.strictObject({
   durationMinutes: z.int().positive().max(1440),
   retention: imageBuildAdmissionSchema.shape.retention,
 });
+const prepareSchema = configSchema.extend({
+  access: imageBuildAdmissionSchema.shape.access.pick({ managementAddress: true }),
+});
+async function readConfiguration(argument: string): Promise<unknown> {
+  const bytes = await readFile(resolve(argument));
+  if (bytes.length > 65_536) throw new Error('Image build configuration exceeds 64 KiB.');
+  return JSON.parse(bytes.toString('utf8'));
+}
 
 async function main() {
   const [command, argument, ...extra] = process.argv.slice(2);
-  if (!['admit', 'inspect', 'cancel'].includes(command ?? '') || !argument || extra.length)
+  if (
+    !['prepare', 'admit', 'inspect', 'cancel'].includes(command ?? '') ||
+    !argument ||
+    extra.length
+  )
     throw new Error(
-      'Usage: pnpm image:build admit <config.json> | inspect <build-id> | cancel <build-id>',
+      'Usage: pnpm image:build prepare <config.json> | admit <config.json> | inspect <build-id> | cancel <build-id>',
     );
+  const store = createImageAccessStore({
+    directory: resolve(process.env.IMAGE_ACCESS_DIRECTORY ?? '.local/image-access'),
+  });
+  if (command === 'prepare') {
+    const config = prepareSchema.parse(await readConfiguration(argument));
+    const sourceDirectory = resolve(config.sourceDirectory);
+    const source = await verifyImageInputs(sourceDirectory, config.manifestDigest);
+    const access = await store.prepare({
+      buildId: config.id,
+      manifestDigest: source.manifestDigest,
+      managementAddress: config.access.managementAddress,
+    });
+    return { ...config, sourceDirectory, access };
+  }
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL is required. Apply database migrations first.');
   const connection = connect(url);
   try {
     if (command === 'admit') {
-      const bytes = await readFile(resolve(argument));
-      if (bytes.length > 65_536) throw new Error('Image build configuration exceeds 64 KiB.');
-      const config = configSchema.parse(JSON.parse(bytes.toString('utf8')));
+      const config = configSchema.parse(await readConfiguration(argument));
       const sourceDirectory = resolve(config.sourceDirectory);
       const source = await verifyImageInputs(sourceDirectory, config.manifestDigest);
       let previous;
@@ -87,6 +112,7 @@ async function main() {
           );
         return previous;
       }
+      await store.recover({ id: config.id, source, access: config.access });
       const request = createHetznerRequest({
         token: await readPrivateFile(
           resolve(process.env.HCLOUD_TOKEN_FILE ?? '.local/hcloud-token'),

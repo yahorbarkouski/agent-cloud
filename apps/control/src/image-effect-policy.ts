@@ -7,9 +7,30 @@ import {
   type ImageProvider,
   type ImageProviderCommand,
   type ImageResourceRole,
+  type ImageBuildAdmission,
 } from '@agent-cloud/contracts';
 import { matchesLabels } from './resource-journal.js';
 import type { ImageBuild } from './image-builds.js';
+
+export function checkImageBuilderIntent(
+  admission: ImageBuildAdmission,
+  command: Extract<ImageProviderCommand, { kind: 'create_server' }>,
+) {
+  if (command.labels.role !== 'builder')
+    throw new CloudError(
+      'guest_unreachable',
+      'Platform image-verifier enrollment is not configured.',
+    );
+  if (
+    !matchesLabels(command.labels, imageBuildLabels(admission.id, 'builder')) ||
+    command.serverType !== admission.offer.serverType ||
+    command.region !== admission.offer.region ||
+    command.imageId !== admission.baseImageId ||
+    command.bootData.id !== admission.access.secretId ||
+    command.bootData.digest !== admission.source.manifestDigest
+  )
+    throw new CloudError('invalid_input', 'Image builder differs from its admission.');
+}
 
 export function imageEffectKey(command: ImageProviderCommand) {
   if (isImageCreate(command)) return `create:${command.labels.role}`;
@@ -94,20 +115,7 @@ export async function checkImageCommand(
         throw new CloudError('invalid_input', 'Image address location differs from admission.');
       return;
     case 'create_server': {
-      // Verifier enrollment gets its own bootstrap before this path can create a verifier.
-      if (command.labels.role !== 'builder')
-        throw new CloudError(
-          'guest_unreachable',
-          'Platform image-verifier enrollment is not configured.',
-        );
-      if (
-        command.serverType !== admission.offer.serverType ||
-        command.region !== admission.offer.region ||
-        command.imageId !== admission.baseImageId ||
-        command.bootData.id !== admission.access.secretId ||
-        command.bootData.digest !== admission.source.manifestDigest
-      )
-        throw new CloudError('invalid_input', 'Image builder differs from its admission.');
+      checkImageBuilderIntent(admission, command);
       const ip = await owned('builder_ip', command.primaryIpId);
       const key = await owned('access_key', command.sshKeyId);
       const firewall = await owned('access_firewall', command.firewallId);

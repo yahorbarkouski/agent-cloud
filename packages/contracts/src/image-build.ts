@@ -146,6 +146,11 @@ const createFields = {
     .regex(/^[a-z0-9-]+$/),
   labels: imageBuildLabelsSchema,
 };
+export const imageSanitationReceiptSchema = z.strictObject({
+  kind: z.literal('sanitized'),
+  builderId: imageBuildIdSchema,
+  manifestDigest: imageDigestSchema,
+});
 export const imageProviderCommandSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('create_ssh_key'), ...createFields, publicKey: sshPublicKey }),
   z.strictObject({
@@ -176,11 +181,7 @@ export const imageProviderCommandSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('power_off'),
     serverId: imageProviderIdSchema,
-    sanitation: z.strictObject({
-      kind: z.literal('sanitized'),
-      builderId: imageBuildIdSchema,
-      manifestDigest: imageDigestSchema,
-    }),
+    sanitation: imageSanitationReceiptSchema,
   }),
   z.strictObject({
     kind: z.literal('create_snapshot'),

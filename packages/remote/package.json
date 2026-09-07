@@ -17,6 +17,7 @@
   ],
   "dependencies": {
     "@agent-cloud/contracts": "workspace:*",
+    "@agent-cloud/images": "workspace:*",
     "@agent-cloud/pki": "workspace:*",
     "zod": "4.5.4"
   }

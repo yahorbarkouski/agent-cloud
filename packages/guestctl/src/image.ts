@@ -162,6 +162,13 @@ export async function prepareImage(configuration: GuestConfiguration) {
     // Access removal is last. If interrupted here, the owner can retry out of band or rebuild this disposable VM.
     await run('/usr/bin/systemctl', ['disable', 'ssh.service', 'ssh.socket']);
     await copyFile('/usr/lib/agent-cloud/sshd_config', '/etc/ssh/sshd_config');
+    for (const path of [
+      '/etc/sudoers.d/agent-cloud-builder',
+      '/etc/ssh/sshd_config.d/10-agent-cloud-builder.conf',
+      '/var/lib/agent-cloud-builder',
+      '/run/agent-cloud-builder.json',
+    ])
+      await rm(path, { recursive: true, force: true });
     for (const entry of await directory('/etc/ssh'))
       if (entry.startsWith('ssh_host_')) await rm(join('/etc/ssh', entry), { force: true });
     for (const home of record.homes) await clearDirectory(home.path, home.uid);

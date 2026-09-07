@@ -72,7 +72,9 @@ export function createGuestRenderer(db: Database, seal: BootstrapSeal): GuestRen
       ssh_pwauth: false,
       allow_public_ssh_keys: false,
       ssh_deletekeys: true,
-      ssh_genkeytypes: [],
+      // An explicit key map suppresses cloud-init generation; guestctl owns the host identity.
+      ssh_keys: {},
+      ssh_publish_hostkeys: { enabled: false },
       write_files: [
         {
           path: '/var/lib/agent-cloud/bootstrap.json',

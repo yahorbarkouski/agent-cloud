@@ -11,3 +11,4 @@ export * from './image-inputs.js';
 export * from './image-release.js';
 export * from './image-build.js';
 export * from './image-provider.js';
+export * from './image-builder.js';
