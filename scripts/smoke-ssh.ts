@@ -13,6 +13,7 @@ import { createGuestProbe } from '../packages/remote/dist/index.js';
 import { readPrivateFile } from '../apps/control/src/private-file.js';
 
 import { withSshFixture } from './support/ssh-fixture.js';
+import { assertScannedHostCertificate } from './support/ssh-keyscan.js';
 
 const step = resolve('.local/tools/step-0.30.6');
 const subjects = [
@@ -85,6 +86,22 @@ for (const subject of subjects) {
     });
     await writeFile(join(fixture, 'proof.json'), JSON.stringify(proof) + '\n', { mode: 0o644 });
     const port = await start();
+    const { stdout: scanned } = await run('/usr/bin/ssh-keyscan', [
+      '-p',
+      String(port),
+      '-T',
+      '5',
+      '-c',
+      '-t',
+      'ed25519',
+      '127.0.0.1',
+    ]);
+    const expected = await readFile(join(fixture, 'host_key-cert.pub'), 'utf8');
+    assertScannedHostCertificate({ output: scanned, expected });
+    for (const invalid of ['', publicKey, `127.0.0.1 ${scanned}`, `${scanned}\n${scanned}`])
+      assert.throws(() => {
+        assertScannedHostCertificate({ output: invalid, expected });
+      });
     const probe = createGuestProbe();
     const target = {
       subject,

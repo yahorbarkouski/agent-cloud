@@ -2,11 +2,22 @@
 
 ## M2 customer access workflow
 
-- [ ] Ground: trace account/grant/CLI authentication and guest/SSH trust in parallel; parent owns the live M1 drill.
-- [ ] Sketch: compare bounded customer access designs against traced ownership and revocation behavior.
+- [x] Ground: traced account/grant/CLI authentication and guest/SSH trust in `research/m2-customer-access-grounding.md`.
+- [ ] Sketch: compare bounded customer SSH access designs against traced ownership and revocation behavior. Device/browser login remains a later M2 slice.
+  - [x] Frame: existing delegated grants, customer root semantics, isolated native SSH, short-lived issuance, gateway ownership and active revocation.
+  - [x] Fan out: three isolated usage-first designs.
+  - [x] Cross-judge: gpt-5.6-sol chose A21/25 over C18/B15; parent read all and agrees with corrections.
+  - [ ] Pick and graft: keep one coherent session model.
+  - [ ] Verify: trace scope, issuance crash recovery, network restrictions and revocation.
 - [ ] Agree: autonomous implementation is authorized; no human checkpoint requested.
 - [ ] Implement: fill the selected access contracts after the running M1 drill is safe.
 - [ ] Scrap audit: revisit the shape if implementation needs repeated exceptions.
+
+## Second customer lifecycle passed; certificate test corrected
+
+Customer VM164971891 passed actual create/replay, snapshot boot, enrollment, runtime readiness, graceful power-off/on and reboot with changed boot IDs. Before waiting for renewal, the test misparsed `ssh-keyscan -c` output by removing a nonexistent hostname column. It failed and automatically deleted VM/IP; exact provider absence and zero live ledger resources were verified. Raw scan output was not saved, so that failed check cannot prove which certificate was served.
+
+The new shared smoke helper compares the actual certificate fields and rejects missing, plain-key, hostname-prefixed and duplicate output. Native OpenSSH26035 and typecheck/lint passed after correcting a fixture-runner return-shape mistake. The private live driver now saves public observations before assertions. The third VM fits the original60000µUSDcustomerVM/IP allowance, including previous attempts, at a conservative56826µUSDtotal. The snapshot and free firewall remain retained; real elapsed renewal is still open.
 
 ## Customer firewall listener correction
 

@@ -1,0 +1,374 @@
+{
+  "updatedAt": "2026-09-07T14:23:00Z",
+  "status": "local_checks_and_review_passed",
+  "cause": "Private live driver incorrectly treated ssh-keyscan -c output as known_hosts output and stripped the certificate type.",
+  "source": "https://github.com/openssh/openssh-portable/blob/master/ssh-keyscan.c#L312-L315",
+  "secondCustomerAttempt": {
+    "id": "2224a90a-acad-42f4-9081-e8fc08822ff7",
+    "state": "failed_and_customer_cleaned",
+    "startedAt": "2026-09-07T14:14:00.672Z",
+    "deadlineAt": "2026-09-07T15:04:00.673Z",
+    "name": "customer-drill-2224a90a-2",
+    "steps": {
+      "create": {
+        "key": "4a45620d-ec53-49d3-96c2-bb16657df69e",
+        "args": [
+          "machine",
+          "create",
+          "customer-drill-2224a90a-2",
+          "--project",
+          "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+          "--size",
+          "small",
+          "--region",
+          "nbg1"
+        ],
+        "requestedAt": "2026-09-07T14:14:01.335Z",
+        "operation": {
+          "id": "op_1a6c9d5a-79ce-4c4f-a057-9ae03b8f5bd6",
+          "accountId": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+          "projectId": "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+          "machineId": "vm_c74df458-e043-48e2-ac50-de74afeecdcc",
+          "grantId": "grant_b6e660a9-c35b-4689-9103-ae91f64fb6ba",
+          "kind": "machine.create",
+          "intent": {
+            "kind": "run"
+          },
+          "progress": {
+            "kind": "queued"
+          },
+          "createdAt": "2026-09-07T14:14:01.486Z"
+        }
+      },
+      "power-off": {
+        "key": "85fa581c-0bc1-426e-8449-dd41f60e2cba",
+        "args": [
+          "machine",
+          "power-off",
+          "vm_c74df458-e043-48e2-ac50-de74afeecdcc",
+          "--expected-version",
+          "2"
+        ],
+        "requestedAt": "2026-09-07T14:15:30.031Z",
+        "operation": {
+          "id": "op_51d3e947-5da2-4ed6-8ff0-e62f9a9e0562",
+          "accountId": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+          "projectId": "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+          "machineId": "vm_c74df458-e043-48e2-ac50-de74afeecdcc",
+          "grantId": "grant_b6e660a9-c35b-4689-9103-ae91f64fb6ba",
+          "kind": "machine.power_off",
+          "intent": {
+            "kind": "run"
+          },
+          "progress": {
+            "kind": "queued"
+          },
+          "createdAt": "2026-09-07T14:15:30.163Z"
+        }
+      },
+      "power-on": {
+        "key": "218315f1-331d-4cc3-9700-cb7b52f1a936",
+        "args": [
+          "machine",
+          "power-on",
+          "vm_c74df458-e043-48e2-ac50-de74afeecdcc",
+          "--expected-version",
+          "4"
+        ],
+        "requestedAt": "2026-09-07T14:15:51.457Z",
+        "operation": {
+          "id": "op_f11395e8-f38e-48bb-915a-baa0de66ada5",
+          "accountId": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+          "projectId": "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+          "machineId": "vm_c74df458-e043-48e2-ac50-de74afeecdcc",
+          "grantId": "grant_b6e660a9-c35b-4689-9103-ae91f64fb6ba",
+          "kind": "machine.power_on",
+          "intent": {
+            "kind": "run"
+          },
+          "progress": {
+            "kind": "queued"
+          },
+          "createdAt": "2026-09-07T14:15:51.590Z"
+        }
+      },
+      "reboot": {
+        "key": "921c18d7-b518-4ffb-90db-95a85c21d46a",
+        "args": [
+          "machine",
+          "reboot",
+          "vm_c74df458-e043-48e2-ac50-de74afeecdcc",
+          "--expected-version",
+          "6"
+        ],
+        "requestedAt": "2026-09-07T14:16:17.065Z",
+        "operation": {
+          "id": "op_d00b1a92-e872-49f4-b0a2-5c7fee63dd58",
+          "accountId": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+          "projectId": "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+          "machineId": "vm_c74df458-e043-48e2-ac50-de74afeecdcc",
+          "grantId": "grant_b6e660a9-c35b-4689-9103-ae91f64fb6ba",
+          "kind": "machine.reboot",
+          "intent": {
+            "kind": "run"
+          },
+          "progress": {
+            "kind": "queued"
+          },
+          "createdAt": "2026-09-07T14:16:17.208Z"
+        }
+      },
+      "destroy": {
+        "key": "4b94c127-84ad-42b8-8bb6-90091278e326",
+        "args": [
+          "machine",
+          "destroy",
+          "vm_c74df458-e043-48e2-ac50-de74afeecdcc",
+          "--expected-version",
+          "8",
+          "--allow-data-loss"
+        ],
+        "requestedAt": "2026-09-07T14:16:47.585Z",
+        "operation": {
+          "id": "op_4aaeed92-f6eb-4832-80fd-9a03d48ca915",
+          "accountId": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+          "projectId": "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+          "machineId": "vm_c74df458-e043-48e2-ac50-de74afeecdcc",
+          "grantId": "grant_b6e660a9-c35b-4689-9103-ae91f64fb6ba",
+          "kind": "machine.destroy",
+          "intent": {
+            "kind": "cleanup",
+            "sourceOperationId": "op_1a6c9d5a-79ce-4c4f-a057-9ae03b8f5bd6"
+          },
+          "progress": {
+            "kind": "cleaning_up"
+          },
+          "createdAt": "2026-09-07T14:16:47.719Z"
+        }
+      }
+    },
+    "observations": [
+      {
+        "phase": "created",
+        "observedAt": "2026-09-07T14:15:30.031Z",
+        "machine": {
+          "id": "vm_c74df458-e043-48e2-ac50-de74afeecdcc",
+          "accountId": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+          "projectId": "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+          "spec": {
+            "name": "customer-drill-2224a90a-2",
+            "size": "small",
+            "region": "nbg1"
+          },
+          "provider": "hetzner",
+          "state": {
+            "kind": "allocated",
+            "allocationId": "alloc_351b4ead-56cc-4be9-8612-28c8592565b1",
+            "serverId": "164971891",
+            "power": "running",
+            "guest": {
+              "kind": "ssh",
+              "verifiedAt": "2026-09-07T14:15:26.720Z",
+              "imageVersion": "dev-aec4ae5feb7aefb4e58e4519",
+              "manifestDigest": "739d94533985de55963de5486a656ce8ceff67cdd3b2ab7f0e593177f31bc010",
+              "bootId": "8eee1379-b04b-4998-9c9e-aebac1753b06"
+            }
+          },
+          "version": 2,
+          "createdAt": "2026-09-07T14:14:01.482Z"
+        }
+      },
+      {
+        "phase": "power-off",
+        "observedAt": "2026-09-07T14:15:51.457Z",
+        "machine": {
+          "id": "vm_c74df458-e043-48e2-ac50-de74afeecdcc",
+          "accountId": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+          "projectId": "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+          "spec": {
+            "name": "customer-drill-2224a90a-2",
+            "size": "small",
+            "region": "nbg1"
+          },
+          "provider": "hetzner",
+          "state": {
+            "kind": "allocated",
+            "allocationId": "alloc_351b4ead-56cc-4be9-8612-28c8592565b1",
+            "serverId": "164971891",
+            "power": "off",
+            "guest": {
+              "kind": "ssh",
+              "verifiedAt": "2026-09-07T14:15:26.720Z",
+              "imageVersion": "dev-aec4ae5feb7aefb4e58e4519",
+              "manifestDigest": "739d94533985de55963de5486a656ce8ceff67cdd3b2ab7f0e593177f31bc010",
+              "bootId": "8eee1379-b04b-4998-9c9e-aebac1753b06"
+            }
+          },
+          "version": 4,
+          "createdAt": "2026-09-07T14:14:01.482Z"
+        }
+      },
+      {
+        "phase": "power-on",
+        "observedAt": "2026-09-07T14:16:17.065Z",
+        "machine": {
+          "id": "vm_c74df458-e043-48e2-ac50-de74afeecdcc",
+          "accountId": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+          "projectId": "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+          "spec": {
+            "name": "customer-drill-2224a90a-2",
+            "size": "small",
+            "region": "nbg1"
+          },
+          "provider": "hetzner",
+          "state": {
+            "kind": "allocated",
+            "allocationId": "alloc_351b4ead-56cc-4be9-8612-28c8592565b1",
+            "serverId": "164971891",
+            "power": "running",
+            "guest": {
+              "kind": "ssh",
+              "verifiedAt": "2026-09-07T14:16:14.334Z",
+              "imageVersion": "dev-aec4ae5feb7aefb4e58e4519",
+              "manifestDigest": "739d94533985de55963de5486a656ce8ceff67cdd3b2ab7f0e593177f31bc010",
+              "bootId": "e2503f29-214f-4693-a83e-4297235b5c8a"
+            }
+          },
+          "version": 6,
+          "createdAt": "2026-09-07T14:14:01.482Z"
+        }
+      },
+      {
+        "phase": "reboot",
+        "observedAt": "2026-09-07T14:16:46.964Z",
+        "machine": {
+          "id": "vm_c74df458-e043-48e2-ac50-de74afeecdcc",
+          "accountId": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+          "projectId": "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+          "spec": {
+            "name": "customer-drill-2224a90a-2",
+            "size": "small",
+            "region": "nbg1"
+          },
+          "provider": "hetzner",
+          "state": {
+            "kind": "allocated",
+            "allocationId": "alloc_351b4ead-56cc-4be9-8612-28c8592565b1",
+            "serverId": "164971891",
+            "power": "running",
+            "guest": {
+              "kind": "ssh",
+              "verifiedAt": "2026-09-07T14:16:44.435Z",
+              "imageVersion": "dev-aec4ae5feb7aefb4e58e4519",
+              "manifestDigest": "739d94533985de55963de5486a656ce8ceff67cdd3b2ab7f0e593177f31bc010",
+              "bootId": "0136a75c-5e1f-4c14-bc74-f61508a687a1"
+            }
+          },
+          "version": 8,
+          "createdAt": "2026-09-07T14:14:01.482Z"
+        }
+      }
+    ],
+    "offer": {
+      "size": "small",
+      "serverType": "cpx12",
+      "region": "nbg1",
+      "architecture": "x86",
+      "vcpus": 1,
+      "memoryGb": 2,
+      "diskGb": 40,
+      "available": true,
+      "currency": "USD",
+      "priceBasis": "account_gross",
+      "serverHourlyMicros": 26568,
+      "ipv4HourlyMicros": 1230,
+      "hourlyMicros": 27798
+    },
+    "projectId": "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+    "machineId": "vm_c74df458-e043-48e2-ac50-de74afeecdcc",
+    "createReplayVerified": true,
+    "allocationId": "alloc_351b4ead-56cc-4be9-8612-28c8592565b1",
+    "failure": "Guest SSH still presents a different certificate.",
+    "cleanupOperationId": "op_4aaeed92-f6eb-4832-80fd-9a03d48ca915",
+    "cleanup": {
+      "completedAt": "2026-09-07T14:18:03.562Z",
+      "machine": {
+        "id": "vm_c74df458-e043-48e2-ac50-de74afeecdcc",
+        "accountId": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+        "projectId": "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+        "spec": {
+          "name": "customer-drill-2224a90a-2",
+          "size": "small",
+          "region": "nbg1"
+        },
+        "provider": "hetzner",
+        "state": {
+          "kind": "destroyed",
+          "destroyedAt": "2026-09-07T14:18:00.045Z"
+        },
+        "version": 10,
+        "createdAt": "2026-09-07T14:14:01.482Z"
+      },
+      "state": {
+        "active_allocations": 0,
+        "live_resources": 0
+      },
+      "providerAbsence": {
+        "observedAt": "2026-09-07T14:21:17.340Z",
+        "serverId": "164971891",
+        "primaryIpId": "148481208",
+        "serverAbsent": true,
+        "primaryIpAbsent": true
+      }
+    }
+  },
+  "verification": {
+    "nativeAndStatic": {
+      "session": 26035,
+      "result": "passed",
+      "subjects": [
+        "allocation",
+        "image_verifier"
+      ],
+      "nativeLog": ".local/customer-keyscan-native-final.log",
+      "staticLog": ".local/customer-keyscan-static-final.log"
+    },
+    "initialFailure": {
+      "session": 9836,
+      "result": "failed",
+      "reason": "New smoke call supplied fixture.run result object instead of stdout; typecheck/lint also failed. Corrected before successful26035.",
+      "log": ".local/customer-keyscan-native.log"
+    },
+    "format": {
+      "result": "passed",
+      "session": 99760,
+      "log": ".local/customer-keyscan-format-final.log"
+    }
+  },
+  "nextBudget": {
+    "observedAt": "2026-09-07T14:21:17.342Z",
+    "currency": "USD",
+    "maxCustomerVmIpGrossMicros": 60000,
+    "firstIpGrossMicros": 1230,
+    "secondVmAndIpGrossMicros": 27798,
+    "thirdVmAndIpMaxGrossMicros": 27798,
+    "totalUpperBoundMicros": 56826,
+    "basis": "Each VM and IP rounded separately to one billed hour at the admitted gross rates; third run must remain under50minutes. Snapshot and image factory have separate recorded caps.",
+    "nextName": "customer-drill-2224a90a-3",
+    "freshCreateStarted": false
+  },
+  "limits": [
+    "No raw scan was retained from the failed live comparison. Its presented SSH certificate is not independently established by that assertion.",
+    "The second live attempt proves customer lifecycle behavior but not real timer renewal.",
+    "Snapshot and free firewall remain retained for the third test."
+  ],
+  "review": {
+    "model": "gpt-5.6-sol",
+    "result": "no_code_blocker",
+    "report": "docs/research/m1-keyscan-review.md",
+    "contextCorrection": "Reviewer rechecked and marked the stale-context finding resolved."
+  },
+  "ci": {
+    "result": "pending_exact_commit"
+  }
+}

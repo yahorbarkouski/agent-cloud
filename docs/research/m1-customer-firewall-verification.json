@@ -1,6 +1,6 @@
 {
   "updatedAt": "2026-09-07T14:05:30Z",
-  "status": "local_checks_and_review_passed",
+  "status": "verified_and_pushed",
   "cause": "Guest Caddy configuration listens on8443, while the original customer firewall allowed22/80/443 and the private live driver probed443.",
   "discoveredBeforeCustomerVm": true,
   "source": "packages/guestctl/src/system.ts",
@@ -104,6 +104,14 @@
       "result": "passed",
       "session": 9767,
       "log": ".local/customer-firewall-format.log"
+    },
+    "leafProbeFixture": {
+      "observedAt": "2026-09-07T14:12:42.595Z",
+      "serverRequiredClientCertificate": true,
+      "clientSuppliedCertificate": false,
+      "trustedServerLeafObserved": true,
+      "authenticatedApplicationRequest": false,
+      "scope": "Local Node TLS behavior only, not a Hetzner guest observation."
     }
   },
   "limits": [
@@ -117,6 +125,10 @@
     "report": "docs/research/m1-customer-firewall-review.md"
   },
   "ci": {
-    "result": "pending_exact_commit"
+    "result": "passed",
+    "commit": "2276c43a14511b6c09e0d97e43048abe959497e9",
+    "runId": 34131266130,
+    "url": "https://github.com/yahorbarkouski/agent-cloud/actions/runs/34131266130",
+    "evidence": ".local/customer-firewall-ci-result.json"
   }
 }
