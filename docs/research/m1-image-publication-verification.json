@@ -1,6 +1,6 @@
 {
   "date": "2026-09-07T07:46:24.608238+00:00",
-  "status": "locally-verified-checkpoint",
+  "status": "verified-checkpoint",
   "paidCloudResourcesCreated": 0,
   "fullCheck": {
     "session": "70745",
@@ -233,15 +233,24 @@
   },
   "review": {
     "model": "gpt-5.6-sol",
-    "status": "code review passed; final artifact/trail audit pending",
-    "resolved": "All image-selection and publication replay paths verify current key policy and snapshot ownership."
+    "status": "completed; no implementation blocker",
+    "resolved": "All image-selection and publication replay paths verify current key policy and snapshot ownership.",
+    "report": "docs/research/m1-image-publication-review.md"
   },
   "linuxCi": {
-    "status": "pending commit"
+    "runId": 34097317093,
+    "url": "https://github.com/yahorbarkouski/agent-cloud/actions/runs/34097317093",
+    "headSha": "b72f992b2f9163f25c2e919c31273d4cfa58cf6a",
+    "status": "completed",
+    "conclusion": "success",
+    "durationSeconds": 239,
+    "completedAt": "2026-09-07T07:52:45Z",
+    "evidence": "7c5206"
   },
   "limits": [
     "Real Ubuntu, cloud-init, SSH, PKI and temporary VM deletion were exercised locally. Provider resources, snapshot creation and ownership observations remain protocol fixtures.",
     "OrbStack starts before test seed installation; the unseeded check and seeded reboot are not proof of Hetzner initial-boot user-data injection.",
     "Production image scheduling, allocation pinning/consumption, signing-key configuration, certificate renewal/operator recovery, live activation and M2-M7 remain open. No paid resources created."
-  ]
+  ],
+  "implementationCommit": "b72f992b2f9163f25c2e919c31273d4cfa58cf6a"
 }

@@ -6,7 +6,7 @@ Updated 2026-09-07. Full agent-cloud goal remains active, excluding Stripe. M0 i
 
 Customers bring Codex, Claude Code or another coding agent. We build their CLI/API/skills. TypeScript, ordinary Linux VMs, Compose, SSH and Hetzner. Keep costs low; no benchmarks, expensive plans, warm pool or automatic size/region fallback. Continued implementation, private GitHub pushes and Hetzner setup are authorized.
 
-Work only in `/Users/yahorbarkouski/Documents/ChatGPT/learning/agent-cloud`, standalone Git inside an unrelated workspace. Branch `yahor/agent-cloud`; private origin `https://github.com/yahorbarkouski/agent-cloud.git`. Previous verifier implementation `5445f410f34d73aa8810a9b77b230defec28ff84` and reviewed evidence checkpoint `c6ff55d` are pushed. Current uncommitted work implements retained publication and its verification. The verifier's Linux CI 34094753361 passed; the publication checkpoint still needs its own commit/CI.
+Work only in `/Users/yahorbarkouski/Documents/ChatGPT/learning/agent-cloud`, standalone Git inside an unrelated workspace. Branch `yahor/agent-cloud`; private origin `https://github.com/yahorbarkouski/agent-cloud.git`. Previous verifier implementation `5445f410f34d73aa8810a9b77b230defec28ff84` and reviewed evidence checkpoint `c6ff55d` are pushed. Retained publication implementation `b72f992b2f9163f25c2e919c31273d4cfa58cf6a` is committed and pushed. Its exact-head Linux CI 34097317093 passed in 3m59s, including frozen install, all checks, formatting, fresh PKI, native PKI/SSH/enrollment and cleanup. Final artifact/trail review passed. The final documentation checkpoint records these results.
 
 ## Implemented foundation
 
@@ -57,11 +57,10 @@ Smallstep `.local/tools/step-0.30.6`, step-ca 0.30.2 digest-pinned, project agen
 
 VM ownership paths and cleanup rules are in AGENTS.md. Smokes run sequentially. While one is active, leave VM commands to it; even diagnostic `orb run` can restart a sanitized stopped source. On failure inspect/delete only recorded machines and their exact private fixture directories. Operator key store defaults to `.local/image-access/<buildId>`.
 
-Reviewer `/root/image_release_judge`, gpt-5.6-sol, reviewed publication code/SQL and the replay fix, finding no remaining blocker. Final publication artifact/trail audit is pending. No transcript directory was supplied; review is an artifact/trail audit.
+Reviewer `/root/image_release_judge`, gpt-5.6-sol, reviewed publication code/SQL and the replay fix, finding no remaining blocker. Final publication artifact/trail audit passed with no implementation blocker; report `docs/research/m1-image-publication-review.md`. No transcript directory was supplied; review is an artifact/trail audit.
 
 ## Next work
 
-1. Finish publication formatting, final review, commit/push and exact-head CI. Do not repeat passed native checks without a new change or unresolved concern. Keep the full goal active.
-2. Connect production image selection to customer admission and pin snapshot lifetime through uncertain creates. Add durable scheduled image advancement/expiry cleanup, operator signing-key configuration, certificate renewal/recovery and production GuestProvisioning wiring. The existing internal image reader is not full allocation consumption.
-3. Then run one bounded cheap Hetzner drill. Last read-only inventory at 04:17:12Z found 0 resources; refresh before paid mutations. Dedicated verified project agent-cloud-development15945891, Ubuntu 24.04 x86 image 161547269. Historical CPX12 + IPv4 price of 27,798 gross micro-USD/hour and snapshot price of 24,477 gross micro-USD/GB-month are not current admission authority. Do not create paid capacity until the complete bounded lifecycle/cleanup is ready.
-4. Continue M2 login/customer SSH, M3 transfers/commands/Compose/routes, M4 recipes/off-VM backup/isolated restore, M5 usage/traffic/alerts/cost caps, M6 self-hosting, M7 full end-to-end/failure proof.
+1. Connect production image selection to customer admission and pin snapshot lifetime through uncertain creates. Add durable scheduled image advancement/expiry cleanup, operator signing-key configuration, certificate renewal/recovery and production GuestProvisioning wiring. The existing internal image reader is not full allocation consumption.
+2. Then run one bounded cheap Hetzner drill. Last read-only inventory at 04:17:12Z found 0 resources; refresh before paid mutations. Dedicated verified project agent-cloud-development15945891, Ubuntu 24.04 x86 image 161547269. Historical CPX12 + IPv4 price of 27,798 gross micro-USD/hour and snapshot price of 24,477 gross micro-USD/GB-month are not current admission authority. Do not create paid capacity until the complete bounded lifecycle/cleanup is ready.
+3. Continue M2 login/customer SSH, M3 transfers/commands/Compose/routes, M4 recipes/off-VM backup/isolated restore, M5 usage/traffic/alerts/cost caps, M6 self-hosting, M7 full end-to-end/failure proof.
