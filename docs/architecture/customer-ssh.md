@@ -1,12 +1,15 @@
 # Customer SSH access design
 
-Design selected on 2026-09-07. The shared authority loader is integrated into the main development branch. Session storage and the customer certificate signer are implemented. Local protocol checks cover the signer and native OpenSSH. Admission, durable issuer execution, gateway and CLI remain planned below. Existing opaque delegated grants authorize this slice. Browser/device login, persistent commands, deployment and forwarding remain later work. The current probe/runtime SSH path stays restricted.
+The CLI, API, durable certificate issuer, gateway and native SSH/SFTP are connected. Existing opaque delegated grants authorize access. The current verification result is in `../CONTEXT.md`; this document describes the implemented boundaries. Browser/device login, durable commands and general application deployment remain separate capabilities. The probe/runtime SSH account remains restricted.
 
 ## Customer usage
 
 ```sh
 acld ssh <machine-id>
 acld ssh <machine-id> -- id -u
+acld file put <machine-id> ./application.txt /var/lib/agent-customer/application.txt
+acld file get <machine-id> /var/lib/agent-customer/application.txt ./downloaded.txt
+acld access inspect <session-id>
 ```
 
 The CLI creates an ephemeral Ed25519 key and a random32-byte transport secret in an owner-only temporary directory. It sends the public key and SHA-256 ticket hash to the API under one persisted request key. The plaintext ticket stays local until the gateway consumes it. A lost API response replays the same request and returns the saved certificate. Losing the local secret means starting a new session.
@@ -31,7 +34,7 @@ The customer user is `agent-customer` with passwordless sudo. Interactive sessio
 
 The API accepts only an existing machine ID, canonical Ed25519 public key and fixed-size ticket hash. It authorizes `machine:exec` and the machine's project, then binds account, project, grant, machine, allocation, pinned guest identity and gateway configuration. Every authority-changing request field participates in the idempotency fingerprint. Hash uniqueness is global. The shipped CLI generates the secret with a cryptographic RNG; the API cannot measure entropy from a hash.
 
-Add a branded `AccessSessionId` with the repository's UUID convention. Contracts derive schemas and types together. The stored row contains immutable ownership, request fingerprint, public key, ticket hash, deadlines and the following discriminated states:
+The branded `AccessSessionId` follows the repository's UUID convention. Contracts derive schemas and types together. The stored row contains immutable ownership, request fingerprint, public key, ticket hash, deadlines and the following discriminated states:
 
 ```ts
 type AccessIssuance =
@@ -89,11 +92,11 @@ type OwnedSshTarget = {
 
 SQL forbids mutation of ownership, key/hash, deadlines, saved certificate and target, including the exact host CA, guest host key and signed image digest. Finalization verifies those pins against the same issued allocation identity. It permits issuance only along the declared transitions, and one claim followed by one close. Claim requires issued credentials, current authority and unexpired ticket/session. An unclaimed expired/revoked session can close directly. Cross-tenant and cross-project references use composite foreign keys. No row can reopen after claim, even if the gateway never connected. An opened timestamp is optional audit evidence in a separate immutable event, not a prerequisite for denying replay.
 
-One session permits one persisted CA submission, with a ninety-second admission-to-issuance deadline. An attempted result lost to a crash remains uncertain and cannot sign again. The same invocation can recover a saved result; an unknown result requires a new session after normal admission limits. Start with ten fresh sessions per grant per five minutes and twenty per account, plus four unexpired session reservations per grant and twenty per account. Pending/unknown reservations count until the original issuance deadline. Issued-unclaimed reservations count until ticket expiry; claimed reservations count until the hard lease expires or closure. Rate windows count every admitted row regardless of outcome, so lost requests cannot evade limits. These are explicit configurable operator ceilings, not new customer spending policy.
+One session permits one persisted CA submission, with a ninety-second admission-to-issuance deadline. An attempted result lost to a crash remains uncertain and cannot sign again. The same invocation can recover a saved result; an unknown result requires a new session after normal admission limits. Start with ten fresh sessions per grant per five minutes and twenty per account, plus four unexpired session reservations per grant and twenty per account. Pending/unknown reservations count until the original issuance deadline. Issued-unclaimed reservations count until ticket expiry; claimed reservations count until the hard lease expires or closure. Rate windows count every admitted row regardless of outcome, so lost requests cannot evade limits. These are fixed admission ceilings, separate from customer spending policy.
 
 From one admission-time database timestamp, persist `issueDeadline = admittedAt + 90s` and `hardDeadline = min(admittedAt + 1h, ancestryExpiry)`. At publication, persist `ticketDeadline = min(issuedAt + 60s, issueDeadline, ancestryExpiry)` once. Certificate validity is at most five minutes and never after the original hard/ancestry deadline. No replay, queue delay or renewed authority check moves these absolute limits.
 
-`loadAuthority(db, grantId)` returns `{ principal, checkedAt, expiresAt }` where expiry is the earliest validated ancestor. One bounded recursive SQL statement reads the complete ancestry from one MVCC snapshot. It materializes the traversal before reading PostgreSQL time for the expiry decision. `loadPrincipal` remains the useful principal-only wrapper for existing authentication/lifecycle callers. Grant delegation consumes the full horizon directly. Admission, issue, claim and session checks must use this shared walk under their stated locks. A consistent snapshot does not prevent a revocation that commits after that snapshot. Future gateways must subtract RPC latency when anchoring remaining lifetime. Do not duplicate an access-only ancestor query.
+`loadAuthority(db, grantId)` returns `{ principal, checkedAt, expiresAt }` where expiry is the earliest validated ancestor. One bounded recursive SQL statement reads the complete ancestry from one MVCC snapshot. It materializes the traversal before reading PostgreSQL time for the expiry decision. `loadPrincipal` remains the useful principal-only wrapper for existing authentication/lifecycle callers. Grant delegation consumes the full horizon directly. Admission, issue, claim and session checks must use this shared walk under their stated locks. A consistent snapshot does not prevent a revocation that commits after that snapshot. Gateways subtract RPC latency when anchoring remaining lifetime. Do not duplicate an access-only ancestor query.
 
 ## Implemented storage boundary
 
@@ -107,11 +110,11 @@ Contract and PostgreSQL tests cover malformed raw inserts, source/key boundaries
 
 ## Issue, claim and close
 
-`POST /v1/machines/:machineId/access-sessions` atomically admits the session and queues an `issue_access_session` task through the existing Graphile worker. It returns202 with public pending metadata. `GET /v1/access-sessions/:id` requires current `machine:read`, account/project scope, and either the issuing grant or a validated ancestor of it. A still-authorized ancestor can therefore inspect a session after child revocation, but this grants no new ticket or signing authority. It returns pending, ready, unavailable or consumed metadata, never plaintext ticket. The SDK wait helper stops at the earlier of its caller deadline and persisted issue deadline; it rejects unavailable/consumed states without silently creating another session. Lost POST responses replay the same admission; no CA work runs in the HTTP request. Worker restarts can resume pending provider checks, but an already attempted CA call cannot be repeated.
+`POST /v1/machines/:machineId/access-sessions` atomically admits the session and queues an `issue_access_session` task through the existing Graphile worker. It returns202 with public pending metadata. `GET /v1/access-sessions/:id` requires current account/project scope. The issuing grant needs `machine:exec`; a validated ancestor needs `machine:read`. A still-authorized ancestor can therefore inspect a session after child revocation, but this grants no new ticket or signing authority. It returns pending, ready, unavailable or consumed metadata, never plaintext ticket. The SDK wait helper stops at the earlier of its caller deadline and persisted issue deadline; it rejects unavailable/consumed states without silently creating another session. Lost POST responses replay the same admission; no CA work runs in the HTTP request. Worker restarts can resume pending provider checks, but an already attempted CA call cannot be repeated.
 
-`apps/control/src/access-sessions.ts` owns admission and issuance. Initial and final transactions acquire machine advisory lock, global admission lock only when using shared ceilings, account row, then machine/allocation/session rows. This matches lifecycle order. The worker alone holds an access-session advisory lock on one pinned PostgreSQL connection across the complete issuance pass to prevent a concurrent worker from marking an in-flight CA call unknown. It takes machine locks only inside its initial/final phases. Admission, claim, revoke and destroy never acquire that session advisory lock, so there is no reverse edge. Under that order, reload the grant chain, require verified allocation-owned guest identity and a supported customer-access image, and reject active cleanup or non-running lifecycle work. Preserve idempotent outcomes before considering fresh admission capacity.
+`apps/control/src/access-sessions.ts` owns admission and issuance. Initial and final transactions acquire the machine advisory lock, then the account row lock before reading machine/allocation/session state. This matches lifecycle order. The worker alone holds an access-session advisory lock on one pinned PostgreSQL connection across the complete issuance pass to prevent a concurrent worker from marking an in-flight CA call unknown. It takes machine locks only inside its initial/final phases. Admission, claim, revoke and destroy never acquire that session advisory lock, so there is no reverse edge. Under that order, reload the grant chain, require verified allocation-owned guest identity and a supported customer-access image, and reject active cleanup or non-running lifecycle work. Preserve idempotent outcomes before considering fresh admission capacity.
 
-Release SQL locks before provider observation and CA calls. Check exact current server/IP ownership and source-restricted firewall policy before signing. Persist the attempted state before the CA call. The final transaction reacquires the machine lock, rechecks grant ancestry, allocation, bootstrap/identity, machine version, cleanup intent, deadlines and the observed resource IDs. A valid signature does not override lost authority. Only a validated certificate and current target can become issued. Provider observation is never a certificate-signing retry. Before CA submission, retryable provider unavailability may reschedule only within the original issue deadline. A pending job after that deadline persists `deadline_exceeded` without calling the CA. A worker that acquires the session lock and finds `attempted` has recovered a lost execution; without a proven signer lookup receipt it persists `signing_unknown` and never resubmits. Definite signer/provider rejection persists the matching unavailable reason. Every provider/CA call is abort-bounded by both its transport timeout and remaining issue deadline. Finalization after expiry cannot publish credentials.
+Release SQL locks before provider observation and CA calls. Check exact current server/IP ownership and source-restricted firewall policy before signing. Persist the attempted state before the CA call. The final transaction reacquires the machine lock, rechecks grant ancestry, allocation, bootstrap/identity, machine version, cleanup intent, deadlines and the observed resource IDs. A valid signature does not override lost authority. Only a validated certificate and current target can become issued. Provider observation is never a certificate-signing retry. Before CA submission, retryable provider unavailability may reschedule only within the original issue deadline. A pending job after that deadline persists `deadline_exceeded` without calling the CA. A worker that acquires the session lock and finds `attempted` has recovered a lost execution; without a proven signer lookup receipt it persists `signing_unknown` and never resubmits. Definite signer/provider rejection persists the matching unavailable reason. Provider and CA transports have fixed timeouts. The persisted issue deadline is checked before signing and during finalization; an expired result cannot publish credentials.
 
 The gateway process can run on the same operator host during development. It holds no database, provider, bootstrap or CA credentials. It calls a narrow authenticated control RPC for claim, batch authority checks and close. An operator-generated gateway token is stored0600 on that gateway; the control configuration contains only its hash, gateway ID and allowed egress CIDRs. Tokens authenticate a distinct `GatewayPrincipal`, never a customer/owner principal. Rotate/revoke gateway tokens through explicit operator configuration and recheck policy on every RPC. Startup requires TLS to the configured control origin, except explicit loopback development; reject redirects. Gateway configuration cannot load control-owner database or signing material. An upgrade accepts only the fixed WSS path and `Authorization: Bearer <ticket>` header. Tickets never enter URLs or access logs. Browser-origin requests are refused in this CLI-only slice. Bound unauthenticated sockets and header/handshake size before ticket lookup.
 
@@ -143,38 +146,55 @@ Root-equivalent access can alter the VM and copy secrets. Closing platform acces
 
 ## Transport and files
 
-The service boundaries follow these signatures. Types come from the validated contracts and existing connection/config ports.
+The gateway uses native Node streams and pinned `ws`, with compression disabled. It accepts binary frames up to64KiB and uses64KiB stream high-water marks for backpressure. Admission defaults to100 active/pending connections and256MiB total bytes per session. Operators can lower these limits. Configuration caps them at1000 connections and1GiB. Header size is8KiB, the initial socket timeout is8s, control RPC timeout4s and TCP connect timeout4s. Invalid upgrades close any already opened target.
 
-```ts
-admitAccessSession(input: { connection: Connection; principal: Principal; machineId: MachineId;
-  request: AccessSessionRequest; key: string }): Promise<AccessSession>;
-advanceAccessSession(input: { connection: Connection; sessionId: AccessSessionId;
-  provider: GuestObserver; signer: CustomerAccessSigner }): Promise<void>;
-claimAccessSession(input: { connection: Connection; ticket: string;
-  gatewayInstanceId: string; connectionId: string }): Promise<ClaimedAccess>;
-checkAccessAuthority(input: { connection: Connection;
-  sessions: readonly AccessSessionId[] }): Promise<AccessAuthorityBatch>;
+The CLI uses explicit OpenSSH options and an option boundary before the hostname, so a remote command beginning with `-F` or `-o` cannot alter local SSH configuration. It never inherits the user's SSH agent, configuration, known hosts, local commands or forwarding. SFTP quotes single-file paths and rejects NUL/newline characters. Remote commands retain ordinary SSH shell semantics. SSH/SFTP stream output is an exception to the CLI's usual JSON stdout; access session metadata goes to stderr.
+
+- `packages/contracts/src/access.ts`: schemas, IDs and public outcomes.
+- `packages/db`, migration0020: immutable sessions and signing receipts.
+- `apps/control/src/access-sessions.ts`: admission, single-attempt issuance, claims and current authority.
+- `apps/control/src/access-closure.ts`: transactional grant/machine closure.
+- `apps/access-gateway/src/server.ts`: authenticated upgrade and bounded live connections.
+- `packages/pki/src/customer-ssh.ts`: certificate policy and validation.
+- `apps/cli/src/ssh.ts`: invocation files, native SSH/SFTP and hidden ticket-file proxy.
+- `packages/guestctl/src/customer-ssh.ts`: signed installed policy and effective SSH/sudo checks.
+
+A new signed image carries optional `customerSsh:1`, the separate `agent-customer` account, allocation principal and passwordless sudo. Its home is `/var/lib/agent-customer`. Old images remain valid without enabling this capability. Readiness validates installed bytes against signed inputs and checks actual `sshd -T` output and sudo behavior. Ubuntu emits repeated `allowusers` lines and trailing whitespace in subsystem output; parse both without weakening expected values. SFTP uses the built-in `internal-sftp` subsystem.
+
+## Operator configuration
+
+Set `ACLD_ACCESS_CONFIG` on the customer API and worker to an owner-only JSON file:
+
+```json
+{
+  "gateway": {
+    "id": "primary",
+    "origin": "wss://access.example.com",
+    "egressCidrs": ["192.0.2.10/32"]
+  },
+  "tokenHash": "<SHA-256 hex digest of the complete gateway token>"
+}
 ```
 
-Use a pinned `ws` dependency and native Node/OpenSSH. Disable compression. Set a32KiB message limit and1MiB per-direction queued-byte limit, plus explicit connect and pre-auth timeouts. Bridge with Node streams and verified backpressure. Test whether the library's stream close behavior preserves SSH's expected EOF/disconnect behavior; do not claim generic TCP half-close without evidence. Destroy the whole connection on a failed bridge, limit concurrent handshakes and store only metadata, close reasons and byte counts.
+Use actual gateway egress addresses. The example address is reserved for documentation. SSH firewall sources must match this configured profile; the existing probe worker must reach guests from these allowed addresses too. The customer runtime's existing PKI configuration supplies the customer certificate signer. The image factory and an unconfigured API expose no customer SSH routes.
 
-- `packages/contracts/src/access.ts`: schemas, branded IDs and public outcomes.
-- `packages/db` plus next immutable migration0020: sessions, immutable signing receipts, constraints and indexes.
-- `apps/control/src/access-sessions.ts`: admission, single-attempt issuance and returned metadata; customer worker registration uses the existing Graphile queue.
-- `apps/control/src/access-authority.ts`: SQL claim/current-authority/closure using the existing grant loader; narrow gateway RPC routes stay in control.
-- `apps/access-gateway/src/index.ts`: bounded WSS upgrade and live byte connections.
-- `packages/pki/src/customer-ssh.ts`: customer certificate policy and validation.
-- `apps/cli/src/ssh.ts`: invocation files, native SSH and hidden ticket-file proxy.
-- `packages/guestctl`, `images`, runtime config and Hetzner firewall adapter: distinct customer user, access-capable inputs and configured source addresses.
+The separate gateway reads an owner-only file named by `ACLD_GATEWAY_CONFIG`:
 
-The gateway imports contracts and its RPC client only, and must not depend on database/control runtime packages or load private factories as a side effect. Future browser login supplies the existing principal before this API, so this slice needs no OAuth tables or browser UI.
+```json
+{
+  "controlUrl": "https://api.example.com",
+  "token": "<aclg_ followed by 32 cryptographically random base64url bytes>",
+  "host": "127.0.0.1",
+  "port": 4322,
+  "maximumConnections": 100,
+  "maximumSessionBytes": 268435456
+}
+```
 
-## Synthesis and verification
+Run `pnpm gateway` behind an HTTPS reverse proxy that supports WebSocket upgrades. Keep ticket authorization headers out of access logs. The gateway holds only this token, not database, provider or CA credentials. Loopback HTTP/WS is permitted for local fixtures; deployed origins require HTTPS/WSS. Changing the gateway token requires updating its hash and restarting the configured processes. Old gateway authority then expires within the15s check bound.
 
-All three candidates were read fully. Both parent and independent gpt-5.6-sol judge chose A. A scored21/25, C18 and B15. A supplied an executable ticket-file ProxyCommand, stable allocation principal and separate customer user. C supplied explicit monotonic connection states, post-claim checks and transactional revoke/destroy closure. Review exposed that a database-reading gateway could inherit excessive rights, so the final shape uses a narrow control RPC and keeps one authority implementation. The final design uses a client-generated ticket hash, reviewed separately, to keep replay useful without a new sealing key. It also reduces CA submissions to one per session and fixes the timing/lock details.
+## Verification
 
-Rejected B/C's stdin ticket channel because stdin already carries SSH bytes. Rejected their per-session principal files because neither supplied a working delivery path. Rejected sealed ticket storage, direct public SSH, provider/signer authority in the gateway, automatic uncertain CA retries and early forwarding. Candidate artifacts and rubric are `.local/m2-access-design`; the synthesis record preserves these decisions in the repository.
+`pnpm smoke:access` runs the actual CLI, HTTP API, PostgreSQL/Graphile worker, gateway, Smallstep and native SSH/SFTP against one owned local Ubuntu VM. It verifies sudo, a file round trip with spaces, descendant revocation, rejection of new revoked access, API-outage closure and retained guest data. It removes the fixture VM and database on success; a failed VM remains in `.local/guest-image-machine.json` for exact inspection and cleanup. No provider resources are created.
 
-Before implementation completes, exercise actual CLI/SDK/API, PostgreSQL constraints, Smallstep, native OpenSSH and WSS in disposable local fixtures. Cover lost API/CA/upgrade responses, exact idempotency conflict, restart after claim, parent revocation, worst-phase polling, stalled database reads, clock rollback, expiry during issue/open, destruction races, wrong target/host CA/source address, customer/probe privilege separation, malformed frames, backpressure, EOF and local secret disposal. Retain failures and independent review. A later bounded Hetzner check needs a new verified access-capable image; the current M1 image is not sufficient.
-
-First implementation step is the contract and SQL session model plus authority/race tests. Broader forwarding, device login and application deployment retain their own open milestones.
+Focused service tests cover authorization, ticket replay, idempotency, immutable signing attempts, lost CA results, revocation during signing, target changes and admission limits. The native certificate smoke covers key, source, principal and signature rejection. A bounded independent review caught local OpenSSH option injection and exec-only session inspection mismatch; both have regression checks. Customer access is not yet verified through Hetzner. Public deployment, durable commands and browser login remain unfinished.

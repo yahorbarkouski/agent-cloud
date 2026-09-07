@@ -3,10 +3,18 @@ import {
   guestManifestSchema,
   imageArtifactsSchema,
   imageSourcePaths,
+  renewalImageSourcePaths,
 } from '../packages/contracts/dist/index.js';
-import { createImageManifest, imageArtifacts } from '../packages/images/dist/index.js';
+import {
+  createImageManifest,
+  customerSshSudoers,
+  imageArtifacts,
+} from '../packages/images/dist/index.js';
 
-export function imageFixture(publicTrust?: Parameters<typeof createImageManifest>[0]['trust']) {
+export function imageFixture(
+  publicTrust?: Parameters<typeof createImageManifest>[0]['trust'],
+  customerSsh?: 1,
+) {
   const hash = (value: string) => createHash('sha256').update(value).digest('hex');
   const artifact = (file: string) => ({
     file,
@@ -30,7 +38,9 @@ export function imageFixture(publicTrust?: Parameters<typeof createImageManifest
       tlsRoot: 'test-public-root',
     },
   );
-  const files = new Map([...imageSourcePaths, 'guestctl.mjs'].map((path) => [path, path]));
+  const sources = customerSsh === 1 ? imageSourcePaths : renewalImageSourcePaths;
+  const files = new Map([...sources, 'guestctl.mjs'].map((path) => [path, path]));
+  if (customerSsh === 1) files.set('guest-customer.sudoers', customerSshSudoers);
   for (const artifact of imageArtifacts(pins))
     files.set('artifacts/' + artifact.file, artifact.file);
   files.set('artifacts.json', JSON.stringify(pins) + '\n');

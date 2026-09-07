@@ -66,8 +66,10 @@ export const enrollmentImageSourcePaths = [
   'systemd/agent-cloud-proxy.service',
 ];
 
-export const imageSourcePaths = [
+export const renewalImageSourcePaths = [
   ...enrollmentImageSourcePaths,
   'systemd/agent-cloud-renew.service',
   'systemd/agent-cloud-renew.timer',
 ];
+
+export const imageSourcePaths = [...renewalImageSourcePaths, 'guest-customer.sudoers'];

@@ -63,6 +63,7 @@ try {
       version: manifest.version,
       manifestDigest: createHash('sha256').update(JSON.stringify(manifest)).digest('hex'),
       ...manifest.trust,
+      ...(manifest.customerSsh === 1 ? { customerSsh: 1 } : {}),
     });
     const { provider, seal, limits, catalog, operation, allocation, bootstrap } =
       await prepareEnrollmentFixture({

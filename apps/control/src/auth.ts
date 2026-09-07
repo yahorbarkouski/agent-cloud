@@ -16,6 +16,7 @@ import {
   type ProjectId,
 } from '@agent-cloud/contracts';
 import { grants, auditEvents, databaseTime, type Executor } from '@agent-cloud/db';
+import { closeGrantAccess } from './access-closure.js';
 
 export const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
 export const generateToken = () => `acld_${randomBytes(32).toString('base64url')}`;
@@ -216,6 +217,7 @@ export async function revokeGrant(db: Executor, input: { principal: Principal; g
     event: 'grant.revoked',
     details: { actorGrantId: input.principal.grantId },
   });
+  await closeGrantAccess(db, input.principal.accountId, input.grantId);
 }
 
 /** List descendants, never ancestor/sibling credentials or token hashes. */

@@ -18,6 +18,7 @@ import {
 } from '@agent-cloud/contracts';
 import { CloudClient } from '@agent-cloud/sdk';
 import { registerGrants } from './grants.js';
+import { registerSsh } from './ssh.js';
 
 const program = new Command()
   .name('acld')
@@ -36,6 +37,7 @@ function output(value: unknown) {
   process.stdout.write(JSON.stringify(value) + '\n');
 }
 registerGrants({ program, client, output });
+registerSsh({ program, client, output });
 
 program
   .command('login')

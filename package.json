@@ -46,7 +46,9 @@
     "image:build": "pnpm build && tsx --env-file-if-exists=.env scripts/image-build.ts",
     "smoke:cleanup": "pnpm build && tsx scripts/smoke-cleanup.ts",
     "machine:recover": "pnpm build && tsx --env-file-if-exists=.env scripts/machine-recover.ts",
-    "smoke:reference": "pnpm build:guest && AGENT_CLOUD_REFERENCE_SCENARIO=1 tsx scripts/smoke-guest.ts"
+    "smoke:reference": "pnpm build:guest && AGENT_CLOUD_REFERENCE_SCENARIO=1 tsx scripts/smoke-guest.ts",
+    "gateway": "pnpm build && node --env-file-if-exists=.env apps/access-gateway/dist/index.js",
+    "smoke:access": "pnpm build:guest && AGENT_CLOUD_ACCESS_SCENARIO=1 tsx scripts/smoke-guest.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -65,6 +67,8 @@
     "typescript": "6.0.3",
     "typescript-eslint": "8.69.0",
     "vitest": "5.0.0",
-    "zod": "4.5.4"
+    "zod": "4.5.4",
+    "@types/ws": "8.18.1",
+    "ws": "8.21.3"
   }
 }

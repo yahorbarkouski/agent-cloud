@@ -37,7 +37,7 @@ async function checksums() {
 }
 
 async function stage() {
-  const fixture = imageFixture();
+  const fixture = imageFixture(undefined, 1);
   await mkdir(join(directory, 'artifacts'));
   await mkdir(join(directory, 'systemd'));
   for (const [path, value] of fixture.files) await writeFile(join(directory, path), value);
@@ -74,6 +74,8 @@ it.each([
   expect(digestInputs(changed)).not.toBe(fixture.manifest.publicInputsDigest);
   if (path === 'artifacts.json' || path === 'trust.json') {
     expect(() => createImageManifest({ ...fixture, inputs: changed })).toThrow('canonical input');
+  } else if (path === 'guest-customer.sudoers') {
+    expect(() => createImageManifest({ ...fixture, inputs: changed })).toThrow('sudo policy');
   } else if (!path.startsWith('artifacts/')) {
     const manifest = createImageManifest({ ...fixture, inputs: changed });
     expect(manifest.version).not.toBe(fixture.manifest.version);
@@ -242,4 +244,23 @@ it('preserves historical enrollment-only image identity and rejects a partial re
     files: fixture.inputs.files.filter((file) => file.path !== 'systemd/agent-cloud-renew.timer'),
   };
   expect(() => createImageManifest({ ...fixture, inputs: partial })).toThrow('complete input set');
+});
+
+it('authenticates the customer capability and preserves absent markers in historical manifests', () => {
+  const historical = imageFixture();
+  expect(historical.manifest).not.toHaveProperty('customerSsh');
+  const customer = imageFixture(undefined, 1);
+  expect(customer.manifest.customerSsh).toBe(1);
+  expect(digestManifest(customer.manifest)).not.toBe(digestManifest(historical.manifest));
+  expect(() =>
+    createImageManifest({
+      ...customer,
+      inputs: {
+        ...customer.inputs,
+        files: customer.inputs.files.filter(
+          (file) => file.path !== 'systemd/agent-cloud-renew.timer',
+        ),
+      },
+    }),
+  ).toThrow('complete input');
 });

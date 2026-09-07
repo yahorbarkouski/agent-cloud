@@ -7,10 +7,13 @@ import {
   imageVerifierRuntimeSchema,
   type GuestRuntime,
   type GuestBootRuntime,
+  type GuestBootProof,
+  type GuestManifest,
 } from '@agent-cloud/contracts';
 import { loadManifest, type GuestConfiguration } from './identity.js';
 import { readOwnedFile } from './files.js';
 import { runTool } from './tools.js';
+import { verifyCustomerSsh } from './customer-ssh.js';
 
 type Checks = GuestRuntime['checks'];
 export type RuntimeSystem = {
@@ -20,11 +23,13 @@ export type RuntimeSystem = {
   version: (component: 'docker' | 'compose' | 'caddy' | 'step') => Promise<string>;
   disk: () => Promise<Omit<Extract<Checks['disk'], { kind: 'ok' }>, 'kind'>>;
   proxy: () => Promise<unknown>;
+  customerSsh: (manifest: GuestManifest, proof: GuestBootProof) => Promise<void>;
 };
 
 export function runtimeSystem(configuration: GuestConfiguration): RuntimeSystem {
   const run = (binary: string, args: string[]) => runTool(binary, args, configuration.state);
   return {
+    customerSsh: (manifest, proof) => verifyCustomerSsh(configuration, manifest, proof),
     architecture: () => {
       if (process.arch === 'x64') return 'x86';
       if (process.arch === 'arm64') return 'arm';
@@ -137,6 +142,13 @@ export async function inspectRuntime(
       return { kind: 'ok', ...value };
     }),
   ]);
+  const customerSsh =
+    manifest.customerSsh === 1
+      ? await measured('customerSsh', async () => {
+          await system.customerSsh(manifest, proof);
+          return { kind: 'ok' };
+        })
+      : undefined;
   return schema.parse({
     version: proof.version,
     ...(proof.version === 2 ? { machineId: await system.machineId() } : {}),
@@ -152,6 +164,7 @@ export async function inspectRuntime(
       step,
       disk,
       proxy,
+      ...(customerSsh === undefined ? {} : { customerSsh }),
     },
   });
 }

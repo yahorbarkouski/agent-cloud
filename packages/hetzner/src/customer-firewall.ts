@@ -31,6 +31,7 @@ export async function checkCustomerFirewalls(
   request: ReturnType<typeof createHetznerRequest>,
   ids: number[],
   internalReference = false,
+  sshSources?: string[],
 ) {
   const expectedPorts = internalReference ? [...ingressPorts, '80', '443'] : ingressPorts;
   for (const id of ids) {
@@ -57,8 +58,10 @@ export async function checkCustomerFirewalls(
           rule.direction !== 'in' ||
           rule.protocol !== 'tcp' ||
           rule.destination_ips.length !== 0 ||
-          rule.source_ips.length !== 1 ||
-          rule.source_ips[0] !== '0.0.0.0/0' ||
+          JSON.stringify(rule.source_ips.toSorted()) !==
+            JSON.stringify(
+              (rule.port === '22' && sshSources ? sshSources : ['0.0.0.0/0']).toSorted(),
+            ) ||
           !rule.port ||
           !allowed.delete(rule.port)
         )

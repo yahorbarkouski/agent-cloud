@@ -19,7 +19,7 @@ afterEach(async () => {
   await rm(state, { recursive: true, force: true });
 });
 
-async function fixture() {
+async function fixture(customerSsh?: 1) {
   const binary = 'public guest executable fixture';
   const manifest = guestManifestSchema.parse({
     format: 2,
@@ -39,6 +39,7 @@ async function fixture() {
       sshHostCa: 'ssh-ed25519 BBBB',
       tlsRoot: 'fixture-root',
     },
+    ...(customerSsh === 1 ? { customerSsh } : {}),
   });
   const proof = {
     version: 1,
@@ -60,6 +61,7 @@ async function fixture() {
   await writeFile(join(state, 'proof.json'), JSON.stringify(proof), { mode: 0o644 });
   const bootId = randomUUID();
   const system: RuntimeSystem = {
+    customerSsh: () => Promise.resolve(),
     architecture: () => 'x86',
     machineId: () => Promise.resolve('a'.repeat(32)),
     bootId: () => Promise.resolve(bootId),
@@ -89,6 +91,18 @@ it('reports independent component failures without losing other fresh evidence',
   expect(runtime.checks.proxy).toEqual({ kind: 'unavailable' });
   expect(runtime.checks.compose).toEqual({ kind: 'ok', version: '5.5.1' });
   expect(runtime.checks.disk.kind).toBe('ok');
+  expect(runtime.checks).not.toHaveProperty('customerSsh');
+});
+
+it('requires installed customer SSH verification only for marked manifests', async () => {
+  const guest = await fixture(1);
+  expect((await inspectRuntime(guest.configuration, guest.system)).checks.customerSsh).toEqual({
+    kind: 'ok',
+  });
+  guest.system.customerSsh = () => Promise.reject(new Error('SSH policy changed'));
+  const runtime = await inspectRuntime(guest.configuration, guest.system);
+  expect(runtime.checks.customerSsh).toEqual({ kind: 'unavailable' });
+  expect(runtime.checks.docker.kind).toBe('ok');
 });
 
 it('rejects changed executable or identity evidence rather than reporting readiness', async () => {

@@ -31,6 +31,9 @@ export function readConfig(environment: NodeJS.ProcessEnv = process.env) {
     host: env.HOST,
     port: env.PORT,
     publicUrl: env.PUBLIC_URL,
+    ...(environment.ACLD_ACCESS_CONFIG
+      ? { accessConfigFile: resolve(environment.ACLD_ACCESS_CONFIG) }
+      : {}),
     ...(environment.INTERNAL_REFERENCE_GRANT
       ? { internalReferenceGrant: grantIdSchema.parse(environment.INTERNAL_REFERENCE_GRANT) }
       : {}),

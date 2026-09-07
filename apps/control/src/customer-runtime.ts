@@ -1,6 +1,6 @@
 import { createInternalReference } from './internal-reference.js';
 import { isDeepStrictEqual } from 'node:util';
-import { CloudError, type GuestImage } from '@agent-cloud/contracts';
+import { CloudError, accessServiceConfigSchema, type GuestImage } from '@agent-cloud/contracts';
 import type { Connection } from '@agent-cloud/db';
 import {
   createHetznerRequest,
@@ -17,7 +17,8 @@ import { createGuestRenewalService } from './guest-renewal.js';
 import { createGuestReadiness } from './guest-readiness.js';
 import { prepareGuestBootstrap } from './guest-bootstrap.js';
 import { createImageReleaseKeySource, readBootstrapIdentity } from './runtime-identity.js';
-import { readRuntimeSigner } from './runtime-pki.js';
+import { readRuntimeSigner, readRuntimeCustomerSigner } from './runtime-pki.js';
+import { createAccessService } from './access-sessions.js';
 import { readPrivateFile } from './private-file.js';
 import { guestEnrollmentUrl, type CustomerRuntimeConfig } from './runtime-config.js';
 import type { Config } from './config.js';
@@ -35,6 +36,16 @@ export async function createCustomerRuntime(input: {
   const token = await readPrivateFile(config.providerTokenFile);
   const transport = { token, ...(input.transport ? { transport: input.transport } : {}) };
   const request = createHetznerRequest(transport);
+  const accessConfig = config.accessConfigFile
+    ? accessServiceConfigSchema.parse(JSON.parse(await readPrivateFile(config.accessConfigFile)))
+    : undefined;
+  const checkNetwork = () =>
+    checkCustomerFirewalls(
+      request,
+      runtime.firewallIds,
+      Boolean(config.internalReferenceGrant),
+      accessConfig?.gateway.egressCidrs,
+    );
   const readKeys = createImageReleaseKeySource(runtime.identityDirectory);
   const images = new HetznerImageProvider({
     ...transport,
@@ -110,11 +121,7 @@ export async function createCustomerRuntime(input: {
   async function resolveImage(allocation: Parameters<typeof resolvePinnedImage>[0]) {
     const image = await resolvePinnedImage(allocation);
     await Promise.all([requireSignerTrust(image), getIdentity()]);
-    await checkCustomerFirewalls(
-      request,
-      runtime.firewallIds,
-      Boolean(config.internalReferenceGrant),
-    );
+    await checkNetwork();
     return image;
   }
   const guest: GuestProvisioning = {
@@ -131,6 +138,17 @@ export async function createCustomerRuntime(input: {
   return {
     provider,
     guest,
+    ...(accessConfig
+      ? {
+          access: createAccessService({
+            connection,
+            provider,
+            config: accessConfig,
+            signer: () => readRuntimeCustomerSigner(runtime.pki),
+            checkNetwork,
+          }),
+        }
+      : {}),
     ...(config.internalReferenceGrant
       ? {
           internalReference: createInternalReference({
@@ -152,11 +170,7 @@ export async function createCustomerRuntime(input: {
     },
     checkConfiguration: async () => {
       await Promise.all([getIdentity(), getServices()]);
-      await checkCustomerFirewalls(
-        request,
-        runtime.firewallIds,
-        Boolean(config.internalReferenceGrant),
-      );
+      await checkNetwork();
       const selected = await readPublishedImage({
         connection,
         provider: images,

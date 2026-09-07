@@ -94,6 +94,7 @@ export async function prepareImageVerification(input: {
             version: manifest.version,
             manifestDigest,
             ...manifest.trust,
+            ...(manifest.customerSsh === 1 ? { customerSsh: 1 } : {}),
           },
         });
         if (existing) {

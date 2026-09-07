@@ -22,8 +22,8 @@ const keyPolicy = (publicKey = pair.publicKey): ImageReleaseKey => ({
   signedUntil: '2026-09-10T00:00:00Z',
   verifyUntil: '2026-10-01T00:00:00Z',
 });
-function payload() {
-  const fixture = imageFixture();
+function payload(customerSsh?: 1) {
+  const fixture = imageFixture(undefined, customerSsh);
   const buildId = randomUUID();
   const value = imageReleasePayloadSchema.parse({
     format: 1,
@@ -75,6 +75,20 @@ it('authenticates a release and derives the exact image from signed metadata', (
     payload: Object.fromEntries(Object.entries(value).reverse()),
   };
   expect(verifySignedImageRelease(reordered, [keyPolicy()], now).image).toEqual(result.image);
+});
+
+it('derives customer SSH support from authenticated release inputs and rejects marker tampering', () => {
+  const release = signImageRelease(payload(1), pair.privateKey);
+  expect(verifySignedImageRelease(release, [keyPolicy()], now).image.customerSsh).toBe(1);
+  delete release.payload.manifest.customerSsh;
+  expect(() => verifySignedImageRelease(release, [keyPolicy()], now)).toThrow('signature');
+  const historical = payload();
+  expect(
+    verifySignedImageRelease(signImageRelease(historical, pair.privateKey), [keyPolicy()], now)
+      .image,
+  ).not.toHaveProperty('customerSsh');
+  historical.manifest.customerSsh = 1;
+  expect(() => signImageRelease(historical, pair.privateKey)).toThrow('evidence');
 });
 
 it.each(['snapshot', 'trust', 'input', 'retention', 'boot'])(

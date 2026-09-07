@@ -25,6 +25,7 @@ export const guestImageSchema = z.strictObject({
   sshUserCa: caPublicKey,
   sshHostCa: caPublicKey,
   tlsRoot: z.string().min(1).max(8192),
+  customerSsh: z.literal(1).optional(),
 });
 export type GuestImage = z.infer<typeof guestImageSchema>;
 
@@ -98,6 +99,7 @@ export const guestManifestSchema = z.strictObject({
     guestctlSha256: guestImageSchema.shape.manifestDigest,
   }),
   trust: guestImageSchema.pick({ sshUserCa: true, sshHostCa: true, tlsRoot: true }),
+  customerSsh: z.literal(1).optional(),
 });
 export type GuestManifest = z.infer<typeof guestManifestSchema>;
 export const guestBootstrapFileSchema = z.strictObject({
@@ -138,6 +140,12 @@ export const guestRuntimeSchema = z.strictObject({
       }),
       z.strictObject({ kind: z.literal('unavailable') }),
     ]),
+    customerSsh: z
+      .discriminatedUnion('kind', [
+        z.strictObject({ kind: z.literal('ok') }),
+        z.strictObject({ kind: z.literal('unavailable') }),
+      ])
+      .optional(),
   }),
 });
 export type GuestRuntime = z.infer<typeof guestRuntimeSchema>;

@@ -91,7 +91,7 @@ export function authorizeCommand(
   }
 }
 
-export async function lockAccount(tx: Transaction, principal: Principal) {
+export async function lockAccount(tx: Transaction, principal: Pick<Principal, 'accountId'>) {
   const [account] = await tx
     .select()
     .from(accounts)

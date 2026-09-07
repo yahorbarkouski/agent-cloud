@@ -47,6 +47,7 @@ export async function verifyImage(configuration: GuestConfiguration, spec: Guest
     spec.image.manifestDigest !== digest ||
     spec.image.version !== manifest.version ||
     spec.image.architecture !== manifest.architecture ||
+    spec.image.customerSsh !== manifest.customerSsh ||
     spec.image.sshHostCa !== manifest.trust.sshHostCa ||
     spec.image.sshUserCa !== manifest.trust.sshUserCa ||
     spec.image.tlsRoot.trim() !== manifest.trust.tlsRoot.trim()

@@ -25,6 +25,7 @@ import {
   type Database,
 } from '@agent-cloud/db';
 import { authorize, loadPrincipal } from './auth.js';
+import { closeMachineAccess } from './access-closure.js';
 
 /** A destroy intent owns cleanup even after its admitting credential expires. */
 export async function admitCleanup(input: {
@@ -182,6 +183,7 @@ export async function admitCleanup(input: {
       requestHash: fingerprint,
       operationId: operation.id,
     });
+    await closeMachineAccess(tx, principal.accountId, machine.id);
     await enqueueOperation(tx, operation.id);
     return operation;
   });

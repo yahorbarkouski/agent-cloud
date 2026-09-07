@@ -6,6 +6,11 @@ import { ZodError } from 'zod';
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import {
   referenceInputSchema,
+  accessSessionIdSchema,
+  accessSessionRequestSchema,
+  gatewayClaimSchema,
+  gatewayCheckSchema,
+  gatewayCloseSchema,
   CloudError,
   errorStatus,
   type CatalogSource,
@@ -36,6 +41,7 @@ import {
   type Database,
 } from '@agent-cloud/db';
 import type { InternalReference } from './internal-reference.js';
+import type { AccessService } from './access-sessions.js';
 import {
   authenticate,
   authorize,
@@ -62,6 +68,7 @@ export function createApp(input: {
   imageRelease?: ImageReleaseSelection;
   customerAccess?: 'enabled' | 'disabled';
   internalReference?: InternalReference;
+  access?: AccessService;
 }) {
   const app = new Hono<{ Variables: { principal: Principal; requestId: string } }>();
   app.use('*', async (c, next) => {
@@ -152,6 +159,38 @@ export function createApp(input: {
     await next();
   });
   app.get('/v1/whoami', (c) => c.json({ principal: c.get('principal') }));
+  if (input.access && input.customerAccess !== 'disabled') {
+    const access = input.access;
+    app.post('/v1/machines/:machineId/access-sessions', async (c) =>
+      c.json(
+        await access.admit(
+          c.get('principal'),
+          machineIdSchema.parse(c.req.param('machineId')),
+          accessSessionRequestSchema.parse(await c.req.json<unknown>()),
+          idempotencyKeySchema.parse(c.req.header('Idempotency-Key')),
+        ),
+        202,
+      ),
+    );
+    app.get('/v1/access-sessions/:id', async (c) =>
+      c.json(
+        await access.inspect(c.get('principal'), accessSessionIdSchema.parse(c.req.param('id'))),
+      ),
+    );
+    app.use('/gateway/v1/*', async (c, next) => {
+      access.authenticateGateway(c.req.header('Authorization'));
+      await next();
+    });
+    app.post('/gateway/v1/claim', async (c) =>
+      c.json(await access.claim(gatewayClaimSchema.parse(await c.req.json<unknown>()))),
+    );
+    app.post('/gateway/v1/check', async (c) =>
+      c.json(await access.check(gatewayCheckSchema.parse(await c.req.json<unknown>()).connections)),
+    );
+    app.post('/gateway/v1/close', async (c) =>
+      c.json(await access.close(gatewayCloseSchema.parse(await c.req.json<unknown>()))),
+    );
+  }
   app.get('/v1/catalog', (c) => c.json(input.catalog()));
   app.get('/v1/projects', async (c) => {
     const principal = c.get('principal');

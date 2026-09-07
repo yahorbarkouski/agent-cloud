@@ -113,6 +113,7 @@ export function verifySignedImageRelease(value: unknown, keys: ImageReleaseKey[]
       version: release.payload.manifest.version,
       manifestDigest: digestManifest(release.payload.manifest),
       ...release.payload.manifest.trust,
+      ...(release.payload.manifest.customerSsh === 1 ? { customerSsh: 1 } : {}),
     }),
   };
 }

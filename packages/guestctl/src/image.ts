@@ -18,7 +18,9 @@ const fields = {
   homes: z
     .array(
       z.strictObject({
-        path: z.string().regex(/^\/root$|^\/home\/[A-Za-z0-9_-]+$|^\/var\/lib\/agent-probe$/),
+        path: z
+          .string()
+          .regex(/^\/root$|^\/home\/[A-Za-z0-9_-]+$|^\/var\/lib\/agent-(probe|customer)$/),
         uid: z.int().nonnegative(),
       }),
     )

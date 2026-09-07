@@ -30,6 +30,7 @@ const app = createApp({
         renewal: runtime.renewal,
         imageRelease: runtime.imageRelease,
         ...(runtime.internalReference ? { internalReference: runtime.internalReference } : {}),
+        ...(runtime.access ? { access: runtime.access } : {}),
       }
     : {}),
 });

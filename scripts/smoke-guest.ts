@@ -1,6 +1,7 @@
 import { createInternalReference } from '../apps/control/src/internal-reference.js';
 import { runReferenceCommand } from '../packages/remote/dist/index.js';
 import { exerciseReferenceScenario } from './support/reference-scenario.js';
+import { exerciseCustomerAccess } from './support/customer-access-scenario.js';
 import { prepareGuestBootstrap } from '../apps/control/dist/guest-bootstrap.js';
 import { imageInstallCommand } from '../packages/images/dist/index.js';
 import { readGuestBuild } from './support/guest-build.js';
@@ -25,7 +26,7 @@ import {
   type OperationId,
 } from '../packages/contracts/dist/index.js';
 import { machines, operations, machineRecord } from '../packages/db/src/index.js';
-import { createSigner, guestName } from '../packages/pki/dist/index.js';
+import { createSigner, guestName, createCustomerSshSigner } from '../packages/pki/dist/index.js';
 import { createGuestProbe } from '../packages/remote/dist/index.js';
 import { createApp } from '../apps/control/src/app.js';
 import { createGuestRenewalService } from '../apps/control/src/guest-renewal.js';
@@ -177,7 +178,7 @@ try {
     '1h',
   ]);
   await chmod(join(scratch, 'api.key'), 0o600);
-  const signer = createSigner({
+  const signerConfiguration = {
     binary: step,
     caUrl: 'https://localhost:9449',
     tlsRoot: await readFile('.local/pki/public/root_ca.crt', 'utf8'),
@@ -185,7 +186,8 @@ try {
     sshUserCa: (await readFile('.local/pki/public/ssh_user_ca_key.pub', 'utf8')).trim(),
     provisioner: 'agent-cloud-control',
     provisionerPassword: await readPrivateFile(resolve('.local/pki/provisioner-password')),
-  });
+  };
+  const signer = createSigner(signerConfiguration);
   let handle: (input: Request) => Response | Promise<Response> = () =>
     new Response(null, { status: 503 });
   const listener = getRequestListener((input) => handle(input));
@@ -212,6 +214,7 @@ try {
     architecture: manifest.architecture,
     manifestDigest: createHash('sha256').update(JSON.stringify(manifest)).digest('hex'),
     ...manifest.trust,
+    ...(manifest.customerSsh === 1 ? { customerSsh: 1 } : {}),
   });
   if (clone) {
     const receipt = imageReceiptSchema.parse(
@@ -370,7 +373,10 @@ try {
     imageVersion: z.literal(image.version),
   });
   health.parse(JSON.parse(await vm(['curl', '--fail', '--silent', 'http://127.0.0.1:8081/ready'])));
-  if (process.env.AGENT_CLOUD_REFERENCE_SCENARIO === '1') {
+  if (
+    process.env.AGENT_CLOUD_REFERENCE_SCENARIO === '1' ||
+    process.env.AGENT_CLOUD_ACCESS_SCENARIO === '1'
+  ) {
     for (let attempt = 0; attempt < 10; attempt++) {
       await tick();
       if (z.object({ kind: z.literal('succeeded') }).safeParse(await operationProgress()).success)
@@ -378,14 +384,24 @@ try {
       await setTimeout(1000);
     }
     assert.partialDeepStrictEqual(await operationProgress(), { kind: 'succeeded' });
-    await exerciseReferenceScenario({
-      app,
-      machineId: fixture.operation.machineId,
-      token: fixture.account.token,
-      scratch,
-      address: info.ip4,
-      vm,
-    });
+    if (process.env.AGENT_CLOUD_ACCESS_SCENARIO === '1')
+      await exerciseCustomerAccess({
+        connection: database.connection,
+        fixture,
+        signer: createCustomerSshSigner(signerConfiguration),
+        scratch,
+        address: info.ip4,
+        vm,
+      });
+    else
+      await exerciseReferenceScenario({
+        app,
+        machineId: fixture.operation.machineId,
+        token: fixture.account.token,
+        scratch,
+        address: info.ip4,
+        vm,
+      });
   } else {
     progress('verifying renewal timer and certificate reload preserve proxy configuration');
     await vm(['systemctl', 'is-enabled', '--quiet', 'agent-cloud-renew.timer']);

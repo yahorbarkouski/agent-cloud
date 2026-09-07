@@ -5,7 +5,7 @@ description: Operate agent-cloud machines through its JSON CLI, inspect durable 
 
 # Agent-cloud
 
-Use the installed `acld` CLI. In a source checkout, use `pnpm acld`. Run `acld --help` when unsure about available commands. The current release supports machine lifecycle operations; application deployment, SSH, routes, backups, and browser login are still being implemented.
+Use the installed `acld` CLI. In a source checkout, use `pnpm acld`. Run `acld --help` when unsure about available commands. The current release supports machine lifecycle, scoped delegation, SSH and single-file transfer. General application deployment, routes, protected backups and browser login are still being implemented.
 
 ## Establish context
 
@@ -21,7 +21,7 @@ Use `acld grant create <name> --policy <policy.json> --expires-at <UTC-timestamp
 
 The command writes a new0600 credential file and prints only its path, grant ID and expiry. Select it with `ACLD_CREDENTIALS=<new-file>` and verify `acld whoami`. A CLI context does not isolate an agent that can read other credentials on the same OS account. Use a separate OS identity or environment when that isolation is required.
 
-`acld grant list` returns descendants without secrets. Follow `nextCursor` using `--after` until it is null. `acld grant revoke <id>` disables that grant and its descendants on subsequent API requests. `revokedAt` describes that row only; a null value does not prove its ancestors are active. Current SSH session revocation is not implemented yet.
+`acld grant list` returns descendants without secrets. Follow `nextCursor` using `--after` until it is null. `acld grant revoke <id>` disables that grant and its descendants on subsequent API requests. `revokedAt` describes that row only; a null value does not prove its ancestors are active. Existing platform SSH sessions close within15 seconds of lost authority. Root access can change a guest; revocation cannot undo those changes or remove customer-installed access paths.
 
 An interrupted creation leaves a pending file and will not issue again into that path. Inspect the grant list and revoke any unwanted matching grant before deliberately removing the pending file and retrying. Tokens cannot be retrieved from the service. Existing files and symlinks are never overwritten by grant creation. Never copy the credential into the deployed application.
 
@@ -37,9 +37,24 @@ Use valid IDs returned by the service. Generate and retain one idempotency key o
 
 Mutation acceptance returns an operation, not a ready machine. Inspect or wait for that operation. JSON results go to stdout; errors go to stderr. `operation wait` exits 0 for `succeeded` or `cancelled`, 1 for `failed`, and 2 when blocked. Read the JSON progress: `cancelled` means creation was stopped and cleanup completed, not that a machine is ready. A client timeout does not cancel server work. `cleaning_up` means the service is reconciling and removing owned resources before releasing the reservation; keep inspecting the returned operation.
 
-`waiting_guest` distinguishes enrollment from runtime checks. A provider's completed create/reboot action does not prove the guest is usable. `guest_identity_mismatch`, `guest_deadline_exceeded` and `guest_signing_exhausted` retain the owned VM/IP reservation for operator recovery. Do not create a replacement automatically or claim the reservation was released. Customer admission requires an operator-configured customer runtime with a retained signed image and explicit spending limits. The runtime and internal reference application have passed bounded Hetzner verification with cleanup; public customer deployment access is not connected yet. The separate image factory rejects customer `/v1/*` calls. Do not infer customer availability from its health endpoint.
+`waiting_guest` distinguishes enrollment from runtime checks. A provider's completed create/reboot action does not prove the guest is usable. `guest_identity_mismatch`, `guest_deadline_exceeded` and `guest_signing_exhausted` retain the owned VM/IP reservation for operator recovery. Do not create a replacement automatically or claim the reservation was released. Customer admission requires an operator-configured customer runtime with a retained signed image and explicit spending limits. The runtime and internal reference application have passed bounded Hetzner verification with cleanup; general customer deployment helpers remain unfinished. Customer SSH requires a signed image advertising customerSsh:1 and an operator-configured access gateway. The separate image factory rejects customer `/v1/*` calls. Do not infer customer availability from its health endpoint.
 
 If progress is `blocked`, retain the operation ID and report its reason. Empty provider inventory does not prove creation failed. Do not use a fresh key or a new machine name to work around an unknown outcome; that could duplicate paid infrastructure. Duplicate-resource resolution currently needs the operator.
+
+## Connect and transfer files
+
+```sh
+acld ssh vm_... -- /usr/bin/id -u
+acld file put vm_... ./compose.yaml /var/lib/agent-customer/compose.yaml
+acld file get vm_... /var/lib/agent-customer/result.txt ./result.txt
+acld access inspect access_...
+```
+
+SSH and SFTP require `machine:exec` in the machine's project. The guest must be running, verified and free of active lifecycle operations. The remote user is `agent-customer`, with passwordless `sudo`; this permission gives control of the entire VM. Use `--` before SSH command arguments. Remote commands follow ordinary SSH shell semantics, so quote values for the remote shell when necessary. File transfer accepts one file per command and supports spaces; it rejects newline/NUL paths.
+
+SSH streams remote stdout/stderr and preserves the native exit code. Session metadata goes to stderr; do not try to parse all SSH output as JSON. `access inspect` returns JSON metadata without the transport ticket. File transfer uses native SFTP output. The CLI creates ephemeral credentials, verifies allocation-bound host trust and disables inherited SSH configuration, agents and forwarding. Do not bypass failed host authentication by disabling verification.
+
+A consumed ticket cannot reopen a connection. Reconnect with a new SSH command after inspecting the previous outcome. Connection loss does not prove that a remote command failed or rolled back. Do not blindly repeat migrations or other irreversible commands; durable command helpers are still in progress. Long-running applications should use Docker Compose or systemd so closing the CLI does not stop them. API/gateway outages close platform SSH within the15-second authority lease; they do not stop the guest or its applications.
 
 ## Change an existing machine
 

@@ -128,6 +128,7 @@ const refusalBootstrap = guestBootstrapFileSchema.parse({
       architecture: manifest.architecture,
       version: manifest.version,
       ...manifest.trust,
+      ...(manifest.customerSsh === 1 ? { customerSsh: 1 } : {}),
       manifestDigest: createHash('sha256').update(JSON.stringify(manifest)).digest('hex'),
     },
   },

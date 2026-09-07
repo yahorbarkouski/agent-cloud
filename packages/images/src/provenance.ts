@@ -5,10 +5,12 @@ import {
   imageInputsSchema,
   imageSourcePaths,
   enrollmentImageSourcePaths,
+  renewalImageSourcePaths,
   type GuestManifest,
   type ImageArtifacts,
   type ImageInputs,
 } from '@agent-cloud/contracts';
+import { customerSshSudoers } from './customer-ssh.js';
 
 export function imageArtifacts(pins: ImageArtifacts) {
   const artifacts = [pins.node, pins.step, pins.caddy, ...pins.debs];
@@ -50,11 +52,19 @@ export function createImageManifest({
   trust: GuestManifest['trust'];
 }) {
   const paths = JSON.stringify(inputs.files.map((file) => file.path));
+  const customerSsh = paths === JSON.stringify(inputPaths(pins));
   if (
-    paths !== JSON.stringify(inputPaths(pins)) &&
+    !customerSsh &&
+    paths !== JSON.stringify(inputPaths(pins, renewalImageSourcePaths)) &&
     paths !== JSON.stringify(inputPaths(pins, enrollmentImageSourcePaths))
   )
     throw new Error('Image inventory does not cover the complete input set.');
+  if (
+    customerSsh &&
+    inputs.files.find((file) => file.path === 'guest-customer.sudoers')?.sha256 !==
+      createHash('sha256').update(customerSshSudoers).digest('hex')
+  )
+    throw new Error('Customer SSH image requires the supported sudo policy.');
   for (const artifact of imageArtifacts(pins)) {
     if (
       inputs.files.find((file) => file.path === `artifacts/${artifact.file}`)?.sha256 !==
@@ -91,5 +101,6 @@ export function createImageManifest({
       guestctlSha256: bundle.sha256,
     },
     trust,
+    ...(customerSsh ? { customerSsh: 1 } : {}),
   });
 }

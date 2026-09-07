@@ -24,7 +24,9 @@ const taskList =
                 db: connection.db,
                 catalog: () => simulatedCatalog(config.limits.currency),
               }),
-        ...(runtime?.mode === 'customer' ? { guest: runtime.guest } : {}),
+        ...(runtime?.mode === 'customer'
+          ? { guest: runtime.guest, ...(runtime.access ? { access: runtime.access } : {}) }
+          : {}),
       });
 const runner = await run({
   pgPool: connection.pool,

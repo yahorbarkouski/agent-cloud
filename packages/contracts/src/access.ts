@@ -139,6 +139,7 @@ export const accessCloseReasonSchema = z.enum([
   'transport_failed',
   'limit_exceeded',
 ]);
+export type AccessCloseReason = z.infer<typeof accessCloseReasonSchema>;
 const unclaimedSchema = z.strictObject({ kind: z.literal('unclaimed') });
 const claimedSchema = z.strictObject({
   kind: z.literal('claimed'),
@@ -250,3 +251,37 @@ export const accessSessionRecordSchema = z
     }
   });
 export type AccessSessionRecord = z.infer<typeof accessSessionRecordSchema>;
+
+export const accessSessionResponseSchema = z.object({
+  // Stored records are fully validated before projection; public replies omit private lookup hashes.
+  session: z.object(accessSessionRecordSchema.shape).omit({ fingerprint: true, ticketHash: true }),
+});
+export const accessTicketSchema = z.string().regex(/^aclt_[A-Za-z0-9_-]{43}$/);
+export const gatewayClaimSchema = z.strictObject({
+  ticket: accessTicketSchema,
+  gatewayInstanceId: z.uuidv4(),
+  connectionId: z.uuidv4(),
+});
+export const gatewayConnectionSchema = gatewayClaimSchema.omit({ ticket: true }).extend({
+  sessionId: accessSessionIdSchema,
+});
+export const gatewayCheckSchema = z.strictObject({
+  connections: z.array(gatewayConnectionSchema).min(1).max(100),
+});
+export const gatewayCloseSchema = gatewayConnectionSchema.extend({
+  reason: accessCloseReasonSchema,
+});
+export const gatewayLeaseSchema = z.strictObject({
+  sessionId: accessSessionIdSchema,
+  connectionId: z.uuidv4(),
+  remainingMs: z.number().positive().max(3_600_000),
+  target: ownedSshTargetSchema,
+});
+export const gatewayCheckResponseSchema = z.strictObject({
+  leases: z.array(gatewayLeaseSchema).max(100),
+});
+export const accessServiceConfigSchema = z.strictObject({
+  gateway: accessGatewaySchema,
+  tokenHash: accessTicketHashSchema,
+});
+export type AccessServiceConfig = z.infer<typeof accessServiceConfigSchema>;

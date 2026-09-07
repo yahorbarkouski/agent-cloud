@@ -2,6 +2,10 @@ import { setTimeout } from 'node:timers/promises';
 import type { z } from 'zod';
 import {
   referenceInputSchema,
+  accessSessionResponseSchema,
+  accessSessionRequestSchema,
+  type AccessSessionRequest,
+  type AccessSessionId,
   referenceResponseSchema,
   type ReferenceInput,
   credentialsSchema,
@@ -93,6 +97,40 @@ export class CloudClient {
 
   whoami() {
     return this.request({ path: '/v1/whoami', schema: whoamiResponseSchema });
+  }
+  createAccessSession(input: { machineId: MachineId; request: AccessSessionRequest; key: string }) {
+    return this.request({
+      path: `/v1/machines/${input.machineId}/access-sessions`,
+      method: 'POST',
+      body: accessSessionRequestSchema.parse(input.request),
+      key: input.key,
+      schema: accessSessionResponseSchema,
+    });
+  }
+  accessSession(id: AccessSessionId) {
+    return this.request({ path: `/v1/access-sessions/${id}`, schema: accessSessionResponseSchema });
+  }
+  async waitAccessSession(id: AccessSessionId, signal?: AbortSignal) {
+    const started = performance.now();
+    for (;;) {
+      signal?.throwIfAborted();
+      const result = await this.accessSession(id);
+      if (result.session.connection.kind !== 'unclaimed')
+        throw new CloudError('permission_denied', 'Access session was consumed or closed.');
+      if (result.session.issuance.kind === 'issued') return result;
+      if (result.session.issuance.kind === 'unavailable')
+        throw new CloudError(
+          'guest_unreachable',
+          `Access unavailable: ${result.session.issuance.reason}.`,
+        );
+      if (performance.now() - started > 90_000)
+        throw new CloudError(
+          'provider_unavailable',
+          'Access issuance timed out; inspect this session before retrying.',
+          true,
+        );
+      await setTimeout(500, undefined, { signal });
+    }
   }
   catalog() {
     return this.request({ path: '/v1/catalog', schema: catalogResponseSchema });

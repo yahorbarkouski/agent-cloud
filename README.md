@@ -4,7 +4,7 @@ An open-source cloud that customers operate through their existing coding agents
 
 **Current status:** the internal reference application passed the complete CLI/API path on a cheap Hetzner VM: frontend/backend/PostgreSQL, public HTTPS, disconnect/reconnect, logs, an update preserving data, and verified infrastructure cleanup. See [the verification record](docs/reference-deployment-verification.json). Customer authentication/access, general deployments, domains and protected backup/recovery remain unfinished. Stripe is excluded. See [the current handoff](docs/CONTEXT.md) and [internal reference commands](docs/architecture/internal-reference.md).
 
-Project-scoped delegation is available with `acld grant create`, `grant list` and `grant revoke`. Issued secrets are saved to an owner-only file; see [the agent instructions](skills/agent-cloud/SKILL.md#delegate-access). Browser/device sign-in and customer SSH are still in progress.
+Project-scoped delegation is available with `acld grant create`, `grant list` and `grant revoke`. Issued secrets are saved to an owner-only file; see [the agent instructions](skills/agent-cloud/SKILL.md#delegate-access). Customer SSH and SFTP are connected through a separate access gateway. See [customer access](docs/architecture/customer-ssh.md) for commands, source restrictions and operator configuration. Browser/device sign-in remains unfinished.
 
 ## Run locally
 
@@ -38,7 +38,7 @@ pnpm acld operation wait <operation-id>
 pnpm acld machine inspect <machine-id>
 ```
 
-Use IDs returned by bootstrap or the CLI. Retain each request key when retrying; keys need at least 12 characters. CLI results are JSON; errors go to stderr.
+Use IDs returned by bootstrap or the CLI. Retain each request key when retrying; keys need at least12 characters. Lifecycle results are JSON; errors go to stderr. SSH/SFTP stream native output, with SSH session metadata on stderr.
 
 To destroy a machine and its disk after authorizing data loss:
 
@@ -86,7 +86,7 @@ The cleanup smoke runs the actual CLI against a local HTTP API, PostgreSQL and G
 
 The PKI smoke makes an actual TLS connection and checks allocation/hostname rejection. The SSH smoke starts one disposable local OpenSSH container and checks pinned host keys, CA trust, allocation-scoped user certificates and guest evidence. It removes the container and generated keys afterward. It does not boot a guest VM or deploy an application. The enrollment smoke composes admission, the provider journal, encrypted bootstrap, HTTP enrollment, real Smallstep and OpenSSH. It verifies the issued host certificate over SSH and TLS certificate over HTTPS, replay and wrong-key rejection. Its provider observations are local fixtures, so it still does not prove a cloud VM boot. CI runs these local smokes without cloud credentials.
 
-The customer PKI smoke creates a separate temporary CA and OpenSSH container. It checks signed key binding, exact certificate permissions, native command/PTY authentication and rejected keys, sources, principals and signatures. A local TLS proxy drops a real signing response and checks that transport failures never trigger another POST. All fixture keys and containers are removed. This verifies the certificate protocol; customer API admission, gateway access and CLI integration remain in progress.
+The customer PKI smoke creates a separate temporary CA and OpenSSH container. It checks signed key binding, exact certificate permissions, native command/PTY authentication and rejected keys, sources, principals and signatures. A local TLS proxy drops a real signing response and checks that transport failures never trigger another POST. All fixture keys and containers are removed. This verifies the certificate protocol. The separate Ubuntu access smoke exercises customer API admission, gateway access and CLI integration.
 
 For an actual local Ubuntu first-boot check on macOS with OrbStack installed, keep the development PostgreSQL and CA services running:
 
@@ -94,6 +94,7 @@ For an actual local Ubuntu first-boot check on macOS with OrbStack installed, ke
 pnpm build:guest
 pnpm smoke:guest
 pnpm smoke:reference
+pnpm smoke:access
 pnpm smoke:image
 pnpm smoke:builder
 ```
@@ -180,7 +181,8 @@ Stop the API and worker while applying migrations from an earlier checkpoint, th
 | `packages/remote`        | Native SSH identity proof using explicit credentials                  |
 | `packages/sdk`           | Typed HTTP client and operation waiting                               |
 | `apps/control`           | Auth, admission, API, simulator, worker, bootstrap                    |
-| `apps/cli`               | JSON CLI and local credential storage                                 |
+| `apps/cli`               | CLI, local credentials and native SSH/SFTP                            |
+| `apps/access-gateway`    | Bounded SSH transport with checked, revocable connection leases       |
 | `tests`                  | Isolated PostgreSQL integration tests                                 |
 | `scripts/smoke-local.ts` | CLI-to-worker verification and cleanup                                |
 | `skills/agent-cloud`     | Customer agent instructions matching implemented commands             |

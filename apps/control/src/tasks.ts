@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import type { Config } from './config.js';
 import { eq, sql } from 'drizzle-orm';
-import type { TaskList } from 'graphile-worker';
+import type { TaskList, JobHelpers } from 'graphile-worker';
 import {
   operationIdSchema,
+  accessSessionIdSchema,
   isOperationTerminal,
   type MachineProvider,
 } from '@agent-cloud/contracts';
@@ -12,10 +13,12 @@ import {
   operationRecord,
   enqueueOperation,
   databaseTime,
+  accessSessions,
   type Connection,
 } from '@agent-cloud/db';
 import { createImageTasks } from './image-tasks.js';
 import { advanceOperation, type GuestProvisioning } from './advance-operation.js';
+import type { AccessService } from './access-sessions.js';
 
 const payloadSchema = z.object({ operationId: operationIdSchema });
 
@@ -25,8 +28,35 @@ export function createTasks(input: {
   limits: Config['limits'];
   guest?: GuestProvisioning;
   images?: Parameters<typeof createImageTasks>[0]['advance'];
+  access?: AccessService;
 }): TaskList {
   return {
+    ...(input.access
+      ? {
+          issue_access_session: async (payload: unknown, helpers: JobHelpers) => {
+            const { sessionId } = z.object({ sessionId: accessSessionIdSchema }).parse(payload);
+            await input.access?.issue(sessionId);
+            const [row] = await input.connection.db
+              .select({ issuance: accessSessions.issuance })
+              .from(accessSessions)
+              .where(eq(accessSessions.id, sessionId));
+            if (
+              row &&
+              ['pending', 'attempted'].includes(
+                z.object({ kind: z.string() }).parse(row.issuance).kind,
+              )
+            )
+              await helpers.addJob(
+                'issue_access_session',
+                { sessionId },
+                {
+                  jobKey: sessionId,
+                  runAt: new Date((await databaseTime(input.connection.db)).getTime() + 1000),
+                },
+              );
+          },
+        }
+      : {}),
     ...(input.images
       ? createImageTasks({ connection: input.connection, advance: input.images })
       : {}),
@@ -51,6 +81,14 @@ export function createTasks(input: {
       );
     },
     reconcile_operations: async () => {
+      if (input.access) {
+        const pendingAccess = await input.connection.db
+          .select({ id: accessSessions.id })
+          .from(accessSessions)
+          .where(sql`${accessSessions.issuance}->>'kind' IN ('pending','attempted')`)
+          .limit(1000);
+        for (const row of pendingAccess) await input.access.enqueue(input.connection.db, row.id);
+      }
       const pending = await input.connection.db
         .select({ id: operations.id })
         .from(operations)

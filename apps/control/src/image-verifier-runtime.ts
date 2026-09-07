@@ -90,6 +90,7 @@ export function createImageVerifierRuntime(ports: {
             proof.tlsCsr !== verification.identity.tlsCsr ||
             proof.imageVersion !== verification.spec.image.version ||
             proof.manifestDigest !== verification.spec.image.manifestDigest ||
+            manifest.customerSsh !== verification.spec.image.customerSsh ||
             !isDeepStrictEqual(manifest, build.admission.source.manifest) ||
             runtime.architecture !== manifest.architecture ||
             runtime.machineId === build.builderWork.progress.installation.machineId
@@ -111,7 +112,8 @@ export function createImageVerifierRuntime(ports: {
             checks.disk.availableBytes > checks.disk.totalBytes ||
             checks.proxy.kind !== 'ok' ||
             checks.proxy.subject.id !== buildId ||
-            checks.proxy.imageVersion !== manifest.version
+            checks.proxy.imageVersion !== manifest.version ||
+            (manifest.customerSsh === 1 && checks.customerSsh?.kind !== 'ok')
           )
             return { kind: 'waiting' };
           const result = imageVerificationResultSchema.parse({

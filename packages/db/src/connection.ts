@@ -55,6 +55,14 @@ export async function withImageBuildLock<T>(input: {
   return withResourceLock({ ...input, key: `image-build:${input.buildId}` });
 }
 
+export async function withAccessSessionLock<T>(input: {
+  pool: pg.Pool;
+  sessionId: string;
+  work: (db: Database) => Promise<T>;
+}): Promise<{ kind: 'acquired'; value: T } | { kind: 'busy' }> {
+  return withResourceLock({ ...input, key: `access-session:${input.sessionId}` });
+}
+
 async function withResourceLock<T>(input: {
   pool: pg.Pool;
   key: string;

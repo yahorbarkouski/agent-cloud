@@ -1,24 +1,33 @@
 Port 22
 HostKey /var/lib/agent-cloud/keys/ssh_host_ed25519_key
-Include /var/lib/agent-cloud/ssh/*.conf
+Include /var/lib/agent-cloud/ssh/certificate.conf
 TrustedUserCAKeys /usr/lib/agent-cloud/ssh_user_ca.pub
 AuthorizedPrincipalsFile /var/lib/agent-cloud/probe-principals
 AuthorizedKeysFile none
+AuthenticationMethods publickey
+PubkeyAuthentication yes
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 PermitEmptyPasswords no
 PermitRootLogin no
 UsePAM yes
-AllowUsers agent-probe agent-deploy
+AllowUsers agent-probe agent-deploy agent-customer
 AllowAgentForwarding no
 AllowTcpForwarding no
+AllowStreamLocalForwarding no
 X11Forwarding no
 PermitTunnel no
 PermitTTY no
 PermitUserEnvironment no
+PermitUserRC no
 MaxAuthTries 3
 LogLevel INFO
+Subsystem sftp internal-sftp
 
 Match User agent-deploy
     AuthorizedPrincipalsFile /var/lib/agent-cloud/deployment-principals
     ForceCommand /usr/bin/sudo -n -- /usr/local/bin/guestctl reference --json
+
+Match User agent-customer
+    AuthorizedPrincipalsFile /var/lib/agent-cloud/customer-principals
+    PermitTTY yes

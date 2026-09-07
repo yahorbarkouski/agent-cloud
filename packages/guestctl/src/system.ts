@@ -10,6 +10,7 @@ import type { GuestConfiguration } from './identity.js';
 import { readOwnedFile } from './files.js';
 import { z } from 'zod';
 import { consumeImageRecord, validateImageBoot } from './image.js';
+import { publishCustomerPrincipal } from './customer-ssh.js';
 
 /** These paths are owned by the installed image, never supplied by a customer request. */
 export function guestSystem(
@@ -18,7 +19,7 @@ export function guestSystem(
   const run = (binary: string, args: string[]) => runTool(binary, args, configuration.state);
   return {
     prepareIdentity: (spec) => validateImageBoot(configuration, spec),
-    prepareSsh: async ({ proof }) => {
+    prepareSsh: async ({ proof, spec }) => {
       await consumeImageRecord();
       await copyFile('/usr/lib/agent-cloud/sshd_config', '/etc/ssh/sshd_config');
       await chmod('/etc/ssh/sshd_config', 0o644);
@@ -39,6 +40,7 @@ export function guestSystem(
           deploymentPrincipal(guestSubject(proof)) + '\n',
           0o644,
         );
+      await publishCustomerPrincipal(configuration.state, spec);
       // Stopping Ubuntu's socket unit may remove its sshd runtime directory.
       await ensureDirectory('/run/sshd', 0o755);
       await run('/usr/sbin/sshd', ['-t']);

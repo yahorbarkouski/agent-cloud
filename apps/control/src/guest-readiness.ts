@@ -147,6 +147,7 @@ export function createGuestReadiness(ports: {
           proof.manifestDigest !== spec.image.manifestDigest ||
           digest !== spec.image.manifestDigest ||
           manifest.version !== spec.image.version ||
+          manifest.customerSsh !== spec.image.customerSsh ||
           runtime.architecture !== spec.image.architecture ||
           manifest.architecture !== runtime.architecture
         )
@@ -164,7 +165,8 @@ export function createGuestReadiness(ports: {
           checks.disk.availableBytes > checks.disk.totalBytes ||
           checks.proxy.kind !== 'ok' ||
           checks.proxy.allocationId !== spec.allocationId ||
-          checks.proxy.imageVersion !== spec.image.version
+          checks.proxy.imageVersion !== spec.image.version ||
+          (manifest.customerSsh === 1 && checks.customerSsh?.kind !== 'ok')
         )
           return { kind: 'waiting' };
         if (
