@@ -86,7 +86,7 @@ try {
     },
     admittedAt: new Date(now).toISOString(),
     deadlineAt: new Date(now + 90 * 60_000).toISOString(),
-    retention: { kind: 'verification_only' },
+    retention: { kind: 'retain', deleteAfter: new Date(now + 86_400_000).toISOString() },
   });
   const limits = {
     currency: 'USD',
@@ -409,7 +409,7 @@ try {
   >)
     assert.equal(new Set(identities.map((identity) => identity[field])).size, 2);
   await verifyImageClone({ controller, protocol });
-  progress('confirming verification-only build cleanup and local key removal');
+  progress('confirming cancelled retained build cleanup and local key removal');
   await requestImageCleanup(database.connection.db, id);
   let cleaned = false;
   for (let pass = 0; pass < 12; pass++) {

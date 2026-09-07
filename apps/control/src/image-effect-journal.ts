@@ -25,7 +25,7 @@ import {
   type Database,
 } from '@agent-cloud/db';
 import { inspectImageBuild, type ImageBuild } from './image-builds.js';
-import { checkImagePrices, checkImageLimits, parseImageAdmissions } from './image-budget.js';
+import { checkImagePrices, checkImageLimits, parseImageReservations } from './image-budget.js';
 import { imageEffectKey, checkImageCommand } from './image-effect-policy.js';
 import { claimImageResource, observeImageResource, imageCreateMatches } from './image-resources.js';
 import { matchesLabels } from './resource-journal.js';
@@ -219,7 +219,11 @@ export async function runImageEffect(input: {
         (build.state.kind !== 'running' || Date.parse(build.admission.deadlineAt) <= Date.now())
       )
         throw new CloudError('provider_rejected', 'The image build is expired or cleaning.');
-      if (command.kind === 'delete' && build.state.kind !== 'cleaning')
+      if (
+        command.kind === 'delete' &&
+        build.state.kind !== 'cleaning' &&
+        build.state.kind !== 'releasing'
+      )
         throw new CloudError(
           'permission_denied',
           'Request image cleanup before deleting its resources.',
@@ -258,7 +262,7 @@ export async function runImageEffect(input: {
             .select()
             .from(imageBuilds)
             .where(sql`${imageBuilds.state}->>'kind' <> 'cleaned'`);
-          checkImageLimits(parseImageAdmissions(open), input.limits);
+          checkImageLimits(parseImageReservations(open), input.limits);
         }
         await tx.insert(imageBuildEffects).values({
           id,

@@ -1,0 +1,247 @@
+{
+  "date": "2026-09-07T07:46:24.608238+00:00",
+  "status": "locally-verified-checkpoint",
+  "paidCloudResourcesCreated": 0,
+  "fullCheck": {
+    "session": "70745",
+    "log": ".local/publication-full-check.log",
+    "tests": 321,
+    "files": 29,
+    "typecheck": "passed",
+    "lint": "passed"
+  },
+  "finalFocusedCheck": {
+    "session": "2970",
+    "log": ".local/publication-final-tests.log",
+    "tests": 15,
+    "typecheck": "passed",
+    "lint": "passed",
+    "note": "Includes signing-key revocation on both retained replay paths and the native smoke extension."
+  },
+  "nativePublication": {
+    "session": "27055",
+    "completion": "17636e",
+    "log": ".local/publication-native.log",
+    "result": "passed",
+    "events": [
+      {
+        "directory": "/Users/yahorbarkouski/Documents/ChatGPT/learning/agent-cloud/.local/guest-builds/06e2977ed433a27bd2e91ac741a126cb791be99f41746966789329b37d296764",
+        "imageVersion": "dev-842538bfbd610382f2bcb728",
+        "manifestDigest": "06e2977ed433a27bd2e91ac741a126cb791be99f41746966789329b37d296764",
+        "publicInputsDigest": "842538bfbd610382f2bcb7289cde21a97bc157d7428012f1059494020c5ba7c8",
+        "checksumDigest": "1f4229064498676568d91be6743affe45dc1993083c94907389e82b91f2c0b3d",
+        "artifacts": 8,
+        "cloudResourcesCreated": 0
+      },
+      {
+        "phase": "preparing an owned Ubuntu VM for real cloud-init and first SSH",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "phase": "checking pinned host, exact boot identity and upload refusal after expiry",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "phase": "uploading verified inputs through SFTP and rejecting changed uploaded code",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "phase": "persisting installation intent, installing once and losing the completed response",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "phase": "recovering the durable receipt through a restarted controller without reinstalling",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "phase": "persisting sanitation intent and removing builder keys and privileges through SSH",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "builderKeyScan": {
+          "files": 64,
+          "bytes": 94998,
+          "matches": []
+        }
+      },
+      {
+        "phase": "verifying fresh clone 1 of the SSH-built image",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "phase": "booting clone of recorded sanitized image",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "phase": "booting actual cloud-init and systemd enrollment",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "phase": "verifying real SSH, Caddy and bootstrap cleanup",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "phase": "testing restricted runtime inspection and unhealthy services",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "phase": "runtime completion requires healthy Docker, proxy and disk headroom",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "bootstrapScan": {
+          "files": 125,
+          "bytes": 578820,
+          "matches": []
+        }
+      },
+      {
+        "phase": "passed real Ubuntu first boot and restart; provider remains simulated",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "result": "guest-verified",
+        "machineId": "b959bcb22c474dd79b774b9eedfbdfa9",
+        "sshIdentity": "c8c12b1bb35c051a6a87c04253cf541704615c5a6cca67a5e7345c6b6923dd11",
+        "tlsIdentity": "f91a8fa499337d5e3f859cd1458a6baab18ca67b0174558eb41e85b282fce2c0",
+        "allocationId": "alloc_2d59cfba-2551-4954-8037-0ed51a307446"
+      },
+      {
+        "phase": "verifying fresh clone 2 of the SSH-built image",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "phase": "booting clone of recorded sanitized image",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "phase": "booting actual cloud-init and systemd enrollment",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "phase": "verifying real SSH, Caddy and bootstrap cleanup",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "phase": "testing restricted runtime inspection and unhealthy services",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "phase": "runtime completion requires healthy Docker, proxy and disk headroom",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "bootstrapScan": {
+          "files": 125,
+          "bytes": 578381,
+          "matches": []
+        }
+      },
+      {
+        "phase": "passed real Ubuntu first boot and restart; provider remains simulated",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "result": "guest-verified",
+        "machineId": "e2a56a84ccd346128a8fd2a0f8eef551",
+        "sshIdentity": "1ccec88c239dd1125f01824c02f5651bccbd0e286c760f42d5a2a764c2e4886a",
+        "tlsIdentity": "b057e32c07f75afeb1b35437b8cbb90e8cf8c3ff658b476ee728968d9dda11c7",
+        "allocationId": "alloc_934acabc-4dd5-4371-b880-771abbdd70ea"
+      },
+      {
+        "phase": "booting build-owned image verifier from the recorded stopped source",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "phase": "unseeded verifier has no identity, principals or SSH/application listeners",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "phase": "waiting for native verifier HTTPS enrollment with build-owned keys",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "phase": "rejecting unhealthy verifier services before saving fresh boot evidence",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "result": "image-verifier-verified",
+        "buildId": "c1c70851-86bf-4818-8ad2-8d4cc6aebe55",
+        "snapshotId": "1006",
+        "serverId": "1008",
+        "machineId": "0ab520d5253242019d55e2523d3aee40",
+        "bootId": "17d623ec-3398-4dc4-878d-2c453252b4b8",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "phase": "publishing verified snapshot after native temporary VM cleanup",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "result": "image-release-published",
+        "buildId": "c1c70851-86bf-4818-8ad2-8d4cc6aebe55",
+        "snapshotId": "1006",
+        "keyId": "d6b9b84115197cbebafc2eaa7ede7ef875153e79aafcf09d7c6c184616b90bd9",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "phase": "native temporary VMs removed before signing; cancelled retained snapshot removed through journal cleanup",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "phase": "confirming cancelled retained build cleanup and local key removal",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "phase": "passed durable builder recovery, sanitation, stopped snapshot ordering, distinct clone boots and terminal cleanup",
+        "cloudResourcesCreated": 0
+      }
+    ]
+  },
+  "migration": {
+    "application": "897340",
+    "hashCheck": "74a5d4",
+    "count": 16,
+    "latest": "0015_image_publication",
+    "sha256": "adbc2e2f429eddee001864851447641feead32b3d749be6cf10a86c0fe312899",
+    "allHashesMatch": true
+  },
+  "localCli": {
+    "session": "85974",
+    "log": ".local/publication-local-smoke.log",
+    "result": "passed",
+    "machineId": "vm_635feaf1-f869-479a-a780-21f9300a2aa4"
+  },
+  "baseCleanup": {
+    "check": "d09ef3",
+    "activeAllocations": 0,
+    "simulatedServers": 0,
+    "simulatedPrimaryIps": 0,
+    "openImageBuilds": 0
+  },
+  "nativeCleanup": {
+    "check": "1908e3",
+    "orbMachines": 0,
+    "ownershipRecords": 0,
+    "privateFixtureDirectories": 0
+  },
+  "format": {
+    "session": "64318",
+    "status": "passed",
+    "log": ".local/publication-format.log",
+    "note": "Formatted generated migration snapshot after initial31888 reported it."
+  },
+  "review": {
+    "model": "gpt-5.6-sol",
+    "status": "code review passed; final artifact/trail audit pending",
+    "resolved": "All image-selection and publication replay paths verify current key policy and snapshot ownership."
+  },
+  "linuxCi": {
+    "status": "pending commit"
+  },
+  "limits": [
+    "Real Ubuntu, cloud-init, SSH, PKI and temporary VM deletion were exercised locally. Provider resources, snapshot creation and ownership observations remain protocol fixtures.",
+    "OrbStack starts before test seed installation; the unseeded check and seeded reboot are not proof of Hetzner initial-boot user-data injection.",
+    "Production image scheduling, allocation pinning/consumption, signing-key configuration, certificate renewal/operator recovery, live activation and M2-M7 remain open. No paid resources created."
+  ]
+}

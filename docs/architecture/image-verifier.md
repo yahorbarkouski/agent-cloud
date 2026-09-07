@@ -1,6 +1,6 @@
 # Platform image verification
 
-The implementation now extends the selected image-publication design through build-owned enrollment and runtime evidence. It is under local verification. Retained publication and production activation remain open.
+The implementation extends the selected image-publication design through build-owned enrollment and runtime evidence. Local verification passed. Retained publication is implemented in the next phase; production activation remains open.
 
 ## Caller and ownership
 
@@ -36,7 +36,7 @@ Preparation records an immutable bootstrap intent before server rendering. Token
 
 Runtime uses a short-lived credential forcing only guestctl inspect. It re-observes owned resources, requires the recorded issued identity, verifies image/component/proxy/disk health and compares verifier identity with the builder. Cancellation and expiry prevent fresh verification work, while uncertain provider effects and owned resources remain eligible for reconciliation and cleanup.
 
-Full abort continues to remove every resource, including the unpublished snapshot. Successful retained publication will use a separate cleanup intent: temporary VM/IP/access resources disappear while the signed, verified snapshot remains charged under explicit retention. Promotion and retention cleanup are not implemented by merely adding verifier enrollment.
+Full abort removes every resource, including a published snapshot. Retained publication uses a separate cleanup intent: temporary VM/IP/access resources disappear before signing, while the verified snapshot remains charged under explicit retention. This phase is implemented in `image-publication.ts`.
 
 ## Verification required
 
@@ -47,3 +47,5 @@ Use PostgreSQL tests for ownership, token binding, replay, signing budgets, canc
 Shared native PKI and SSH checks passed both namespaces. The full suite passed306tests/28files with typecheck and lint. Applied migration0014 adds verifier persistence, and all15migration hashes match. Native `smoke:builder` passed two customer clones, a build-owned verifier, unhealthy service rejection and full cleanup. The added unseeded isolation assertion then exposed an SSH socket before keys existed. Sanitation now installs `ConditionPathExists` for the guest host key on both SSH units, preventing startup even if cloud-init enables them again. A manual check kept both units inactive. The rebuilt native run passed the unseeded listener check, later guest enrollment and runtime checks, and full cleanup. Evidence is in `../research/m1-image-verifier-verification.json`.
 
 The OrbStack fixture starts a clone before installing its NoCloud seed and then reboots it. It checks that this unseeded interval has no guest identity, principals, SSH listener or application listener. This establishes the observed pre-bootstrap state and the later seeded enrollment path, not bootstrap injection on the initial provider boot. Real Hetzner initial boot and snapshot association still require the bounded provider drill.
+
+Retained publication is now implemented in `image-publication.ts`; see [image publication](image-release.md#retained-publication-and-selection). Production scheduling, allocation pinning and real Hetzner proof remain open.

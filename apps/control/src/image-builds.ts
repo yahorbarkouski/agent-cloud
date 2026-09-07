@@ -2,6 +2,7 @@ import { eq, sql } from 'drizzle-orm';
 import {
   CloudError,
   imageBuildAdmissionSchema,
+  imagePublicationSchema,
   imageBuildStateSchema,
   imageBuilderWorkSchema,
   imageEffectOutcomeSchema,
@@ -20,6 +21,7 @@ import {
   imageBuildEffects,
   imageBuildResources,
   imageBuilderWork,
+  imagePublications,
   type Database,
 } from '@agent-cloud/db';
 import { verifyImageInputs } from '@agent-cloud/images';
@@ -28,7 +30,7 @@ import {
   checkImageAdmission,
   checkImageLimits,
   checkImagePrices,
-  parseImageAdmissions,
+  parseImageReservations,
 } from './image-budget.js';
 
 /** Validates the actual local input tree before committing a resource-free admission. */
@@ -81,7 +83,10 @@ export async function admitImageBuild(input: {
       .select()
       .from(imageBuilds)
       .where(sql`${imageBuilds.state}->>'kind' <> 'cleaned'`);
-    checkImageLimits([...parseImageAdmissions(open), admission], input.limits);
+    checkImageLimits(
+      parseImageReservations([...open, { admission, state: { kind: 'running' } }]),
+      input.limits,
+    );
     await tx.insert(imageBuilds).values({ id: admission.id, admission });
     return { admission, state: imageBuildStateSchema.parse({ kind: 'running' }) };
   });
@@ -107,7 +112,18 @@ export async function inspectImageBuild(db: Database, buildId: ImageBuildId) {
       .select()
       .from(imageBuilderWork)
       .where(eq(imageBuilderWork.buildId, buildId));
+    const [publication] = await tx
+      .select()
+      .from(imagePublications)
+      .where(eq(imagePublications.buildId, buildId));
     return {
+      publication: imagePublicationSchema.parse(
+        !publication
+          ? { kind: 'waiting' }
+          : publication.release === null
+            ? { kind: 'prepared', evidence: publication.evidence }
+            : { kind: 'published', release: publication.release },
+      ),
       admission: imageBuildAdmissionSchema.parse(row.admission),
       state: imageBuildStateSchema.parse(row.state),
       verification: await readImageVerification(tx, buildId),
@@ -153,7 +169,7 @@ export async function requestImageCleanup(
       .where(eq(imageBuilds.id, buildId))
       .for('update');
     if (!row) throw new CloudError('not_found', 'Image build not found.');
-    if (imageBuildStateSchema.parse(row.state).kind === 'running')
+    if (['running', 'releasing', 'retained'].includes(imageBuildStateSchema.parse(row.state).kind))
       await tx
         .update(imageBuilds)
         .set({ state: { kind: 'cleaning', reason } })

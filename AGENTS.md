@@ -8,7 +8,7 @@ Build an open-source cloud operated by customers' existing coding agents. We do 
 - Use TypeScript, ordinary Linux VMs, Docker Compose, SSH and Hetzner. Stripe is deferred until the product works.
 - Hetzner verification and credentials are ready. Prefer local services and protocol fixtures. Rent capacity only for a bounded inexpensive test with recorded ownership, explicit spending limits and complete cleanup. No expensive plans, warm pool, benchmarks or automatic type/region fallback.
 - Never put provider credentials in a guest. Do not log secrets, customer commands or application data. Use dedicated development credentials and scoped CI secrets.
-- Do not report a live integration as verified from a simulated provider or local VM. The live CLI remains gated until its complete bounded lifecycle is ready.
+- Do not report a live integration as verified from a simulated provider or local VM. The live CLI remains gated until its complete bounded lifecycle is ready, including scheduled retention cleanup and image pinning through uncertain customer creates.
 
 ## Code boundaries
 
@@ -33,7 +33,7 @@ Build an open-source cloud operated by customers' existing coding agents. We do 
 - `packages/guestctl` owns root-run first boot and atomic key/certificate publication. Preserve keys on retry and explicitly set modes under systemd's umask. `images/` contains public image inputs and Linux configuration. `packages/images` owns complete input provenance and authenticated release metadata. Published input directories are immutable and named by manifest digest.
 - Installation requires the caller's builder UUID. Execute controller-owned `imageInstallCommand` to validate the pinned transfer checksum with base OS tools before uploaded code. The install-start marker prevents a second installer after a lost response. Partial installation requires disposal or explicit recovery.
 - `guestctl prepare-image --json` accepts only an exclusive fresh builder without guest or Docker data. It must not start Docker to inspect it. Persist installation and sanitation intent before SSH. Unknown sanitation requests full cleanup. Only a saved sanitation receipt and confirmed stopped source authorize a snapshot. See `docs/architecture/image-sanitation.md`.
-- Image builds use sibling SQL journals with no customer ownership. Verify a snapshot using a build-owned bootstrap, exact provider boot source and restricted runtime evidence. Compare its machine ID with the sanitized builder. A successful enrollment alone cannot publish a release. Retained publication and full abort are different intents. See `docs/architecture/image-verifier.md` and `image-release.md`.
+- Image builds use sibling SQL journals with no customer ownership. Verify a snapshot using a build-owned bootstrap, exact provider boot source and restricted runtime evidence. Compare its machine ID with the sanitized builder. A successful enrollment alone cannot publish a release. Retained publication and full abort are different intents. Save release evidence before temporary cleanup; sign only after temporary resources and local keys are gone. Every image-selection and publication replay path checks current key trust and snapshot ownership. Inspection returns recorded audit evidence, which is not authorization to deploy. Retained storage stays reserved until snapshot absence. See `docs/architecture/image-verifier.md` and `image-release.md`.
 - Operator builder keys default to `.local/image-access/<buildId>`, outside SQL. Preparation preserves the first identity for an exact admission. Retain keys while provider outcomes are uncertain. Remove them only after authoritative cleanup; removal must be retryable. See `docs/architecture/guest-bootstrap.md` and `guest-image.md` for remaining production integration.
 
 ## Local verification
@@ -53,7 +53,7 @@ Ownership records and private fixtures:
 | Builder access fixture   | `.local/image-builder-access/<builderId>` |
 | Verifier HTTPS fixture   | `.local/image-verifier-access/<buildId>`  |
 
-On failure inspect only recorded machines after the smoke exits. Delete those machines and their records before a fresh run, then remove only their exact private fixture directories. The builder smoke exercises native SSH/SFTP/cloud-init, installation recovery, sanitation, two customer clones and a build-owned verifier, then full abort. OrbStack network/disk overrides belong only to fixtures. Its verifier starts before NoCloud seed installation: check the unseeded guest has no identity, principals or SSH/application listeners. The seeded reboot is local proof, not Hetzner initial-boot or snapshot proof.
+On failure inspect only recorded machines after the smoke exits. Delete those machines and their records before a fresh run, then remove only their exact private fixture directories. The builder smoke exercises native SSH/SFTP/cloud-init, installation recovery, sanitation, two customer clones and a build-owned verifier, then retained publication and full abort. OrbStack network/disk overrides belong only to fixtures. Its verifier starts before NoCloud seed installation: check the unseeded guest has no identity, principals or SSH/application listeners. The seeded reboot is local proof, not Hetzner initial-boot or snapshot proof.
 
 ## Preserve context
 

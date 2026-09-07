@@ -3,6 +3,7 @@ import {
   selectOffer,
   microsSchema,
   imageBuildAdmissionSchema,
+  imageBuildStateSchema,
   type Catalog,
   type ImageBuildAdmission,
   type ImageBuildLimits,
@@ -108,21 +109,36 @@ export function checkImageAdmission(admission: ImageBuildAdmission, now: number)
     );
 }
 
-export function checkImageLimits(admissions: ImageBuildAdmission[], limits: ImageBuildLimits) {
+export function parseImageReservations(rows: { admission: unknown; state: unknown }[]) {
+  return rows.map((row) => {
+    const admission = imageBuildAdmissionSchema.parse(row.admission);
+    const state = imageBuildStateSchema.parse(row.state);
+    return {
+      currency: admission.budget.currency,
+      openBuilds: state.kind === 'retained' || state.kind === 'cleaned' ? 0 : 1,
+      vmGrossMicros:
+        state.kind === 'retained' || state.kind === 'cleaned'
+          ? 0
+          : admission.budget.maxVmGrossMicros,
+      snapshotMonthlyGrossMicros:
+        state.kind === 'cleaned' ? 0 : admission.budget.maxSnapshotMonthlyGrossMicros,
+    };
+  });
+}
+
+export function checkImageLimits(
+  reservations: ReturnType<typeof parseImageReservations>,
+  limits: ImageBuildLimits,
+) {
   if (
-    admissions.length > limits.maxOpenBuilds ||
-    admissions.some((admission) => admission.budget.currency !== limits.currency) ||
-    admissions.reduce((sum, admission) => sum + admission.budget.maxVmGrossMicros, 0) >
-      limits.maxVmGrossMicros ||
-    admissions.reduce((sum, admission) => sum + admission.budget.maxSnapshotMonthlyGrossMicros, 0) >
+    reservations.reduce((sum, item) => sum + item.openBuilds, 0) > limits.maxOpenBuilds ||
+    reservations.some((item) => item.currency !== limits.currency) ||
+    reservations.reduce((sum, item) => sum + item.vmGrossMicros, 0) > limits.maxVmGrossMicros ||
+    reservations.reduce((sum, item) => sum + item.snapshotMonthlyGrossMicros, 0) >
       limits.maxSnapshotMonthlyGrossMicros
   )
     throw new CloudError(
       'budget_exceeded',
-      'Open image builds exceed the current operator limits.',
+      'Open image builds and retained snapshots exceed the current operator limits.',
     );
-}
-
-export function parseImageAdmissions(rows: { admission: unknown }[]) {
-  return rows.map((row) => imageBuildAdmissionSchema.parse(row.admission));
 }

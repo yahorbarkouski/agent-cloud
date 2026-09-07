@@ -128,6 +128,15 @@ export const imageVerifierResults = pgTable('image_verifier_results', {
   createdAt: createdAt(),
 });
 
+export const imagePublications = pgTable('image_publications', {
+  buildId: text('build_id')
+    .primaryKey()
+    .references(() => imageVerifierResults.buildId),
+  evidence: jsonb('evidence').notNull(),
+  release: jsonb('release'),
+  createdAt: createdAt(),
+});
+
 export const accounts = pgTable(
   'accounts',
   {

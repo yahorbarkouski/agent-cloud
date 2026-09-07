@@ -13,6 +13,9 @@ type Plan =
   | { kind: 'verifier_prepare' }
   | { kind: 'verifier_check' }
   | { kind: 'verified' }
+  | { kind: 'publication_prepare' }
+  | { kind: 'release_cleanup' }
+  | { kind: 'retained' }
   | { kind: 'verification_required'; snapshotId: string };
 
 /** Plans from one consistent SQL snapshot. Executors revalidate under their own build lock. */
@@ -20,11 +23,18 @@ export function planImageRelease(
   build: ImageBuild,
   now = Date.now(),
   verificationEnabled = false,
+  publicationEnabled = false,
 ): Plan {
   const { admission } = build;
   if (build.state.kind === 'cleaned') return { kind: 'cleaned' };
   if (build.state.kind === 'cleaning') return { kind: 'cleanup', reason: build.state.reason };
+  if (build.state.kind === 'retained')
+    return admission.retention.kind === 'retain' &&
+      Date.parse(admission.retention.deleteAfter) > now
+      ? { kind: 'retained' }
+      : { kind: 'cleanup', reason: 'expired' };
   if (Date.parse(admission.deadlineAt) <= now) return { kind: 'cleanup', reason: 'expired' };
+  if (build.state.kind === 'releasing') return { kind: 'release_cleanup' };
   const pending = build.effects.find((effect) => effect.resolution.kind === 'pending');
   if (pending) return { kind: 'effect', command: pending.command };
   const identity = (role: ImageResourceRole) => ({
@@ -123,7 +133,12 @@ export function planImageRelease(
   const snapshot = resource('snapshot');
   if (effect('snapshot')?.resolution.kind !== 'confirmed' || !snapshot) return failed();
   if (!verificationEnabled) return { kind: 'verification_required', snapshotId: snapshot.ref.id };
-  if (build.verification.kind === 'verified') return { kind: 'verified' };
+  if (build.verification.kind === 'verified') {
+    if (!publicationEnabled) return { kind: 'verified' };
+    return admission.retention.kind === 'retain'
+      ? { kind: 'publication_prepare' }
+      : { kind: 'cleanup', reason: 'requested' };
+  }
   if (build.verification.kind === 'waiting') return { kind: 'verifier_prepare' };
   if (
     Date.parse(build.verification.spec.expiresAt) <= now &&

@@ -126,6 +126,8 @@ export const imageBuildLimitsSchema = z.strictObject({
 export type ImageBuildLimits = z.infer<typeof imageBuildLimitsSchema>;
 export const imageBuildStateSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('running') }),
+  z.strictObject({ kind: z.literal('releasing') }),
+  z.strictObject({ kind: z.literal('retained'), at: z.iso.datetime() }),
   z.strictObject({
     kind: z.literal('cleaning'),
     reason: z.enum(['requested', 'expired', 'failed']),

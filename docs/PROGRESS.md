@@ -49,6 +49,13 @@
 
 ## Verification ledger
 
+M1 retained snapshot publication, 2026-09-07:
+
+- Publication captures immutable evidence from persisted admission, sanitation, stop/snapshot and verifier records. Temporary cleanup preserves only the exact snapshot. Signing and retained state commit together after temporary resource absence and local key removal. Cancellation and expiry retain the full-abort path.
+- Release selection and both replay paths validate current signature/key policy and provider snapshot ownership. Review found and fixed a replay path that originally returned stored metadata without these checks. Retained builds release VM/open-build allowance while keeping their monthly snapshot cap until deletion.
+- Added 15 PostgreSQL integration cases covering publication/restart, unverified and verification-only refusal, immutability, early signing/deletion refusal, cancellation at three provider-read boundaries, six snapshot changes, key trust/revocation, key-removal recovery, storage allowance and expiry cleanup. Full check 70745 passed 321 tests in 29 files, typecheck and lint; native publication 27055 passed actual builder/verifier deletion before signing, verified retained image selection, then full abort. Check 1908e3 confirmed no local VMs, ownership records or private native fixtures remain. Final targeted check 2970 passed after the replay revocation cases and native smoke extension.
+- Migration 0015 applied after stopping the owned API/worker. Hash check 74a5d4 confirmed all 16 files match the database. API 32218 and worker 33856 are restarted. CLI smoke 85974 passed create/inspect/destroy/cleanup; d09ef3 found zero active allocations, simulator VMs/IPs and open base image builds. Evidence is in `research/m1-image-publication-verification.json`. No paid cloud resources created. Provider snapshot observations remain protocol fixtures. Scheduled expiry cleanup, production allocation pinning/consumption, operator key configuration, renewal/recovery and live activation remain open.
+
 M1 platform verifier, 2026-09-07:
 
 - Shared subject-bound guest/PKI/SSH paths preserve customer wire1 and add explicit build-owned verifier wire2. Native PKI99134 and SSH81642 passed both namespaces with no cloud resources.

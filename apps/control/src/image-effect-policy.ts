@@ -245,6 +245,11 @@ export async function checkImageCommand(
       return;
     }
     case 'delete': {
+      if (build.state.kind === 'releasing' && command.resource.kind === 'snapshot')
+        throw new CloudError(
+          'permission_denied',
+          'Retained cleanup cannot delete its release snapshot.',
+        );
       const row = build.resources.find(
         (resource) =>
           resource.ref.kind === command.resource.kind && resource.ref.id === command.resource.id,

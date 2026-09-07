@@ -1,3 +1,4 @@
+import { CloudError } from '@agent-cloud/contracts';
 import { eq } from 'drizzle-orm';
 import { imageBuilds, withImageBuildLock, type Connection } from '@agent-cloud/db';
 import {
@@ -15,13 +16,19 @@ export async function planImageCleanup(input: {
   connection: Connection;
   buildId: ImageBuildId;
   provider: ImageProvider;
+  intent?: 'abort' | 'release';
 }) {
   return withImageBuildLock({
     pool: input.connection.pool,
     buildId: input.buildId,
     work: async (db) => {
-      await requestImageCleanup(db, input.buildId);
+      if (input.intent !== 'release') await requestImageCleanup(db, input.buildId);
       let build = await inspectImageBuild(db, input.buildId);
+      if (input.intent === 'release' && build.state.kind !== 'releasing')
+        throw new CloudError(
+          'permission_denied',
+          'Retained cleanup requires an active publication intent.',
+        );
       if (build.state.kind === 'cleaned') return { kind: 'cleaned' } satisfies { kind: 'cleaned' };
       for (const effect of build.effects) {
         if (effect.resolution.kind === 'pending')
@@ -64,7 +71,11 @@ export async function planImageCleanup(input: {
         };
       // Server attachments must disappear before deleting their IP, firewall or access key.
       const order = ['server', 'snapshot', 'primary_ip', 'firewall', 'ssh_key'];
-      const remaining = build.resources.filter((resource) => resource.state.kind !== 'absent');
+      const retaining = build.state.kind === 'releasing';
+      const remaining = build.resources.filter(
+        (resource) =>
+          resource.state.kind !== 'absent' && !(retaining && resource.role === 'snapshot'),
+      );
       const next = remaining
         .filter((resource) => {
           const creator = pending.find((effect) => effect.id === resource.effectId);
@@ -94,6 +105,7 @@ export async function planImageCleanup(input: {
           kind: 'waiting',
           effects: remaining.map((resource) => resource.effectId),
         } satisfies { kind: 'waiting'; effects: string[] };
+      if (retaining) return { kind: 'ready_to_publish' } satisfies { kind: 'ready_to_publish' };
       await db
         .update(imageBuilds)
         .set({ state: { kind: 'cleaned', at: new Date().toISOString() } })

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
 import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:https';
 import { join, resolve } from 'node:path';
@@ -12,6 +12,7 @@ import {
   imageVerifierProofSchema,
   simulatedCatalog,
   type ImageProvider,
+  type ImageReleaseKey,
 } from '../../packages/contracts/dist/index.js';
 import { createSigner } from '../../packages/pki/dist/index.js';
 import { createGuestProbe } from '../../packages/remote/dist/index.js';
@@ -20,6 +21,7 @@ import { createImageVerifierEnrollment } from '../../apps/control/dist/image-ver
 import { createImageVerifierRuntime } from '../../apps/control/dist/image-verifier-runtime.js';
 import { inspectImageBuild, requestImageCleanup } from '../../apps/control/dist/image-builds.js';
 import { advanceImageBuild } from '../../apps/control/dist/advance-image-build.js';
+import { readPublishedImage } from '../../apps/control/dist/image-publication.js';
 import { BootstrapSeal } from '../../apps/control/dist/bootstrap-seal.js';
 import { createApp } from '../../apps/control/dist/app.js';
 import { readPrivateFile } from '../../apps/control/dist/private-file.js';
@@ -324,6 +326,46 @@ export async function verifyImageClone(input: {
         cloudResourcesCreated: 0,
       }) + '\n',
     );
+    progress('publishing verified snapshot after native temporary VM cleanup');
+    const pair = generateKeyPairSync('ed25519');
+    const signedFrom = Date.now();
+    const key: ImageReleaseKey = {
+      kind: 'trusted',
+      publicKey: pair.publicKey.export({ format: 'pem', type: 'spki' }).toString(),
+      signedFrom: new Date(signedFrom - 60_000).toISOString(),
+      signedUntil: new Date(signedFrom + 86_400_000).toISOString(),
+      verifyUntil: new Date(signedFrom + 2 * 86_400_000).toISOString(),
+    };
+    const publicationController = {
+      ...verifierController,
+      publication: { privateKey: pair.privateKey, keys: [key] },
+    };
+    let retained = false;
+    for (let pass = 0; pass < 16; pass++) {
+      const result = await advanceImageBuild(publicationController);
+      if (result.kind === 'retained') {
+        assert.equal(result.release.payload.snapshot.id, verified.value.result.snapshotId);
+        process.stdout.write(
+          JSON.stringify({
+            result: 'image-release-published',
+            buildId: build.admission.id,
+            snapshotId: result.release.payload.snapshot.id,
+            keyId: result.release.signature.keyId,
+            cloudResourcesCreated: 0,
+          }) + '\n',
+        );
+        retained = true;
+        break;
+      }
+    }
+    assert(retained, 'Publication did not finish temporary cleanup.');
+    assert.deepEqual(
+      [...protocol.resources.values()].map((resource) => resource.kind),
+      ['snapshot'],
+    );
+    const selected = await readPublishedImage({ ...publicationController, keys: [key] });
+    assert(selected.kind === 'acquired');
+    assert.equal(selected.value.image.providerImage, verified.value.result.snapshotId);
     await requestImageCleanup(controller.connection.db, build.admission.id);
     let cleaned = false;
     for (let pass = 0; pass < 16; pass++) {
@@ -335,7 +377,9 @@ export async function verifyImageClone(input: {
     assert(cleaned);
     assert.equal(protocol.resources.size, 0);
     succeeded = true;
-    progress('native verifier and builder deleted through journal cleanup');
+    progress(
+      'native temporary VMs removed before signing; cancelled retained snapshot removed through journal cleanup',
+    );
   } finally {
     const current = server;
     if (current)

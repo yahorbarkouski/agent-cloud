@@ -47,6 +47,14 @@ export const signedImageReleaseSchema = z.strictObject({
 });
 export type SignedImageRelease = z.infer<typeof signedImageReleaseSchema>;
 
+export const imageReleaseEvidenceSchema = imageReleasePayloadSchema.omit({ issuedAt: true });
+export type ImageReleaseEvidence = z.infer<typeof imageReleaseEvidenceSchema>;
+export const imagePublicationSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('waiting') }),
+  z.strictObject({ kind: z.literal('prepared'), evidence: imageReleaseEvidenceSchema }),
+  z.strictObject({ kind: z.literal('published'), release: signedImageReleaseSchema }),
+]);
+
 export const imageReleaseKeySchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('trusted'),
