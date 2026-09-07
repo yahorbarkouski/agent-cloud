@@ -8,11 +8,18 @@ import {
   composeCommandSchema,
   hostingGuestCommandSchema,
   composeAppSchema,
+  backupGuestCommandSchema,
+  restoreGuestRequestSchema,
+  restoreIdSchema,
 } from '@agent-cloud/contracts';
 import { createGuestHosting } from './hosting.js';
 import { createComposeDeployments } from './compose.js';
 import { composeSystem } from './compose-system.js';
-import { readJsonInput } from './input.js';
+import { readJsonHeader, readJsonInput } from './input.js';
+import { createReadStream } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
+import { z } from 'zod';
+import { createGuestBackups } from './backups.js';
 import { createGuestRuns, runSystem } from './runs.js';
 import { createReferenceDeployment, referenceSystem } from './reference.js';
 import { startReferenceApp } from './reference-app.js';
@@ -32,7 +39,51 @@ const configuration = {
   keygen: '/usr/bin/ssh-keygen',
 };
 try {
-  if (process.argv[2] === 'hosting') {
+  if (process.argv[2] === 'backup-dispatch') {
+    if (process.getuid?.() !== 0 || process.argv.length !== 3)
+      throw new Error('Backup transport requires its fixed root command.');
+    const action = z
+      .enum(['capture', 'inspect', 'read', 'remove', 'restore', 'inspect-restore'])
+      .parse(
+        /^backup (capture|inspect|read|remove|restore|inspect-restore)$/.exec(
+          process.env['SSH_ORIGINAL_COMMAND'] ?? '',
+        )?.[1],
+      );
+    const backups = createGuestBackups({
+      directory: '/var/lib/agent-cloud/backups',
+      composeDirectory: '/var/lib/agent-cloud/compose',
+      customerDirectory: '/var/lib/agent-customer',
+    });
+    if (action === 'restore') {
+      const header = await readJsonHeader(process.stdin, 4096);
+      const result = await backups.restore(
+        restoreGuestRequestSchema.parse(header.value),
+        header.body,
+      );
+      process.stdout.write(JSON.stringify(result) + '\n');
+    } else if (action === 'inspect-restore') {
+      const request = z
+        .strictObject({ id: restoreIdSchema })
+        .parse(await readJsonInput(process.stdin, 4096));
+      process.stdout.write(JSON.stringify(await backups.inspectRestore(request.id)) + '\n');
+    } else {
+      const command = backupGuestCommandSchema.parse(await readJsonInput(process.stdin, 16_384));
+      if (command.kind !== action)
+        throw new Error('Backup request differs from its fixed SSH action.');
+      if (command.kind === 'read') {
+        const artifact = await backups.read(command.id);
+        await pipeline(createReadStream(artifact.path), process.stdout);
+      } else {
+        const result =
+          command.kind === 'capture'
+            ? await backups.capture(command)
+            : command.kind === 'inspect'
+              ? await backups.inspect(command.id)
+              : await backups.remove(command.id);
+        process.stdout.write(JSON.stringify(result) + '\n');
+      }
+    }
+  } else if (process.argv[2] === 'hosting') {
     if (process.getuid?.() !== 0 || process.argv[3] !== '--json' || process.argv.length !== 4)
       throw new Error('Hosting requires its fixed root command.');
     const result = await createGuestHosting({ state: configuration.state }).command(

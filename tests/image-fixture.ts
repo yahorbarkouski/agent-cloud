@@ -6,6 +6,7 @@ import {
   renewalImageSourcePaths,
 } from '../packages/contracts/dist/index.js';
 import {
+  backupSudoers,
   createImageManifest,
   customerSshSudoers,
   imageArtifacts,
@@ -40,7 +41,10 @@ export function imageFixture(
   );
   const sources = customerSsh === 1 ? imageSourcePaths : renewalImageSourcePaths;
   const files = new Map([...sources, 'guestctl.mjs'].map((path) => [path, path]));
-  if (customerSsh === 1) files.set('guest-customer.sudoers', customerSshSudoers);
+  if (customerSsh === 1) {
+    files.set('guest-customer.sudoers', customerSshSudoers);
+    files.set('guest-backup.sudoers', backupSudoers);
+  }
   for (const artifact of imageArtifacts(pins))
     files.set('artifacts/' + artifact.file, artifact.file);
   files.set('artifacts.json', JSON.stringify(pins) + '\n');

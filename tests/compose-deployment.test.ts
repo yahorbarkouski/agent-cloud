@@ -13,13 +13,32 @@ import type { ComposeSystem } from '../packages/guestctl/src/compose-system.js';
 import { readComposeBundle } from '../apps/cli/src/compose.js';
 import * as files from '../packages/guestctl/src/files.js';
 import { Readable } from 'node:stream';
-import { readJsonInput } from '../packages/guestctl/src/input.js';
+import { readJsonHeader, readJsonInput } from '../packages/guestctl/src/input.js';
 
 const directories: string[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
   for (const directory of directories.splice(0))
     await rm(directory, { recursive: true, force: true });
+});
+it('preserves binary bytes following a bounded JSON header', async () => {
+  const header = Buffer.from('{"id":"fixture"}\n');
+  const archive = Buffer.from([0, 255, 10, 1]);
+  const input = Readable.from([
+    Buffer.concat([header, archive.subarray(0, 2)]),
+    archive.subarray(2),
+  ]);
+  const parsed = await readJsonHeader(input, header.length - 1);
+  expect(parsed.value).toEqual({ id: 'fixture' });
+  const chunks: Buffer[] = [];
+  for await (const chunk of parsed.body) {
+    if (!(chunk instanceof Uint8Array)) throw new Error('Expected binary body chunk.');
+    chunks.push(Buffer.from(chunk));
+  }
+  expect(Buffer.concat(chunks)).toEqual(archive);
+  await expect(readJsonHeader(Readable.from(['{}']), 2)).rejects.toMatchObject({
+    failure: { code: 'invalid_input' },
+  });
 });
 const image = 'sha256:' + 'a'.repeat(64);
 it('retains Unicode across SSH chunk boundaries and bounds decoded request bytes', async () => {

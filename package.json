@@ -56,7 +56,9 @@
     "customer": "pnpm build && tsx --env-file-if-exists=.env scripts/customer.ts",
     "smoke:hosting": "pnpm build:guest && AGENT_CLOUD_ACCESS_SCENARIO=1 AGENT_CLOUD_HOSTING_SCENARIO=1 tsx scripts/smoke-guest.ts",
     "smoke:gateway-pki": "pnpm build && tsx scripts/smoke-gateway-pki.ts",
-    "setup:hosting-gateway": "pnpm build && tsx scripts/setup-hosting-gateway.ts"
+    "setup:hosting-gateway": "pnpm build && tsx scripts/setup-hosting-gateway.ts",
+    "smoke:backups": "pnpm build:guest && AGENT_CLOUD_ACCESS_SCENARIO=1 AGENT_CLOUD_BACKUP_SCENARIO=1 tsx scripts/smoke-guest.ts",
+    "smoke:backup-store": "tsx packages/backup-store/src/fixture/smoke.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

@@ -7,6 +7,7 @@ import {
   runtimePrincipal,
   deploymentPrincipal,
   hostingPrincipal,
+  backupPrincipal,
 } from '@agent-cloud/pki';
 import { atomicWrite, ensureDirectory, isMissing } from './files.js';
 import type { EnrollmentSystem } from './enrollment.js';
@@ -51,6 +52,11 @@ export function guestSystem(
           hostingPrincipal(guestSubject(proof)) + '\n',
           0o644,
         );
+      await atomicWrite(
+        join(configuration.state, 'backup-principals'),
+        proof.version === 1 ? backupPrincipal(guestSubject(proof)) + '\n' : '',
+        0o644,
+      );
       await publishCustomerPrincipal(configuration.state, spec);
       // Stopping Ubuntu's socket unit may remove its sshd runtime directory.
       await ensureDirectory('/run/sshd', 0o755);

@@ -29,7 +29,7 @@ import {
   machineRecord,
   operationRecord,
   enqueueOperation,
-  type Database,
+  type Executor,
   type Transaction,
 } from '@agent-cloud/db';
 import { authorize, loadPrincipal } from './auth.js';
@@ -152,7 +152,7 @@ async function assertReservation(input: {
 }
 
 export async function admit(input: {
-  db: Database;
+  db: Executor;
   principal: Principal;
   request: Admission;
   key: string;

@@ -36,6 +36,7 @@ import { advanceOperation } from '../apps/control/src/advance-operation.js';
 import { readPrivateFile } from '../apps/control/src/private-file.js';
 import { testDatabase } from '../tests/database.js';
 import { prepareEnrollmentFixture } from './support/enrollment-fixture.js';
+import { prepareBackupTargetFixture } from './support/backup-target-fixture.js';
 import { readImageBuilder, imageReceiptSchema } from './support/image-builder.js';
 
 const ownershipPath = resolve('.local/guest-image-machine.json');
@@ -228,6 +229,10 @@ try {
     address: info.ip4,
     enrollmentUrl: `https://host.orb.internal:${address.port}/guest/enroll`,
   });
+  const nativeTarget =
+    process.env.AGENT_CLOUD_BACKUP_SCENARIO === '1'
+      ? prepareBackupTargetFixture({ guestBuild, command })
+      : undefined;
   const probe = createGuestProbe();
   const runtime = createGuestReadiness({ provider: fixture.provider, signer, probe });
   const tick = (operationId: OperationId = fixture.operation.id) =>
@@ -396,6 +401,7 @@ try {
           await command('orb', ['restart', owner.name], 120_000);
         },
         vm,
+        ...(nativeTarget ? { nativeTarget } : {}),
       });
     else
       await exerciseReferenceScenario({

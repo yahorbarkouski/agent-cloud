@@ -145,3 +145,9 @@ export function createGuestProbe(config: { sshBinary?: string } = {}) {
 }
 
 export { runHostingCommand } from './hosting.js';
+export {
+  inspectRestore,
+  runBackupCommand,
+  runRestoreCommand,
+  withBackupStream,
+} from './backups.js';

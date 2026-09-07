@@ -70,9 +70,12 @@ export function hostingPrincipal(subject: GuestSubject): string {
 export function deploymentPrincipal(subject: GuestSubject): string {
   return `deployment-${guestSubjectKey(subject)}`;
 }
+export function backupPrincipal(subject: GuestSubject): string {
+  return `backup-${guestSubjectKey(subject)}`;
+}
 
 export interface ProbeCredential<
-  K extends 'probe' | 'runtime' | 'deployment' | 'hosting' = 'probe',
+  K extends 'probe' | 'runtime' | 'deployment' | 'hosting' | 'backup' = 'probe',
 > {
   kind: K;
   subject: GuestSubject;
@@ -87,19 +90,21 @@ export function createSigner(configuration: SignerConfiguration) {
   async function signSsh(input: {
     subject: GuestSubject;
     publicKey: string;
-    kind: 'host' | 'probe' | 'runtime' | 'deployment' | 'hosting';
+    kind: 'host' | 'probe' | 'runtime' | 'deployment' | 'hosting' | 'backup';
   }) {
     const key = guestEnrollmentInputSchema.shape.sshHostPublicKey.parse(input.publicKey);
     const principal =
       input.kind === 'hosting'
         ? hostingPrincipal(input.subject)
-        : input.kind === 'host'
-          ? guestName(input.subject)
-          : input.kind === 'deployment'
-            ? deploymentPrincipal(input.subject)
-            : input.kind === 'runtime'
-              ? runtimePrincipal(input.subject)
-              : probePrincipal(input.subject);
+        : input.kind === 'backup'
+          ? backupPrincipal(input.subject)
+          : input.kind === 'host'
+            ? guestName(input.subject)
+            : input.kind === 'deployment'
+              ? deploymentPrincipal(input.subject)
+              : input.kind === 'runtime'
+                ? runtimePrincipal(input.subject)
+                : probePrincipal(input.subject);
     return inWorkspace({
       work: async (directory, run, flags) => {
         const keyPath = join(directory, 'identity.pub');
@@ -179,10 +184,9 @@ export function createSigner(configuration: SignerConfiguration) {
       },
     });
   }
-  async function issueCredential<K extends 'probe' | 'runtime' | 'deployment' | 'hosting'>(
-    value: GuestSubject,
-    kind: K,
-  ): Promise<ProbeCredential<K>> {
+  async function issueCredential<
+    K extends 'probe' | 'runtime' | 'deployment' | 'hosting' | 'backup',
+  >(value: GuestSubject, kind: K): Promise<ProbeCredential<K>> {
     const subject = guestSubjectSchema.parse(value);
     return inWorkspace({
       work: async (directory) => {
@@ -214,6 +218,7 @@ export function createSigner(configuration: SignerConfiguration) {
     issueRuntimeCredential: (subject: GuestSubject) => issueCredential(subject, 'runtime'),
     issueHostingCredential: (subject: GuestSubject) => issueCredential(subject, 'hosting'),
     issueDeploymentCredential: (subject: GuestSubject) => issueCredential(subject, 'deployment'),
+    issueBackupCredential: (subject: GuestSubject) => issueCredential(subject, 'backup'),
     validateTlsRequest,
     signTls,
   });

@@ -14,9 +14,10 @@
   },
   "dependencies": {
     "@agent-cloud/contracts": "workspace:*",
-    "@agent-cloud/pki": "workspace:*",
-    "zod": "4.5.4",
     "@agent-cloud/images": "workspace:*",
-    "pg": "8.23.0"
+    "@agent-cloud/pki": "workspace:*",
+    "pg": "8.23.0",
+    "tar-stream": "3.2.1",
+    "zod": "4.5.4"
   }
 }

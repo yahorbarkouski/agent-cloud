@@ -74,7 +74,7 @@ it.each([
   expect(digestInputs(changed)).not.toBe(fixture.manifest.publicInputsDigest);
   if (path === 'artifacts.json' || path === 'trust.json') {
     expect(() => createImageManifest({ ...fixture, inputs: changed })).toThrow('canonical input');
-  } else if (path === 'guest-customer.sudoers') {
+  } else if (path === 'guest-customer.sudoers' || path === 'guest-backup.sudoers') {
     expect(() => createImageManifest({ ...fixture, inputs: changed })).toThrow('sudo policy');
   } else if (!path.startsWith('artifacts/')) {
     const manifest = createImageManifest({ ...fixture, inputs: changed });

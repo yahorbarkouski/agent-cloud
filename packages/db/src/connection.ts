@@ -63,6 +63,14 @@ export async function withAccessSessionLock<T>(input: {
   return withResourceLock({ ...input, key: `access-session:${input.sessionId}` });
 }
 
+/** A single backup worker bounds plaintext/ciphertext scratch across all accounts and processes. */
+export async function withBackupWorkerLock<T>(input: {
+  pool: pg.Pool;
+  work: (db: Database) => Promise<T>;
+}) {
+  return withResourceLock({ ...input, key: 'backup-worker' });
+}
+
 async function withResourceLock<T>(input: {
   pool: pg.Pool;
   key: string;

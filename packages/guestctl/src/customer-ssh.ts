@@ -8,8 +8,8 @@ import {
   type GuestBootSpec,
   type GuestManifest,
 } from '@agent-cloud/contracts';
-import { customerSshSudoers, digestInputs } from '@agent-cloud/images';
-import { probePrincipal, runtimePrincipal } from '@agent-cloud/pki';
+import { backupSudoers, customerSshSudoers, digestInputs } from '@agent-cloud/images';
+import { backupPrincipal, probePrincipal, runtimePrincipal } from '@agent-cloud/pki';
 import { atomicWrite, isMissing, readOwnedFile } from './files.js';
 import type { GuestConfiguration } from './identity.js';
 import { runTool } from './tools.js';
@@ -47,13 +47,15 @@ export async function verifyCustomerSsh(
     ['sshd_config', '/etc/ssh/sshd_config'],
     ['guest-inspect.sudoers', '/etc/sudoers.d/agent-cloud-inspect'],
     ['guest-customer.sudoers', '/etc/sudoers.d/agent-cloud-customer'],
+    ['guest-backup.sudoers', '/etc/sudoers.d/agent-cloud-backup'],
   ] satisfies [string, string][]) {
     const bytes = await system.read(installed);
     const input = inputs.files.find((file) => file.path === source);
     if (
       input?.sha256 !== createHash('sha256').update(bytes).digest('hex') ||
       input.bytes !== Buffer.byteLength(bytes) ||
-      (source === 'guest-customer.sudoers' && bytes !== customerSshSudoers)
+      (source === 'guest-customer.sudoers' && bytes !== customerSshSudoers) ||
+      (source === 'guest-backup.sudoers' && bytes !== backupSudoers)
     )
       throw new Error('Installed customer SSH policy differs from the image inputs.');
   }
@@ -66,23 +68,31 @@ export async function verifyCustomerSsh(
   )
     throw new Error('Guest SSH trust or probe principals differ from the guest identity.');
   const principals = join(configuration.state, 'customer-principals');
+  const backupPrincipals = join(configuration.state, 'backup-principals');
   if (proof.version === 1) {
     if ((await system.read(principals)) !== `customer-${proof.allocationId}\n`)
       throw new Error('Customer SSH principal differs from the allocation.');
+    if ((await system.read(backupPrincipals)) !== `${backupPrincipal(guestSubject(proof))}\n`)
+      throw new Error('Backup SSH principal differs from the allocation.');
   } else {
+    let customerPrincipalMissing = false;
     try {
       await system.read(principals);
     } catch (error) {
       if (!isMissing(error)) throw error;
-      await verifyPolicy();
-      return;
+      customerPrincipalMissing = true;
     }
-    throw new Error('Image verifiers must not have customer SSH principals.');
+    if (!customerPrincipalMissing)
+      throw new Error('Image verifiers must not have customer SSH principals.');
+    if ((await system.read(backupPrincipals)) !== '')
+      throw new Error('Image verifiers must not have backup SSH principals.');
+    await verifyPolicy();
+    return;
   }
   await verifyPolicy();
 
   async function verifyPolicy() {
-    for (const user of ['agent-customer', 'agent-probe']) {
+    for (const user of ['agent-customer', 'agent-probe', 'agent-backup']) {
       const entries = (
         await system.run('/usr/sbin/sshd', [
           '-T',
@@ -115,7 +125,11 @@ export async function verifyCustomerSsh(
         hostcertificate: join(configuration.state, 'certificates', 'current', 'host-cert.pub'),
         authorizedprincipalsfile: join(
           configuration.state,
-          user === 'agent-customer' ? 'customer-principals' : 'probe-principals',
+          user === 'agent-customer'
+            ? 'customer-principals'
+            : user === 'agent-backup'
+              ? 'backup-principals'
+              : 'probe-principals',
         ),
         passwordauthentication: 'no',
         kbdinteractiveauthentication: 'no',
@@ -135,7 +149,8 @@ export async function verifyCustomerSsh(
       };
       if (
         Object.entries(expected).some(([key, value]) => effective.get(key) !== value) ||
-        allowedUsers.sort().join(' ') !== 'agent-customer agent-deploy agent-hosting agent-probe'
+        allowedUsers.sort().join(' ') !==
+          'agent-backup agent-customer agent-deploy agent-hosting agent-probe'
       )
         throw new Error('Effective guest SSH policy does not support isolated customer access.');
     }

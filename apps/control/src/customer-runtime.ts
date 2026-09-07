@@ -1,4 +1,5 @@
 import { createHostingRuntime } from './hosting-runtime.js';
+import { createBackupRuntime } from './backup-runtime.js';
 import { createInternalReference } from './internal-reference.js';
 import { isDeepStrictEqual } from 'node:util';
 import { CloudError, accessServiceConfigSchema, type GuestImage } from '@agent-cloud/contracts';
@@ -139,6 +140,16 @@ export async function createCustomerRuntime(input: {
   return {
     provider,
     guest,
+    ...(config.backupConfigFile
+      ? {
+          backups: await createBackupRuntime({
+            connection,
+            provider,
+            path: config.backupConfigFile,
+            signer: async () => (await getServices()).signer,
+          }),
+        }
+      : {}),
     ...(accessConfig
       ? {
           access: createAccessService({

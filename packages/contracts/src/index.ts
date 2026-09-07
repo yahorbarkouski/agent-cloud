@@ -22,3 +22,4 @@ export * from './runs.js';
 export * from './compose.js';
 export * from './login.js';
 export * from './hosting.js';
+export * from './backups.js';

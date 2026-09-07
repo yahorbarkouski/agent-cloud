@@ -22,6 +22,7 @@ export async function exerciseCompose(input: {
     credentials: string,
   ) => Promise<{ code: number; stdout: string; stderr: string }>;
   vm: (args: string[], timeout?: number) => Promise<string>;
+  initialOnly?: boolean;
 }) {
   const source = join(input.scratch, 'application source');
   await mkdir(source, { mode: 0o700 });
@@ -135,6 +136,7 @@ export async function exerciseCompose(input: {
     revision: '1',
     count: '1',
   });
+  if (input.initialOnly) return { releaseId: first, application };
   const status = await cli(['inspect', input.machine, 'sample']);
   assert.equal(status.containers.length, 3);
   assert.ok(
@@ -190,4 +192,5 @@ export async function exerciseCompose(input: {
       releases: [first, second, failed, recovery],
     }) + '\n',
   );
+  return { releaseId: recovery, application };
 }

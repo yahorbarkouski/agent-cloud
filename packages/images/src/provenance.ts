@@ -11,6 +11,7 @@ import {
   type ImageInputs,
 } from '@agent-cloud/contracts';
 import { customerSshSudoers } from './customer-ssh.js';
+import { backupSudoers } from './backup.js';
 
 export function imageArtifacts(pins: ImageArtifacts) {
   const artifacts = [pins.node, pins.step, pins.caddy, ...pins.debs];
@@ -59,12 +60,18 @@ export function createImageManifest({
     paths !== JSON.stringify(inputPaths(pins, enrollmentImageSourcePaths))
   )
     throw new Error('Image inventory does not cover the complete input set.');
-  if (
-    customerSsh &&
-    inputs.files.find((file) => file.path === 'guest-customer.sudoers')?.sha256 !==
-      createHash('sha256').update(customerSshSudoers).digest('hex')
-  )
-    throw new Error('Customer SSH image requires the supported sudo policy.');
+  if (customerSsh)
+    for (const [path, bytes] of [
+      ['guest-customer.sudoers', customerSshSudoers],
+      ['guest-backup.sudoers', backupSudoers],
+    ] satisfies [string, string][]) {
+      const input = inputs.files.find((file) => file.path === path);
+      if (
+        input?.sha256 !== createHash('sha256').update(bytes).digest('hex') ||
+        input.bytes !== Buffer.byteLength(bytes)
+      )
+        throw new Error('Customer SSH image requires the supported sudo policy.');
+    }
   for (const artifact of imageArtifacts(pins)) {
     if (
       inputs.files.find((file) => file.path === `artifacts/${artifact.file}`)?.sha256 !==

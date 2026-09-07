@@ -1,7 +1,15 @@
 import { setTimeout } from 'node:timers/promises';
 export { loginConfiguration, exchangeGithubLogin, readLoginJson } from './login.js';
-import type { z } from 'zod';
+import { z } from 'zod';
 import {
+  backupCaptureRequestSchema,
+  backupIdSchema,
+  backupResponseSchema,
+  backupsResponseSchema,
+  machineIdSchema,
+  restoreIdSchema,
+  restoreRequestSchema,
+  restoreResponseSchema,
   referenceInputSchema,
   routePublishSchema,
   routeRemoveSchema,
@@ -62,6 +70,7 @@ export class CloudClient {
     body?: unknown;
     key?: string;
     timeoutMs?: number;
+    signal?: AbortSignal;
   }): Promise<T> {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.credentials.token}`,
@@ -74,7 +83,10 @@ export class CloudClient {
       method: input.method ?? 'GET',
       headers,
       redirect: 'error',
-      signal: AbortSignal.timeout(input.timeoutMs ?? 15_000),
+      signal: AbortSignal.any([
+        AbortSignal.timeout(input.timeoutMs ?? 15_000),
+        ...(input.signal ? [input.signal] : []),
+      ]),
       ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
     });
     const body: unknown = await response.json();
@@ -147,6 +159,103 @@ export class CloudClient {
   }
   whoami() {
     return this.request({ path: '/v1/whoami', schema: whoamiResponseSchema });
+  }
+  captureBackup(input: {
+    machineId: MachineId;
+    request: z.input<typeof backupCaptureRequestSchema>;
+  }) {
+    return this.request({
+      path: `/v1/machines/${machineIdSchema.parse(input.machineId)}/backups`,
+      method: 'POST',
+      body: backupCaptureRequestSchema.parse(input.request),
+      schema: backupResponseSchema,
+    });
+  }
+  backups(machineId: MachineId) {
+    return this.request({
+      path: `/v1/machines/${machineIdSchema.parse(machineId)}/backups`,
+      schema: backupsResponseSchema,
+    });
+  }
+  backup(id: string) {
+    return this.request({
+      path: `/v1/backups/${backupIdSchema.parse(id)}`,
+      schema: backupResponseSchema,
+    });
+  }
+  restoreBackup(request: z.input<typeof restoreRequestSchema>) {
+    return this.request({
+      path: '/v1/restores',
+      method: 'POST',
+      body: restoreRequestSchema.parse(request),
+      schema: restoreResponseSchema,
+    });
+  }
+  restore(id: string) {
+    return this.request({
+      path: `/v1/restores/${restoreIdSchema.parse(id)}`,
+      schema: restoreResponseSchema,
+    });
+  }
+  async waitBackup(input: { backupId: string; timeoutMs?: number; signal?: AbortSignal }) {
+    const id = backupIdSchema.parse(input.backupId);
+    const timeout = z
+      .number()
+      .int()
+      .min(1)
+      .max(3_600_000)
+      .parse(input.timeoutMs ?? 900_000);
+    const deadline = performance.now() + timeout;
+    for (;;) {
+      input.signal?.throwIfAborted();
+      const remaining = Math.ceil(deadline - performance.now());
+      if (remaining <= 0)
+        throw new CloudError(
+          'provider_unavailable',
+          `Backup wait timed out. Inspect backup ${id}; the admitted capture continues.`,
+          true,
+        );
+      const result = await this.request({
+        path: `/v1/backups/${id}`,
+        schema: backupResponseSchema,
+        timeoutMs: Math.min(remaining, 15_000),
+        ...(input.signal ? { signal: input.signal } : {}),
+      });
+      if (result.backup.state.kind !== 'pending') return result;
+      await setTimeout(Math.min(1000, Math.max(0, deadline - performance.now())), undefined, {
+        signal: input.signal,
+      });
+    }
+  }
+  async waitRestore(input: { restoreId: string; timeoutMs?: number; signal?: AbortSignal }) {
+    const id = restoreIdSchema.parse(input.restoreId);
+    const timeout = z
+      .number()
+      .int()
+      .min(1)
+      .max(3_600_000)
+      .parse(input.timeoutMs ?? 900_000);
+    const deadline = performance.now() + timeout;
+    for (;;) {
+      input.signal?.throwIfAborted();
+      const remaining = Math.ceil(deadline - performance.now());
+      if (remaining <= 0)
+        throw new CloudError(
+          'provider_unavailable',
+          `Restore wait timed out. Inspect restore ${id}; the isolated machine operation continues.`,
+          true,
+        );
+      const result = await this.request({
+        path: `/v1/restores/${id}`,
+        schema: restoreResponseSchema,
+        timeoutMs: Math.min(remaining, 15_000),
+        ...(input.signal ? { signal: input.signal } : {}),
+      });
+      if (result.restore.state.kind !== 'pending') return result;
+      await setTimeout(Math.min(1000, Math.max(0, deadline - performance.now())), undefined, {
+        signal: input.signal,
+      });
+    }
   }
   createAccessSession(input: { machineId: MachineId; request: AccessSessionRequest; key: string }) {
     return this.request({

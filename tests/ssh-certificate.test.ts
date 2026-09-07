@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { inspectIssuedSsh } from '../packages/pki/src/ssh-certificate.js';
 
-it.each<'probe' | 'runtime'>(['probe', 'runtime'])(
+it.each<'probe' | 'runtime' | 'backup'>(['probe', 'runtime', 'backup'])(
   'rejects certificates that expand %s beyond its key, CA, allocation or forced command',
   (kind) => {
     const fingerprint = (value: string) =>
@@ -29,7 +29,9 @@ it.each<'probe' | 'runtime'>(['probe', 'runtime'])(
         'force-command':
           kind === 'probe'
             ? '/usr/local/bin/guestctl identity --json'
-            : '/usr/bin/sudo -n -- /usr/local/bin/guestctl inspect --json',
+            : kind === 'backup'
+              ? '/usr/bin/sudo -n -- /usr/local/bin/guestctl backup-dispatch'
+              : '/usr/bin/sudo -n -- /usr/local/bin/guestctl inspect --json',
       },
       Extensions: {},
     };

@@ -34,7 +34,7 @@ for image_state in /var/lib/agent-cloud /usr/lib/agent-cloud; do
     [ -z "$(ls -A "$image_state")" ]
   fi
 done
-for image_account in agent-probe agent-proxy agent-customer agent-hosting; do
+for image_account in agent-probe agent-proxy agent-customer agent-hosting agent-backup; do
   if getent passwd "$image_account" >/dev/null; then exit 1; fi
   [ ! -e "/var/lib/$image_account" ]
   [ ! -L "/var/lib/$image_account" ]
@@ -75,6 +75,14 @@ case "${1:-}" in
   reference) exec /usr/bin/flock --wait 5 /run/agent-cloud-reference-admission.lock /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@" ;;
   reference-work) exec /usr/bin/flock --nonblock /run/agent-cloud-reference-work.lock /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@" ;;
   hosting) exec /usr/bin/flock --wait 5 /run/agent-cloud-guest.lock /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@" ;;
+  backup-dispatch)
+    case "${SSH_ORIGINAL_COMMAND:-}" in
+      "backup capture"|"backup restore")
+        exec /usr/bin/flock --wait 5 /run/agent-cloud-backup.lock /usr/bin/flock --wait 5 /run/agent-cloud-compose-admission.lock /usr/bin/flock --wait 5 /run/agent-cloud-compose-work.lock /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@" ;;
+      "backup inspect"|"backup read"|"backup remove"|"backup inspect-restore")
+        exec /usr/bin/flock --wait 5 /run/agent-cloud-backup.lock /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@" ;;
+      *) exit 1 ;;
+    esac ;;
   enroll|renew|prepare-image) exec /usr/bin/flock --nonblock /run/agent-cloud-guest.lock /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@" ;;
 esac
 exec /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@"
@@ -84,11 +92,14 @@ if ! id agent-probe >/dev/null 2>&1; then useradd --system --create-home --home-
 if ! id agent-deploy >/dev/null 2>&1; then useradd --system --create-home --home-dir /var/lib/agent-deploy --shell /bin/sh agent-deploy; fi
 useradd --system --create-home --home-dir /var/lib/agent-customer --shell /bin/sh agent-customer
 useradd --system --no-create-home --home-dir /var/lib/agent-hosting --shell /bin/sh agent-hosting
+useradd --system --create-home --home-dir /var/lib/agent-backup --shell /bin/sh agent-backup
 if ! id agent-proxy >/dev/null 2>&1; then useradd --system --no-create-home --home-dir /var/lib/agent-cloud-proxy --shell /usr/sbin/nologin agent-proxy; fi
 install -m 0440 "$image_input/guest-inspect.sudoers" /etc/sudoers.d/agent-cloud-inspect
 visudo -cf /etc/sudoers.d/agent-cloud-inspect
 install -m 0440 "$image_input/guest-customer.sudoers" /etc/sudoers.d/agent-cloud-customer
 visudo -cf /etc/sudoers.d/agent-cloud-customer
+install -m 0440 "$image_input/guest-backup.sudoers" /etc/sudoers.d/agent-cloud-backup
+visudo -cf /etc/sudoers.d/agent-cloud-backup
 install -m 0644 "$image_input"/systemd/*.service "$image_input"/systemd/*.timer /etc/systemd/system/
 install -d -m 0755 /etc/docker
 cat > /etc/docker/daemon.json <<'DOCKER'
@@ -183,7 +194,7 @@ dpkg-query --show > /usr/lib/agent-cloud/os-packages.txt
   import { createHash } from "node:crypto";
   const manifest = JSON.parse(readFileSync("/usr/lib/agent-cloud/image.json", "utf8"));
   const manifestDigest = createHash("sha256").update(JSON.stringify(manifest)).digest("hex");
-  const homes = ["/root", "/var/lib/agent-probe", "/var/lib/agent-customer", ...readdirSync("/home").map(name => "/home/" + name)].map(path => {
+  const homes = ["/root", "/var/lib/agent-probe", "/var/lib/agent-customer", "/var/lib/agent-backup", ...readdirSync("/home").map(name => "/home/" + name)].map(path => {
     const stat = lstatSync(path);
     if (!stat.isDirectory()) throw new Error("Builder home is not a directory");
     return {path, uid:stat.uid};

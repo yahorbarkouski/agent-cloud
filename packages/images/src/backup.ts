@@ -1,0 +1,3 @@
+export const backupSudoers =
+  'Defaults:agent-backup env_reset, !setenv, secure_path="/usr/local/bin:/usr/bin:/bin", env_keep += "SSH_ORIGINAL_COMMAND"\n' +
+  'agent-backup ALL=(root) NOPASSWD: NOSETENV: /usr/local/bin/guestctl backup-dispatch\n';

@@ -35,6 +35,10 @@ import {
   routeRemoveSchema,
   hostnameSchema,
   domainCreateSchema,
+  backupCaptureRequestSchema,
+  backupIdSchema,
+  restoreRequestSchema,
+  restoreIdSchema,
 } from '@agent-cloud/contracts';
 import {
   projects,
@@ -48,6 +52,7 @@ import {
 } from '@agent-cloud/db';
 import type { InternalReference } from './internal-reference.js';
 import type { HostingService } from './hosting.js';
+import type { BackupService } from './backups.js';
 import type { CustomerLogin } from './customer-login.js';
 import type { AccessService } from './access-sessions.js';
 import {
@@ -79,6 +84,7 @@ export function createApp(input: {
   access?: AccessService;
   login?: CustomerLogin;
   hosting?: { service: HostingService; gatewayToken: string };
+  backups?: BackupService;
 }) {
   const app = new Hono<{ Variables: { principal: Principal; requestId: string } }>();
   app.use('*', async (c, next) => {
@@ -298,6 +304,54 @@ export function createApp(input: {
     );
   }
   app.get('/v1/catalog', (c) => c.json(input.catalog()));
+  if (input.backups && input.customerAccess !== 'disabled') {
+    const backups = input.backups;
+    app.post('/v1/machines/:machineId/backups', async (c) =>
+      c.json(
+        {
+          backup: await backups.capture(
+            c.get('principal'),
+            machineIdSchema.parse(c.req.param('machineId')),
+            backupCaptureRequestSchema.parse(await c.req.json<unknown>()),
+          ),
+        },
+        202,
+      ),
+    );
+    app.get('/v1/machines/:machineId/backups', async (c) =>
+      c.json({
+        backups: await backups.list(
+          c.get('principal'),
+          machineIdSchema.parse(c.req.param('machineId')),
+        ),
+      }),
+    );
+    app.get('/v1/backups/:id', async (c) =>
+      c.json({
+        backup: await backups.inspect(c.get('principal'), backupIdSchema.parse(c.req.param('id'))),
+      }),
+    );
+    app.post('/v1/restores', async (c) =>
+      c.json(
+        {
+          restore: await backups.restore(
+            c.get('principal'),
+            restoreRequestSchema.parse(await c.req.json<unknown>()),
+            input,
+          ),
+        },
+        202,
+      ),
+    );
+    app.get('/v1/restores/:id', async (c) =>
+      c.json({
+        restore: await backups.inspectRestore(
+          c.get('principal'),
+          restoreIdSchema.parse(c.req.param('id')),
+        ),
+      }),
+    );
+  }
   app.get('/v1/projects', async (c) => {
     const principal = c.get('principal');
     authorize(principal, 'project:read');

@@ -20,6 +20,7 @@ import { registerGrants } from './grants.js';
 import { registerSsh } from './ssh.js';
 import { registerRuns } from './runs.js';
 import { registerHosting } from './hosting.js';
+import { registerBackups } from './backups.js';
 import { registerCompose } from './compose.js';
 import { loginWithDevice, logout } from './login.js';
 import { syncCredentialDirectories, withCredentialLock } from './credential-file.js';
@@ -45,6 +46,7 @@ registerSsh({ program, client, output });
 registerRuns({ program, client, output });
 registerCompose({ program, client, output });
 registerHosting({ program, client, output });
+registerBackups({ program, client, output });
 
 program
   .command('login')

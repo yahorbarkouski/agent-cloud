@@ -24,6 +24,9 @@
     },
     {
       "path": "../../packages/remote"
+    },
+    {
+      "path": "../../packages/backup-store"
     }
   ]
 }

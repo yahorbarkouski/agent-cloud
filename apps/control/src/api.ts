@@ -47,6 +47,7 @@ const app = createApp({
         imageRelease: runtime.imageRelease,
         ...(runtime.internalReference ? { internalReference: runtime.internalReference } : {}),
         ...(runtime.access ? { access: runtime.access } : {}),
+        ...(runtime.backups ? { backups: runtime.backups.service } : {}),
         ...(runtime.hosting
           ? {
               hosting: {

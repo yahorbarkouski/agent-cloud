@@ -28,7 +28,8 @@
     "graphile-worker": "0.17.3",
     "pino": "10.3.1",
     "@agent-cloud/pki": "workspace:*",
-    "@agent-cloud/remote": "workspace:*"
+    "@agent-cloud/remote": "workspace:*",
+    "@agent-cloud/backup-store": "workspace:*"
   },
   "devDependencies": {
     "@types/pg": "8.23.1"

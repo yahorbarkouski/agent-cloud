@@ -9,6 +9,7 @@ import {
   sameGuestSubject,
 } from '../packages/contracts/dist/index.js';
 import {
+  backupPrincipal,
   guestName,
   probePrincipal,
   runtimePrincipal,
@@ -24,6 +25,7 @@ it('keeps customer names stable and places verifier subjects in a separate names
   expect(guestName(customer)).toBe(`${allocation.replace('_', '-')}.guest.agent-cloud.internal`);
   expect(probePrincipal(customer)).toBe(`probe-${allocation}`);
   expect(runtimePrincipal(customer)).toBe(`runtime-${allocation}`);
+  expect(backupPrincipal(customer)).toBe(`backup-${allocation}`);
   expect(guestName(verifier)).toBe(`verify-${build}.guest.agent-cloud.internal`);
   expect(probePrincipal(verifier)).toBe(`probe-verify_${build}`);
   expect(sameGuestSubject(customer, verifier)).toBe(false);

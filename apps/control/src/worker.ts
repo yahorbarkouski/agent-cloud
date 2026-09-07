@@ -29,6 +29,7 @@ const taskList =
               guest: runtime.guest,
               ...(runtime.access ? { access: runtime.access } : {}),
               ...(runtime.hosting ? { hosting: runtime.hosting.service } : {}),
+              ...(runtime.backups ? { backups: runtime.backups.service } : {}),
             }
           : {}),
       });

@@ -2,11 +2,13 @@ import { prepareGuestBootstrap } from '../../apps/control/src/guest-bootstrap.js
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
+import { z } from 'zod';
 import {
   allocationIdSchema,
   operationResponseSchema,
   operationProgressSchema,
   simulatedCatalog,
+  type AllocationId,
   type GuestImage,
   type MachineProvider,
 } from '../../packages/contracts/dist/index.js';
@@ -37,24 +39,51 @@ export async function prepareEnrollmentFixture(input: {
     catalog: () => ({ ...simulatedCatalog(), provider: 'hetzner' }),
   });
   let userData: string | undefined;
+  const addresses = new Map<string, string>();
+  let provisionGuest:
+    | ((userData: string, allocationId: AllocationId) => Promise<string>)
+    | undefined;
+  const observedAddress = (labels: Record<string, string>, fallback: string) =>
+    addresses.get(labels['allocation_id'] ?? '') ?? fallback;
   const provider: MachineProvider = {
     kind: 'hetzner',
     getCatalog: () => simulation.getCatalog(),
     submit: async (input) => {
-      if (input.command.kind === 'create_guest')
-        userData = (await render({ attemptId: input.attemptId, command: input.command })).userData;
+      if (input.command.kind === 'create_guest') {
+        const rendered = (await render({ attemptId: input.attemptId, command: input.command }))
+          .userData;
+        const allocationId = input.command.bootstrap.allocationId;
+        if (!addresses.has(allocationId)) {
+          if (addresses.size > 0)
+            assert.ok(
+              provisionGuest,
+              'Another allocation requires its own native guest provisioner.',
+            );
+          const assigned = provisionGuest ? await provisionGuest(rendered, allocationId) : address;
+          addresses.set(allocationId, z.ipv4().parse(assigned));
+        }
+        userData ??= rendered;
+      }
       return simulation.submit(input);
     },
     getAction: (input) => simulation.getAction(input),
-    findServers: (input) => simulation.findServers(input),
-    findPrimaryIps: (input) => simulation.findPrimaryIps(input),
+    findServers: async (input) =>
+      (await simulation.findServers(input)).map((server) => ({
+        ...server,
+        ipv4: observedAddress(server.labels, server.ipv4 ?? address),
+      })),
+    findPrimaryIps: async (input) =>
+      (await simulation.findPrimaryIps(input)).map((ip) => ({
+        ...ip,
+        ipv4: observedAddress(ip.labels, ip.ipv4),
+      })),
     getServer: async (input) => {
       const server = await simulation.getServer(input);
-      return server && { ...server, ipv4: address };
+      return server && { ...server, ipv4: observedAddress(server.labels, server.ipv4 ?? address) };
     },
     getPrimaryIp: async (input) => {
       const ip = await simulation.getPrimaryIp(input);
-      return ip && { ...ip, ipv4: address };
+      return ip && { ...ip, ipv4: observedAddress(ip.labels, ip.ipv4) };
     },
   };
   const admission = createApp({ db, provider: provider.kind, limits, catalog: simulation.catalog });
@@ -107,5 +136,10 @@ export async function prepareEnrollmentFixture(input: {
     allocation,
     bootstrap,
     userData,
+    image,
+    enrollmentUrl,
+    setProvisionGuest(callback: (userData: string, allocationId: AllocationId) => Promise<string>) {
+      provisionGuest = callback;
+    },
   };
 }

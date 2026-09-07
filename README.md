@@ -2,13 +2,15 @@
 
 An open-source cloud that customers operate through their existing coding agents. The product supplies machines, credentials, lifecycle operations, application deployment and recovery. It does not contain an AI agent.
 
-**Current status:** the internal reference application passed the complete CLI/API path on a cheap Hetzner VM: frontend/backend/PostgreSQL, public HTTPS, disconnect/reconnect, logs, an update preserving data, and verified infrastructure cleanup. See [the verification record](docs/reference-deployment-verification.json). GitHub device sign-in, delegated access and revocation are verified. Managed HTTPS routing is native verified; protected backups remain unfinished. Stripe is excluded. See [the current handoff](docs/CONTEXT.md) and [internal reference commands](docs/architecture/internal-reference.md).
+**Current status:** the internal reference application passed the complete CLI/API path on a cheap Hetzner VM: frontend/backend/PostgreSQL, public HTTPS, disconnect/reconnect, logs, an update preserving data, and verified infrastructure cleanup. See [the verification record](docs/reference-deployment-verification.json). GitHub device sign-in, delegated access and revocation are verified. Managed HTTPS routing and manual protected backups with isolated restore are native verified; public restore cutover and scheduled backups remain unfinished. Stripe is excluded. See [the current handoff](docs/CONTEXT.md) and [internal reference commands](docs/architecture/internal-reference.md).
 
 Project-scoped delegation is available with `acld grant create`, `grant list` and `grant revoke`. Issued secrets are saved to an owner-only file; see [the agent instructions](skills/agent-cloud/SKILL.md#delegate-access). Customer SSH and SFTP are connected through a separate access gateway. See [customer access](docs/architecture/customer-ssh.md) for commands, source restrictions and operator configuration. Durable `run submit/inspect/logs/cancel` commands also work through that authenticated path; [the command guide](docs/architecture/durable-commands.md) explains retries and recovery. GitHub device sign-in is connected for operator-admitted customers. Use `acld login --server <url>`; see [customer authentication](docs/architecture/customer-authentication.md) for setup, delegation and interrupted-login recovery.
 
 General Compose deployment is connected through `acld compose apply/wait/inspect/logs/recover`. Upload a small source directory, retain release IDs when retrying, and recover a previous configuration while keeping named volumes. See [Compose deployment and recovery](docs/architecture/compose-deployment.md) for commands, source limits and database recovery boundaries.
 
 Managed routing uses `acld route publish/wait/inspect/remove` and `acld domain add/verify`. The public gateway forwards with mTLS to the guest proxy; applications bind to loopback ports. See [HTTPS routing](docs/architecture/https-routing.md) for ownership, update and outage semantics. This path passed its native Ubuntu/real Caddy check, including updates and outage recovery; it is not yet Hetzner/public ACME verified.
+
+Manual `backup capture/wait/inspect/restore/restore-wait` commands protect PostgreSQL 17 and declared application files off the VM, then restore them onto a separate machine. The native customer scenario verified data, files, wrapping-key rotation and cleanup through local Object Lock storage. See [protected backups](docs/architecture/protected-backups.md) for configuration, supported data and retry boundaries. Hetzner Object Storage enforcement is not yet verified.
 
 ## Run locally
 
@@ -102,6 +104,8 @@ pnpm smoke:access
 pnpm smoke:runs
 pnpm smoke:compose
 pnpm smoke:hosting
+pnpm smoke:backup-store
+pnpm smoke:backups
 pnpm smoke:image
 pnpm smoke:builder
 ```

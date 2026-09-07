@@ -5,7 +5,7 @@ description: Operate agent-cloud machines through its JSON CLI, inspect durable 
 
 # Agent-cloud
 
-Use the installed `acld` CLI. In a source checkout, use `pnpm acld`. Run `acld --help` when unsure about available commands. The current release supports GitHub device sign-in, machine lifecycle, scoped delegation, SSH, single-file transfer, durable commands, Compose deployment/recovery and managed HTTPS routing. Protected backups are still being implemented.
+Use the installed `acld` CLI. In a source checkout, use `pnpm acld`. Run `acld --help` when unsure about available commands. The current release supports GitHub device sign-in, machine lifecycle, scoped delegation, SSH, single-file transfer, durable commands, Compose deployment/recovery, managed HTTPS routing and explicit PostgreSQL backup/isolated restore. Scheduled backups and automatic pruning remain unfinished.
 
 ## Establish context
 
@@ -90,7 +90,17 @@ Keep a release ID and identical source/options when recovering a lost admission 
 
 The helper keeps a stable `acld-<app>` Compose project and pins built/pulled images. Use named volumes for mutable data. Anonymous volumes, including image-declared volumes without explicit mounts, are refused. Source bind mounts must be read-only; use named volumes or deliberate absolute guest paths for writes. An app name does not isolate tenants: this credential controls the whole VM, and explicit external volumes or host paths can share data.
 
-A failed or interrupted release can leave a partially updated app. Inspect its containers/logs, then choose a new apply or an explicit `recover` from a previously succeeded release. Recovery uses retained images/configuration without rebuilding or fetching mutable tags. It preserves named volumes but **does not undo database migrations or restore lost database contents**. Run migrations explicitly through durable commands. Do not delete release directories, prune recovery images, or use `docker compose down -v` as a routine fix. Protected backups and isolated data restore remain separate unfinished capabilities.
+A failed or interrupted release can leave a partially updated app. Inspect its containers/logs, then choose a new apply or an explicit `recover` from a previously succeeded release. Recovery uses retained images/configuration without rebuilding or fetching mutable tags. It preserves named volumes but **does not undo database migrations or restore lost database contents**. Run migrations explicitly through durable commands. Do not delete release directories, prune recovery images, or use `docker compose down -v` as a routine fix. Database recovery uses the separate protected backup and isolated restore flow below.
+
+## Capture and restore application data
+
+Use `backup capture <machine> <app> --id <UUIDv4> --release <successful-release> --service <postgres-service> --database <database> --user <user> [--files <relative-files...>]`, then `backup wait <UUIDv4>`. Retain the UUID before sending the request and inspect it after disconnects. The recipe supports PostgreSQL 17, the captured Compose source and explicitly declared regular files beneath `/var/lib/agent-customer`. It does not capture other databases, arbitrary directories, other named volumes or an entire disk. Files are not transactionally coordinated with the database dump.
+
+`backup inspect <UUIDv4>` must report `captured` before treating an off-machine copy as available. This means encrypted bytes and their protected object version were verified, not that the application has been restored. `backup list <machine>` still works after source destruction. Never place storage credentials or wrapping keys in a guest. Backups are operator-configured; an unavailable endpoint does not authorize an improvised bucket or secret copy.
+
+Restore with `backup restore <backup-UUID> <new-app> --id <restore-UUID> --name <new-machine-name> --size small --region <allowed-region>`, then `backup restore-wait <restore-UUID>`. This needs `backup:restore` and ordinary machine-creation permission/budget. The service creates a new isolated VM; it does not accept an existing target or modify the source. Keep the returned machine and operation IDs. An unfinished target rejects customer SSH and routes. After success, inspect the application and restored files under `/var/lib/agent-customer/restores/<restore-UUID>/`; `restore_verified` records guest database/service verification, not application-specific correctness. The restore network is internal and host ports are inactive. Check the private container address from the VM through authenticated SSH. Public cutover needs network promotion, which is not implemented in this checkpoint; do not publish a route to an inactive port.
+
+A lost or blocked restore must be inspected with `backup restore-inspect <restore-UUID>`. Do not replay SQL manually into that target or mint another restore UUID until the customer's recovery intent and budget cover another machine. Failed targets remain owned and billable. Route cutover, fencing old writes and destroying either VM are separate actions within the customer's authorization. There is no scheduled backup, automatic pruning or purge command in this checkpoint; do not imply they are active.
 
 ## Change an existing machine
 

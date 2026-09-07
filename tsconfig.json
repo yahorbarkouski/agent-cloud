@@ -34,6 +34,11 @@
     {
       "path": "apps/access-gateway"
     },
-    { "path": "apps/public-gateway" }
+    {
+      "path": "apps/public-gateway"
+    },
+    {
+      "path": "packages/backup-store"
+    }
   ]
 }

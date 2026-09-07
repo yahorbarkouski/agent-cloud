@@ -15,7 +15,7 @@ export function sshFingerprint(publicKey: string) {
 export function inspectIssuedSsh(
   value: unknown,
   expected: {
-    kind: 'host' | 'probe' | 'runtime' | 'deployment' | 'hosting';
+    kind: 'host' | 'probe' | 'runtime' | 'deployment' | 'hosting' | 'backup';
     key: string;
     ca: string;
     principal: string;
@@ -38,11 +38,13 @@ export function inspectIssuedSsh(
             'force-command': z.literal(
               expected.kind === 'hosting'
                 ? '/usr/bin/sudo -n -- /usr/local/bin/guestctl hosting --json'
-                : expected.kind === 'deployment'
-                  ? '/usr/bin/sudo -n -- /usr/local/bin/guestctl reference --json'
-                  : expected.kind === 'runtime'
-                    ? '/usr/bin/sudo -n -- /usr/local/bin/guestctl inspect --json'
-                    : '/usr/local/bin/guestctl identity --json',
+                : expected.kind === 'backup'
+                  ? '/usr/bin/sudo -n -- /usr/local/bin/guestctl backup-dispatch'
+                  : expected.kind === 'deployment'
+                    ? '/usr/bin/sudo -n -- /usr/local/bin/guestctl reference --json'
+                    : expected.kind === 'runtime'
+                      ? '/usr/bin/sudo -n -- /usr/local/bin/guestctl inspect --json'
+                      : '/usr/local/bin/guestctl identity --json',
             ),
           }),
     Extensions: z.strictObject({}),

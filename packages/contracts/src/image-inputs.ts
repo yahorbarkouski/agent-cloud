@@ -72,4 +72,8 @@ export const renewalImageSourcePaths = [
   'systemd/agent-cloud-renew.timer',
 ];
 
-export const imageSourcePaths = [...renewalImageSourcePaths, 'guest-customer.sudoers'];
+export const imageSourcePaths = [
+  ...renewalImageSourcePaths,
+  'guest-customer.sudoers',
+  'guest-backup.sudoers',
+];

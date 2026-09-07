@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { HostingService } from './hosting.js';
+import { enqueueBackup, type BackupService } from './backups.js';
 import type { Config } from './config.js';
 import { eq, sql } from 'drizzle-orm';
 import type { TaskList, JobHelpers } from 'graphile-worker';
@@ -31,8 +32,29 @@ export function createTasks(input: {
   images?: Parameters<typeof createImageTasks>[0]['advance'];
   access?: AccessService;
   hosting?: HostingService;
+  backups?: BackupService;
 }): TaskList {
   return {
+    ...(input.backups
+      ? {
+          advance_backup: async (payload: unknown, helpers: JobHelpers) => {
+            const request = z
+              .strictObject({ kind: z.enum(['backup', 'restore']), id: z.uuidv4() })
+              .parse(payload);
+            await input.backups?.advance(request.kind, request.id);
+            const pending = await input.connection.db.execute<{ pending: boolean }>(
+              request.kind === 'backup'
+                ? sql`SELECT record->'state'->>'kind' = 'pending' OR (work->>'kind' = 'stored' AND work->>'guestCleanup' = 'pending' AND (work->>'attempts')::int < 5) AS pending FROM backups WHERE id = ${request.id}`
+                : sql`SELECT record->'state'->>'kind' = 'pending' AS pending FROM backup_restores WHERE id = ${request.id}`,
+            );
+            if (pending.rows[0]?.pending)
+              await helpers.addJob('advance_backup', request, {
+                jobKey: `${request.kind}:${request.id}`,
+                runAt: new Date((await databaseTime(input.connection.db)).getTime() + 1000),
+              });
+          },
+        }
+      : {}),
     ...(input.hosting
       ? {
           apply_hosting_route: async (payload: unknown) => {
@@ -92,6 +114,16 @@ export function createTasks(input: {
       );
     },
     reconcile_operations: async () => {
+      if (input.backups) {
+        const pending = await input.connection.db.execute<{
+          kind: 'backup' | 'restore';
+          id: string;
+        }>(sql`
+          SELECT 'backup' AS kind, id FROM backups WHERE record->'state'->>'kind' = 'pending'
+            OR (work->>'kind' = 'stored' AND work->>'guestCleanup' = 'pending' AND (work->>'attempts')::int < 5)
+          UNION ALL SELECT 'restore' AS kind, id FROM backup_restores WHERE record->'state'->>'kind' = 'pending' LIMIT 1000`);
+        for (const row of pending.rows) await enqueueBackup(input.connection.db, row.kind, row.id);
+      }
       if (input.hosting) {
         const routes = await input.connection.db.execute<{ hostname: string }>(
           sql`SELECT hostname FROM hosting_routes WHERE record->'application'->>'kind' = 'pending' LIMIT 1000`,

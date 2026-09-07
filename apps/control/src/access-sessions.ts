@@ -40,6 +40,7 @@ import {
 import type { CustomerSshSigner } from '@agent-cloud/pki';
 import { authorize, hashToken, loadAuthority } from './auth.js';
 import { lockAccount } from './lifecycle.js';
+import { assertRestoreAccessible } from './backups.js';
 import { observeGuest } from './guest-observation.js';
 
 const sessionScope = (session: AccessSessionRecord) => ({
@@ -80,6 +81,7 @@ export function createAccessService(input: {
     if (!row) throw new CloudError('not_found', 'Machine not found.');
     const machine = machineRecord(row);
     authorize(authority.principal, 'machine:exec', machine.projectId);
+    await assertRestoreAccessible(tx, machine.id);
     if (
       machine.state.kind !== 'allocated' ||
       machine.state.power !== 'running' ||

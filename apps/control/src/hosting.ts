@@ -25,6 +25,7 @@ import {
 } from '@agent-cloud/db';
 import { authorize, loadAuthority } from './auth.js';
 import { lockAccount } from './lifecycle.js';
+import { assertRestoreAccessible } from './backups.js';
 import { createHostingDomains, type resolveDomain } from './hosting-domains.js';
 
 export const hostingTargetSchema = z.strictObject({
@@ -151,6 +152,7 @@ export function createHosting(input: {
         if (!row) throw new CloudError('not_found', 'Machine not found.');
         const machine = machineRecord(row);
         authorize(authority.principal, 'route:publish', machine.projectId);
+        await assertRestoreAccessible(tx, machine.id);
         if (machine.state.kind !== 'allocated' || machine.state.guest.kind !== 'ssh')
           throw new CloudError(
             'resource_busy',

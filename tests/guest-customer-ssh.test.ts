@@ -11,7 +11,7 @@ import {
   newId,
 } from '../packages/contracts/dist/index.js';
 import { createImageManifest, digestManifest } from '../packages/images/dist/index.js';
-import { probePrincipal, runtimePrincipal } from '../packages/pki/dist/index.js';
+import { backupPrincipal, probePrincipal, runtimePrincipal } from '../packages/pki/dist/index.js';
 import {
   publishCustomerPrincipal,
   verifyCustomerSsh,
@@ -28,7 +28,12 @@ const configuration = {
 
 async function fixture() {
   const image = imageFixture(undefined, 1);
-  for (const path of ['sshd_config', 'guest-inspect.sudoers', 'guest-customer.sudoers'])
+  for (const path of [
+    'sshd_config',
+    'guest-inspect.sudoers',
+    'guest-customer.sudoers',
+    'guest-backup.sudoers',
+  ])
     image.files.set(path, await readFile(join('images', path), 'utf8'));
   const inputs = {
     ...image.inputs,
@@ -62,6 +67,7 @@ async function fixture() {
       'HostCertificate /var/lib/agent-cloud/certificates/current/host-cert.pub\n',
     ],
     ['/var/lib/agent-cloud/customer-principals', `customer-${proof.allocationId}\n`],
+    ['/var/lib/agent-cloud/backup-principals', `${backupPrincipal(subject)}\n`],
     [
       '/var/lib/agent-cloud/probe-principals',
       `${probePrincipal(subject)}\n${runtimePrincipal(subject)}\n`,
@@ -71,13 +77,14 @@ async function fixture() {
     ['sshd_config', ['/usr/lib/agent-cloud/sshd_config', '/etc/ssh/sshd_config']],
     ['guest-inspect.sudoers', ['/etc/sudoers.d/agent-cloud-inspect']],
     ['guest-customer.sudoers', ['/etc/sudoers.d/agent-cloud-customer']],
+    ['guest-backup.sudoers', ['/etc/sudoers.d/agent-cloud-backup']],
   ] satisfies [string, string[]][]) {
     const content = image.files.get(source);
     if (content === undefined) throw new Error('Missing policy fixture.');
     for (const path of destinations) files.set(path, content);
   }
   const effective = new Map<string, string>();
-  for (const user of ['agent-customer', 'agent-probe'])
+  for (const user of ['agent-customer', 'agent-probe', 'agent-backup'])
     effective.set(
       user,
       `authenticationmethods publickey
@@ -87,7 +94,7 @@ authorizedkeyscommand none
 authorizedprincipalscommand none
 trustedusercakeys /usr/lib/agent-cloud/ssh_user_ca.pub
 hostcertificate /var/lib/agent-cloud/certificates/current/host-cert.pub
-authorizedprincipalsfile /var/lib/agent-cloud/${user === 'agent-customer' ? 'customer' : 'probe'}-principals
+authorizedprincipalsfile /var/lib/agent-cloud/${user === 'agent-customer' ? 'customer' : user === 'agent-backup' ? 'backup' : 'probe'}-principals
 passwordauthentication no
 kbdinteractiveauthentication no
 hostbasedauthentication no
@@ -103,7 +110,7 @@ permituserrc no
 permittty ${user === 'agent-customer' ? 'yes' : 'no'}
 forcecommand none
 subsystem sftp internal-sftp
-allowusers agent-probe agent-deploy agent-customer agent-hosting
+allowusers agent-probe agent-deploy agent-customer agent-hosting agent-backup
 `,
     );
   const system = {
@@ -147,8 +154,8 @@ it('accepts native Ubuntu sshd formatting and rejects an extra user', async () =
       policy
         .replace('subsystem sftp internal-sftp\n', 'subsystem sftp internal-sftp \n')
         .replace(
-          'allowusers agent-probe agent-deploy agent-customer agent-hosting',
-          'allowusers agent-probe\nallowusers agent-deploy\nallowusers agent-customer\nallowusers agent-hosting',
+          'allowusers agent-probe agent-deploy agent-customer agent-hosting agent-backup',
+          'allowusers agent-probe\nallowusers agent-deploy\nallowusers agent-customer\nallowusers agent-hosting\nallowusers agent-backup',
         ),
     );
   await verifyCustomerSsh(configuration, guest.manifest, guest.proof, guest.system);
@@ -165,10 +172,12 @@ it.each([
   '/etc/ssh/sshd_config',
   '/etc/sudoers.d/agent-cloud-inspect',
   '/etc/sudoers.d/agent-cloud-customer',
+  '/etc/sudoers.d/agent-cloud-backup',
   '/usr/lib/agent-cloud/ssh_user_ca.pub',
   '/var/lib/agent-cloud/ssh/certificate.conf',
   '/var/lib/agent-cloud/probe-principals',
   '/var/lib/agent-cloud/customer-principals',
+  '/var/lib/agent-cloud/backup-principals',
 ])('rejects changed installed %s', async (path) => {
   const guest = await fixture();
   guest.files.set(path, 'changed');
@@ -187,6 +196,7 @@ it.each([
   ['agent-customer', 'subsystem sftp internal-sftp', 'subsystem sftp /bin/false'],
   ['agent-probe', 'permittty no', 'permittty yes'],
   ['agent-probe', 'probe-principals', 'customer-principals'],
+  ['agent-backup', 'backup-principals', 'customer-principals'],
 ])('rejects effective %s policy changed from %s', async (user, before, after) => {
   const guest = await fixture();
   const effective = guest.effective.get(user);
@@ -211,6 +221,7 @@ it('verifies image capability without ever authorizing a verifier as a customer'
     '/var/lib/agent-cloud/probe-principals',
     `${probePrincipal(proof.subject)}\n${runtimePrincipal(proof.subject)}\n`,
   );
+  guest.files.set('/var/lib/agent-cloud/backup-principals', '');
   await expect(
     verifyCustomerSsh(configuration, guest.manifest, proof, guest.system),
   ).rejects.toThrow('must not have customer');

@@ -31,6 +31,9 @@ export function readConfig(environment: NodeJS.ProcessEnv = process.env) {
     host: env.HOST,
     port: env.PORT,
     publicUrl: env.PUBLIC_URL,
+    ...(environment.ACLD_BACKUP_CONFIG
+      ? { backupConfigFile: resolve(environment.ACLD_BACKUP_CONFIG) }
+      : {}),
     ...(environment.ACLD_HOSTING_CONFIG
       ? { hostingConfigFile: resolve(environment.ACLD_HOSTING_CONFIG) }
       : {}),

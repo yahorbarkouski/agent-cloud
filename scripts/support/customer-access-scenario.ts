@@ -21,6 +21,13 @@ import { exerciseDurableRuns } from './durable-runs-scenario.js';
 import { exerciseCompose } from './compose-scenario.js';
 import { prepareHostingFixture } from './hosting-fixture.js';
 import { exerciseHosting } from './hosting-scenario.js';
+import { exerciseBackups } from './backup-scenario.js';
+import { prepareBackupStoreFixture } from './backup-store-fixture.js';
+import type { NativeBackupTarget } from './backup-target-fixture.js';
+import { createGuestProbe } from '../../packages/remote/dist/index.js';
+import { createGuestReadiness } from '../../apps/control/src/guest-readiness.js';
+import { prepareGuestBootstrap } from '../../apps/control/src/guest-bootstrap.js';
+import type { GuestProvisioning } from '../../apps/control/src/advance-operation.js';
 
 /** Actual CLI, Graphile worker, gateway, native SSH/SFTP and owned Ubuntu guest. No paid provider. */
 export async function exerciseCustomerAccess(input: {
@@ -32,8 +39,13 @@ export async function exerciseCustomerAccess(input: {
   address: string;
   reboot: () => Promise<void>;
   vm: (args: string[], timeout?: number) => Promise<string>;
+  nativeTarget?: NativeBackupTarget;
 }) {
   const f = input.fixture;
+  if (input.nativeTarget) {
+    f.limits.maxMachines = 2;
+    f.setProvisionGuest(input.nativeTarget.provision);
+  }
   // OrbStack's host alias is an inbound forwarding address, not the host's SSH egress.
   // Observe one fresh TCP peer at the guest and fail if the fixture is not isolated.
   const probe = connect({ host: z.ipv4().parse(input.address), port: 22 });
@@ -90,12 +102,21 @@ export async function exerciseCustomerAccess(input: {
           controlUrl,
         })
       : undefined;
+  const backup = input.nativeTarget
+    ? await prepareBackupStoreFixture({
+        connection: input.connection,
+        provider: f.provider,
+        signer: input.controlSigner,
+        scratch: input.scratch,
+      })
+    : undefined;
   const app = createApp({
     db: input.connection.db,
     provider: f.provider.kind,
     catalog: f.catalog,
     limits: f.limits,
     access,
+    ...(backup ? { backups: backup.runtime.service } : {}),
     ...(hosting
       ? { hosting: { service: hosting.runtime.service, gatewayToken: hosting.gatewayToken } }
       : {}),
@@ -110,6 +131,26 @@ export async function exerciseCustomerAccess(input: {
       provider: f.provider,
       limits: f.limits,
       access,
+      ...(backup
+        ? {
+            backups: backup.runtime.service,
+            guest: {
+              kind: 'enabled',
+              resolveImage: () => Promise.resolve(f.image),
+              prepareBootstrap: (tx, context) =>
+                prepareGuestBootstrap(tx, {
+                  ...context,
+                  seal: f.seal,
+                  enrollmentUrl: f.enrollmentUrl,
+                }),
+              runtime: createGuestReadiness({
+                provider: f.provider,
+                signer: input.controlSigner,
+                probe: createGuestProbe(),
+              }),
+            } satisfies GuestProvisioning,
+          }
+        : {}),
       ...(hosting ? { hosting: hosting.runtime.service } : {}),
     }),
   });
@@ -122,7 +163,11 @@ export async function exerciseCustomerAccess(input: {
         ['apps/cli/dist/index.js', ...args],
         {
           env: { ...process.env, ACLD_CREDENTIALS: credentials },
-          timeout: process.env.AGENT_CLOUD_COMPOSE_SCENARIO === '1' || hosting ? 330_000 : 100_000,
+          timeout: backup
+            ? 960_000
+            : process.env.AGENT_CLOUD_COMPOSE_SCENARIO === '1' || hosting
+              ? 330_000
+              : 100_000,
           maxBuffer: 262_144,
         },
         (error, stdout, stderr) => {
@@ -194,10 +239,15 @@ export async function exerciseCustomerAccess(input: {
     await success(['login', '--server', controlUrl, '--token-stdin'], ownerFile, f.account.token);
     const policy = {
       ...f.account.principal.policy,
-      capabilities: ['machine:read', 'machine:exec', ...(hosting ? ['route:publish'] : [])],
+      capabilities: [
+        'machine:read',
+        'machine:exec',
+        ...(hosting ? ['route:publish'] : []),
+        ...(backup ? ['machine:create', 'backup:read', 'backup:create', 'backup:restore'] : []),
+      ],
       projects: { kind: 'selected', ids: [f.account.projectId] },
-      maxMachines: 0,
-      maxHourlyMicros: 0,
+      maxMachines: backup ? 2 : 0,
+      maxHourlyMicros: backup ? f.limits.maxHourlyMicros : 0,
     };
     const policyFile = join(input.scratch, 'ssh-policy.json');
     await writeFile(policyFile, JSON.stringify(policy));
@@ -218,6 +268,20 @@ export async function exerciseCustomerAccess(input: {
           ]),
         ),
       );
+    if (backup && input.nativeTarget) {
+      await exerciseBackups({
+        machine,
+        credentials: agentFile,
+        ownerCredentials: ownerFile,
+        scratch: input.scratch,
+        address: input.address,
+        vm: input.vm,
+        cli,
+        rotateWrappingKey: () => backup.rotateWrappingKey(),
+      });
+      await input.nativeTarget.cleanup();
+      return;
+    }
     if (hosting) {
       await exerciseHosting({
         machine,
@@ -303,6 +367,7 @@ export async function exerciseCustomerAccess(input: {
   } finally {
     available = true;
     await hosting?.stop();
+    await backup?.stop();
     await gateway.close();
     await worker.stop();
     if ('closeAllConnections' in server) server.closeAllConnections();

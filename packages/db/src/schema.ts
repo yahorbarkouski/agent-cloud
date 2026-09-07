@@ -722,3 +722,73 @@ export const domainChallenges = pgTable(
   },
   (t) => [index('domain_challenges_account').on(t.accountId, t.createdAt)],
 );
+
+export const backups = pgTable(
+  'backups',
+  {
+    id: text('id').primaryKey(),
+    accountId: text('account_id').notNull(),
+    projectId: text('project_id').notNull(),
+    machineId: text('machine_id').notNull(),
+    allocationId: text('allocation_id').notNull(),
+    grantId: text('grant_id').notNull(),
+    digest: text('digest').notNull(),
+    request: jsonb('request').notNull(),
+    record: jsonb('record').notNull(),
+    work: jsonb('work').notNull(),
+    reservedBytes: integer('reserved_bytes').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique().on(t.accountId, t.id),
+    foreignKey({
+      columns: [t.accountId, t.projectId],
+      foreignColumns: [projects.accountId, projects.id],
+    }),
+    foreignKey({
+      columns: [t.accountId, t.machineId],
+      foreignColumns: [machines.accountId, machines.id],
+    }),
+    foreignKey({
+      columns: [t.accountId, t.allocationId],
+      foreignColumns: [allocations.accountId, allocations.id],
+    }),
+    foreignKey({
+      columns: [t.accountId, t.grantId],
+      foreignColumns: [grants.accountId, grants.id],
+    }),
+    check('backup_reserved_bytes_bound', sql`${t.reservedBytes} BETWEEN 0 AND 1073741824`),
+    index('backups_account_time').on(t.accountId, t.createdAt),
+  ],
+);
+
+export const backupRestores = pgTable(
+  'backup_restores',
+  {
+    id: text('id').primaryKey(),
+    accountId: text('account_id').notNull(),
+    backupId: text('backup_id').notNull(),
+    machineId: text('machine_id').notNull().unique(),
+    grantId: text('grant_id').notNull(),
+    digest: text('digest').notNull(),
+    request: jsonb('request').notNull(),
+    record: jsonb('record').notNull(),
+    work: jsonb('work').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.accountId, t.backupId],
+      foreignColumns: [backups.accountId, backups.id],
+    }),
+    foreignKey({
+      columns: [t.accountId, t.machineId],
+      foreignColumns: [machines.accountId, machines.id],
+    }),
+    foreignKey({
+      columns: [t.accountId, t.grantId],
+      foreignColumns: [grants.accountId, grants.id],
+    }),
+    index('backup_restores_account_time').on(t.accountId, t.createdAt),
+  ],
+);

@@ -162,6 +162,13 @@
       "when": 1788815157399,
       "tag": "0022_hosting_routes",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1788820220864,
+      "tag": "0023_protected_backups",
+      "breakpoints": true
     }
   ]
 }
