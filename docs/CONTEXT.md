@@ -6,7 +6,7 @@ Updated 2026-09-07. The full agent-cloud goal remains active, excluding Stripe. 
 
 Customers bring Codex, Claude Code or another coding agent. We build their CLI/API/skills. TypeScript, ordinary Linux VMs, Compose, SSH and Hetzner. Keep costs low; no benchmarks, expensive plans, warm pool or automatic size/region fallback. Continued implementation, private GitHub pushes and Hetzner setup are authorized.
 
-Work only in `/Users/yahorbarkouski/Documents/ChatGPT/learning/agent-cloud`, standalone Git inside an unrelated workspace. Branch `yahor/agent-cloud`; private origin `https://github.com/yahorbarkouski/agent-cloud.git`. HEAD `357ad45` records the previous publication checkpoint, whose implementation `b72f992` passed Linux CI 34097317093. Current allocation/scheduling work is uncommitted and locally verified. The gpt-5.6-sol artifact/trail review found no blocker. Next: commit/push, exact-commit CI and documentation checkpoint.
+Work only in `/Users/yahorbarkouski/Documents/ChatGPT/learning/agent-cloud`, standalone Git inside an unrelated workspace. Branch `yahor/agent-cloud`; private origin `https://github.com/yahorbarkouski/agent-cloud.git`. Previous publication implementation `b72f992` passed Linux CI 34097317093. Allocation/scheduling implementation `ba42de027bab4928127a0d98979bb7c1989b9377` is committed and pushed. The gpt-5.6-sol artifact/trail review found no blocker. Exact-commit Linux CI 34101902876 passed in 3m41s, including frozen install, full checks, formatting, fresh PKI and all three native smokes with cleanup. Final documentation records that proof. Continue production configuration next.
 
 ## Implemented foundation
 
@@ -42,7 +42,7 @@ Selected public tree remains manifest `06e2977ed433a27bd2e91ac741a126cb791be99f4
 
 ## Local runtime and ownership
 
-Use `npm exec --yes --package=pnpm@12.3.4 -- pnpm <command>`. Target tests with `pnpm exec vitest run tests/file.test.ts`; `pnpm test -- file` forwards poorly. Node 24 intended; system 26.5, pnpm runtime 24.10.0. Adding the root Graphile dev dependency initially left an incomplete peer link; `pnpm install --fix-lockfile` repaired it. Exact-commit CI must prove frozen installation.
+Use `npm exec --yes --package=pnpm@12.3.4 -- pnpm <command>`. Target tests with `pnpm exec vitest run tests/file.test.ts`; `pnpm test -- file` forwards poorly. Node 24 intended; system 26.5, pnpm runtime 24.10.0. Adding the root Graphile dev dependency initially left an incomplete peer link; `pnpm install --fix-lockfile` repaired it. Exact-commit CI proved frozen installation.
 
 Docker/OrbStack healthy. PostgreSQL 17 project agent-cloud-dev at 127.0.0.1:55439, db/user agentcloud, password local-development-only. **API 29181** on 127.0.0.1:4319 and **worker 75505** run current simulated code. Inspect process command/cwd before stopping. `.env` uses simulation. `.local/admin.credentials.json` and `.local/hcloud-token` are 0600; never print credentials or put them in argv/guest metadata. No VM smoke is active. Docker inspection 1378c6 found only the persistent development CA/DB for this project, alongside unrelated containers that must not be touched.
 
@@ -54,6 +54,6 @@ Reviewer `/root/image_release_judge`, gpt-5.6-sol, reviewed pin/scheduling code 
 
 ## Next work
 
-1. Finish this checkpoint's review, commit/push and CI. Then configure mandatory production release selection, the runnable image worker and reconciliation cron, operator signing keys, reachable enrollment, certificate renewal/recovery and production GuestProvisioning. Optional internal image injection must not enable live admission.
+1. Extend the discriminated `readConfig` output in `apps/control/src/config.ts` with mandatory live release/key/enrollment settings, build the operator image worker factory and reconciliation cron, and wire the existing customer GuestProvisioning/enrollment ports in API/worker startup. Add production signing-key setup, reachable enrollment and certificate renewal/recovery before lifting either live gate. Optional internal image injection must not enable live admission.
 2. Run one bounded cheap Hetzner drill only after its full lifecycle and cleanup are ready. Last read-only inventory 04:17:12Z found 0 resources; refresh before paid mutations. Project agent-cloud-development 15945891, Ubuntu 24.04 x86 image 161547269. Historical CPX12 + IPv4 price of 27,798 gross micro-USD/hour and snapshot price of 24,477 gross micro-USD/GB-month are not current admission authority. No fallback or benchmark.
 3. Continue M2–M7: access/renewal/revocation, deployment/Compose/routes, recipes, backups and isolated restore, platform recovery, self-hosting and affordable failure drills. Passing image tests are not end-to-end application deployment.

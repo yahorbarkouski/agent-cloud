@@ -27,13 +27,13 @@ The evidence in `docs/research/m1-image-use-verification.json` is consistent wit
 - Migration session `986c26` reports 17 applied migrations with matching hashes, including migration 0016 at `569599f36dc2807f8c52acda47b867805a7bb8bcfaeeb09a524afd0146e8e048`.
 - Cleanup evidence `f2b982` reports zero active allocations, simulated VMs, simulated IPs, and open image builds.
 
-The latest `docs/DECISIONS.tsv` rows accurately describe pin retention across uncertain creates, explicit scheduling authorization, typed trust and transient errors, the database-clock correction, and the final local verification. `docs/CONTEXT.md` and `docs/PROGRESS.md` accurately keep the overall goal active and describe this checkpoint as uncommitted with exact-implementation CI pending. I found no unsupported completion or deployment claim in the reviewed artifacts.
+The latest `docs/DECISIONS.tsv` rows accurately describe pin retention across uncertain creates, explicit scheduling authorization, typed trust and transient errors, the database-clock correction, local verification, and exact-commit Linux verification. `docs/CONTEXT.md` and `docs/PROGRESS.md` accurately keep the overall goal active while recording implementation commit `ba42de027bab4928127a0d98979bb7c1989b9377` and successful Linux CI run `34101902876`. The saved CI result identifies the same head commit; the job completed successfully in 3m41s and includes the 339-test/31-file check, formatting, PKI for both subjects, SSH for both subjects, composed enrollment, and cleanup. I found no unsupported completion or deployment claim in the reviewed artifacts.
 
 Migration 0016 has been applied to the base database and its recorded hash matches the current file. It should consequently remain immutable; any later SQL correction needs a follow-up migration.
 
 ## Remaining limits and attention flags
 
-- The implementation commit and exact-head Linux CI were still pending in the reviewed evidence. Local results support the checkpoint, but the trail must not claim committed or CI-verified status until those identifiers are recorded.
+- Implementation commit `ba42de027bab4928127a0d98979bb7c1989b9377` is pushed, and exact-head Linux CI run `34101902876` passed. This checkpoint's local and CI evidence is complete.
 - Production API and worker entry points remain gated. The optional resolver used by native and protocol fixtures is acceptable for those tests, but production admission must require trusted release configuration and must not fall back to an unpublished fixture image.
 - Provider behavior in this checkpoint is covered through protocol fixtures rather than paid Hetzner creates, boots, snapshot retention, and deletion. Native enrollment proves the guest identity path locally; it does not prove initial boot or retained-image behavior on the production provider.
 - Retention scheduling is exercised through task and state transitions, not a real multiday expiration run. An unknown create can deliberately retain its pin and associated snapshot capacity until observation or operator recovery resolves it; that is the safe behavior but remains an operational recovery obligation.

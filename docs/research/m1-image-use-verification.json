@@ -1,7 +1,7 @@
 {
   "recordedAt": "2026-09-07T08:36:10.306694+00:00",
   "checkpoint": "M1 allocation image pins and durable image scheduling",
-  "implementationCommit": null,
+  "implementationCommit": "ba42de027bab4928127a0d98979bb7c1989b9377",
   "fullGoalStatus": "active; M1 and M2\u2013M7 remain open; Stripe excluded",
   "cloudResourcesCreated": 0,
   "verification": {
@@ -157,7 +157,24 @@
       "open_image_builds": 0
     },
     "ci": {
-      "status": "pending"
+      "status": "completed",
+      "conclusion": "success",
+      "runId": 34101902876,
+      "headSha": "ba42de027bab4928127a0d98979bb7c1989b9377",
+      "url": "https://github.com/yahorbarkouski/agent-cloud/actions/runs/34101902876",
+      "duration": "3m41s",
+      "checks": [
+        "frozen install",
+        "typecheck",
+        "lint",
+        "339 tests in 31 files",
+        "formatting",
+        "fresh Smallstep setup",
+        "PKI smoke",
+        "SSH smoke",
+        "enrollment smoke",
+        "cleanup"
+      ]
     },
     "formatting": {
       "command": "pnpm format:check",
@@ -202,6 +219,6 @@
   "review": {
     "model": "gpt-5.6-sol",
     "report": "docs/research/m1-image-use-review.md",
-    "result": "no blocking issue in local checkpoint; commit and CI pending"
+    "result": "No blocking issue; implementation commit and successful exact-commit CI now recorded."
   }
 }
