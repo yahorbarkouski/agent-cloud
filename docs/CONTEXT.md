@@ -48,7 +48,7 @@ Read-only `PROVIDER_CURRENCY=USD HCLOUD_SERVER_TYPE_SMALL=cpx12 pnpm hetzner:che
 
 ## Active image publication work
 
-Sanitation checkpoint 4653f79 and Linux CI 34075101498 are complete. Current HEAD c802b3a is the pushed documentation checkpoint. New image provenance/release implementation is dirty and uncommitted. No migration or base API/worker changes in this slice.
+Sanitation checkpoint 4653f79 and Linux CI 34075101498 are complete. Image provenance/release implementation b891c716bc2ff88811ae7bcff778897c15673613 is committed and pushed. Linux CI 34078153918 passed in 2m6s with frozen install, 167-test full check, formatting, fresh PKI setup, all three native smokes and cleanup. A documentation-only checkpoint records those results. No migration or base API/worker changes in this slice.
 
 Selected operator image design in docs/architecture/image-release.md. Three arena candidates converged on sibling platform ownership; parent and gpt-5.6-sol judge selected A with B's acyclic input chain and provisioned initial host key, C's pure planner/recovery/promotion. Reject fake customer allocations, TOFU, raw cloud-init/private keys in journal and all type/region fallback. Research and current price evidence are in docs/research/image-release-\*.md and hetzner-image-catalog-check-2026-09-07.json.
 
@@ -68,9 +68,8 @@ Validation at this live handoff:
 
 Next actions:
 
-1. Local verification is complete. Reviewer image_release_judge on gpt-5.6-sol completed the final artifact/trail audit with no local code blocker. Commit/push this coherent checkpoint and verify Linux CI. Update this context with actual commit/run identifiers. Do not repeat completed local tests without a new change or finding.
-2. Continue operator image admission, SQL build/effect/resource journal, bounded gross storage/VM budgets, provider image/access transport, isolated first SSH host trust, unknown/duplicate reconciliation and cleanup. Platform verifier bootstrap must not fabricate a customer allocation. Signed release consumption must verify current provider ownership and exact snapshot boot before promotion. No paid resource yet.
-3. Finish certificate renewal/operator recovery and production GuestProvisioning wiring, then one bounded cheap Hetzner build/boot/cleanup drill. No expensive type/region fallback.
-4. M2 browser/device login and customer access; M3 transfer/durable commands/Compose/routes; M4 recipes/off-VM backups/isolated restore; M5 usage/traffic/alerts/cost limits; M6 self-hosting; M7 end-to-end/failure proof. Keep goal active until the full product works.
+1. Local and Linux CI verification, final artifact/trail review and implementation push are complete. Do not repeat completed checks without a new change or finding. Continue operator image admission, SQL build/effect/resource journal, bounded gross storage/VM budgets, provider image/access transport, isolated first SSH host trust, unknown/duplicate reconciliation and cleanup. Platform verifier bootstrap must not fabricate a customer allocation. Signed release consumption must verify current provider ownership and exact snapshot boot before promotion. No paid resource yet.
+2. Finish certificate renewal/operator recovery and production GuestProvisioning wiring, then one bounded cheap Hetzner build/boot/cleanup drill. No expensive type/region fallback.
+3. M2 browser/device login and customer access; M3 transfer/durable commands/Compose/routes; M4 recipes/off-VM backups/isolated restore; M5 usage/traffic/alerts/cost limits; M6 self-hosting; M7 end-to-end/failure proof. Keep goal active until the full product works.
 
 Read PROGRESS and the linked research artifacts for historical evidence instead of rerunning completed checkpoints. Never use orb stop without an explicit owned machine name. Sanitation receipts authorize stopping that source before cloning; starting it during diagnostics invalidates the proof.
