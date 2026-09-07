@@ -1,5 +1,5 @@
 {
-  "status": "local_verification_passed",
+  "status": "verified_locally_and_on_hetzner",
   "baselineCommit": "9913342643ae10f8dadbd400cd0a1270cf902ba0",
   "causeEvidence": "m1-hetzner-image-drill.json",
   "review": "m1-snapshot-durability-review.md",
@@ -66,7 +66,7 @@
     "status": "passed",
     "log": ".local/snapshot-durability-checkpoint-format-check.log"
   },
-  "positiveHetznerProof": "pending",
+  "positiveHetznerProof": "passed; m1-hetzner-durability-drill.json",
   "intermediate": {
     "full": {
       "status": "passed",
@@ -146,5 +146,15 @@
     "lint": "passed",
     "typecheckLog": ".local/snapshot-durability-fixture-typecheck.log",
     "lintLog": ".local/snapshot-durability-fixture-lint.log"
+  },
+  "implementation": "7bb3497677fb68867f7ba5cf5682a608a1d94814",
+  "ci": {
+    "runId": 34111421868,
+    "status": "completed",
+    "conclusion": "success",
+    "commit": "7bb3497677fb68867f7ba5cf5682a608a1d94814",
+    "url": "https://github.com/yahorbarkouski/agent-cloud/actions/runs/34111421868",
+    "startedAt": "2026-09-07T10:26:09Z",
+    "completedAt": "2026-09-07T10:30:31Z"
   }
 }

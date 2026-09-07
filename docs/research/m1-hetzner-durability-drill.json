@@ -1,0 +1,247 @@
+{
+  "buildId": "de7d3f33-0f3e-4512-afc6-d163b1cd7359",
+  "implementation": "7bb3497677fb68867f7ba5cf5682a608a1d94814",
+  "status": "publication_verified_and_cleaned",
+  "startedAt": "2026-09-07T10:32:08.648Z",
+  "deadlineAt": "2026-09-07T12:01:39.642Z",
+  "budget": {
+    "currency": "USD",
+    "maxVmGrossMicros": 120000,
+    "maxSnapshotMonthlyGrossMicros": 1000000,
+    "maxSnapshotGb": 40
+  },
+  "manifestDigest": "61b1e3972798d86ebba0d8d104912aa9a9158d98e1f91ef76bb3d3ac8ec62329",
+  "ci": {
+    "runId": 34111421868,
+    "status": "completed",
+    "conclusion": "success",
+    "commit": "7bb3497677fb68867f7ba5cf5682a608a1d94814",
+    "url": "https://github.com/yahorbarkouski/agent-cloud/actions/runs/34111421868",
+    "startedAt": "2026-09-07T10:26:09Z",
+    "completedAt": "2026-09-07T10:30:31Z"
+  },
+  "builderWork": {
+    "kind": "recorded",
+    "serverId": "164935711",
+    "effectId": "dae92353-0bc1-4f8a-a5c7-e8d0c52a18af",
+    "progress": {
+      "kind": "sanitized",
+      "installation": {
+        "kind": "builder",
+        "builderId": "de7d3f33-0f3e-4512-afc6-d163b1cd7359",
+        "manifestDigest": "61b1e3972798d86ebba0d8d104912aa9a9158d98e1f91ef76bb3d3ac8ec62329",
+        "machineId": "86becca1555c48168a26f455751a495b"
+      },
+      "sanitation": {
+        "kind": "sanitized",
+        "builderId": "de7d3f33-0f3e-4512-afc6-d163b1cd7359",
+        "manifestDigest": "61b1e3972798d86ebba0d8d104912aa9a9158d98e1f91ef76bb3d3ac8ec62329"
+      }
+    },
+    "createdAt": "2026-09-07T10:32:25.104Z"
+  },
+  "shutdown": {
+    "effectId": "9cca062d-c91e-492b-bf62-6410bd3d135b",
+    "resolution": {
+      "kind": "confirmed",
+      "at": "2026-09-07T10:33:47.932Z"
+    },
+    "action": {
+      "id": 653814288242272,
+      "command": "shutdown_server",
+      "started": "2026-09-07T10:33:32Z",
+      "finished": "2026-09-07T10:33:33Z",
+      "progress": 100,
+      "status": "success",
+      "resources": [
+        {
+          "id": 164935711,
+          "type": "server"
+        }
+      ],
+      "error": null
+    }
+  },
+  "verification": {
+    "kind": "verified",
+    "result": {
+      "serverId": "164936376",
+      "effectId": "765558e5-9afa-431d-a5e9-0911f21a58ce",
+      "snapshotId": "429149547",
+      "runtime": {
+        "version": 2,
+        "proof": {
+          "version": 2,
+          "subject": {
+            "kind": "image_verifier",
+            "id": "de7d3f33-0f3e-4512-afc6-d163b1cd7359"
+          },
+          "imageVersion": "dev-d71c36cede486069faa8e373",
+          "manifestDigest": "61b1e3972798d86ebba0d8d104912aa9a9158d98e1f91ef76bb3d3ac8ec62329",
+          "sshHostPublicKey": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINPrUImdcr7NYeZECDlmOnXFQ2s1n89kOX+dVAu2ImIV",
+          "tlsCsr": "-----BEGIN CERTIFICATE REQUEST-----\nMIIBcTCCARcCAQAwUTFPME0GA1UEAxNGdmVyaWZ5LWRlN2QzZjMzLTBmM2UtNDUx\nMi1hZmM2LWQxNjNiMWNkNzM1OS5ndWVzdC5hZ2VudC1jbG91ZC5pbnRlcm5hbDBZ\nMBMGByqGSM49AgEGCCqGSM49AwEHA0IABEHGlWeqDXJXn7xQ95l2PZ5780F3JiQB\njxHsCFeo34B5adFum9JLn0VwfOK64pmacw+5RGYu6Vs6onmMbB3sUcOgZDBiBgkq\nhkiG9w0BCQ4xVTBTMFEGA1UdEQRKMEiCRnZlcmlmeS1kZTdkM2YzMy0wZjNlLTQ1\nMTItYWZjNi1kMTYzYjFjZDczNTkuZ3Vlc3QuYWdlbnQtY2xvdWQuaW50ZXJuYWww\nCgYIKoZIzj0EAwIDSAAwRQIhAOalhZjosusjo7XrnZ+Re5UuQOKaCCxV9qJeNYLk\nj7KqAiA6vfrbZgMSWQQ7BZNqafgU5tAvzsyCIYvPWQZkVtz0Jg==\n-----END CERTIFICATE REQUEST-----\n"
+        },
+        "manifest": {
+          "format": 2,
+          "publicInputsDigest": "d71c36cede486069faa8e373ba98dff20a11677d63660066b8db620bd601cc8d",
+          "version": "dev-d71c36cede486069faa8e373",
+          "architecture": "x86",
+          "components": {
+            "node": "24.20.0",
+            "docker": "29.8.0",
+            "compose": "5.5.1",
+            "caddy": "2.11.4",
+            "step": "0.30.6",
+            "guestctlSha256": "f498affb4e6e02fc68c39be5b897ed9034cc1e2bc4ecc7e7e28107a8d3e758fb"
+          },
+          "trust": {
+            "sshUserCa": "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBCSi41rTBm4+Scvh0gGv/6iv5A/8qwTXWBy3i3bcRUyOZEAqifVzBJrSXikhzt39POUKIp0ChRe7lZ4OCom06pM=",
+            "sshHostCa": "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBGZi/bsMnnm+Wp2XZrYIimRHnRRiZL+NozgeREE4jAf6BG+75rFZUBJks8T5DktNU0/L8+O2l+AXFLwOOsh6NI0=",
+            "tlsRoot": "-----BEGIN CERTIFICATE-----\nMIIB3DCCAYGgAwIBAgIQI1MgeX9szo+oIQsuZeFMxDAKBggqhkjOPQQDAjBMMSAw\nHgYDVQQKExdhZ2VudC1jbG91ZC1kZXZlbG9wbWVudDEoMCYGA1UEAxMfYWdlbnQt\nY2xvdWQtZGV2ZWxvcG1lbnQgUm9vdCBDQTAeFw0yNjA5MDYyMjE3NTlaFw0zNjA5\nMDMyMjE3NTlaMEwxIDAeBgNVBAoTF2FnZW50LWNsb3VkLWRldmVsb3BtZW50MSgw\nJgYDVQQDEx9hZ2VudC1jbG91ZC1kZXZlbG9wbWVudCBSb290IENBMFkwEwYHKoZI\nzj0CAQYIKoZIzj0DAQcDQgAEypcFC7iLtgZWlVYiEhRmt3rPaTtfGDtlt+Vy0YhU\noAS+gvCuAmY7CDNP/5UkQLf4CXgNSP83ROC3xtm1l+W1paNFMEMwDgYDVR0PAQH/\nBAQDAgEGMBIGA1UdEwEB/wQIMAYBAf8CAQEwHQYDVR0OBBYEFJJ97bMAQEjvsvLK\nZzhowiGxoazDMAoGCCqGSM49BAMCA0kAMEYCIQDdEuKc1B0qBs/WfqF5LUWbaCHq\nRFH59oBRuIz9wE3MuQIhAI0EjUiPBS5bTCktIdI0BdOE/Nw7G6PpBqyuxuzcBEo7\n-----END CERTIFICATE-----\n"
+          }
+        },
+        "architecture": "x86",
+        "bootId": "245d83b9-829a-4c73-a9ca-5bda98a9eed1",
+        "checks": {
+          "node": {
+            "kind": "ok",
+            "version": "24.20.0"
+          },
+          "docker": {
+            "kind": "ok",
+            "version": "29.8.0"
+          },
+          "compose": {
+            "kind": "ok",
+            "version": "5.5.1"
+          },
+          "caddy": {
+            "kind": "ok",
+            "version": "2.11.4"
+          },
+          "step": {
+            "kind": "ok",
+            "version": "0.30.6"
+          },
+          "disk": {
+            "kind": "ok",
+            "availableBytes": 36123299840,
+            "totalBytes": 39956590592
+          },
+          "proxy": {
+            "kind": "ok",
+            "subject": {
+              "kind": "image_verifier",
+              "id": "de7d3f33-0f3e-4512-afc6-d163b1cd7359"
+            },
+            "imageVersion": "dev-d71c36cede486069faa8e373"
+          }
+        },
+        "machineId": "3f259497516a4b77afa3d78fe2234819"
+      },
+      "verifiedAt": "2026-09-07T10:34:52.354Z"
+    }
+  },
+  "publication": {
+    "kind": "published",
+    "selectionVerifiedAt": "2026-09-07T10:35:24.373Z",
+    "release": "m1-hetzner-durability-release.json",
+    "snapshotId": "429149547"
+  },
+  "resources": [
+    {
+      "role": "access_firewall",
+      "ref": {
+        "kind": "firewall",
+        "id": "11586440"
+      },
+      "state": "absent",
+      "effectId": "4e8f8ae4-5b0a-45c4-96e6-4094a7f7ddee"
+    },
+    {
+      "role": "builder_ip",
+      "ref": {
+        "kind": "primary_ip",
+        "id": "148449666"
+      },
+      "state": "absent",
+      "effectId": "dd857455-6d9a-4bb5-9cf0-5d652019c35d"
+    },
+    {
+      "role": "verifier_ip",
+      "ref": {
+        "kind": "primary_ip",
+        "id": "148449870"
+      },
+      "state": "absent",
+      "effectId": "8a76b59a-a92c-499a-a11e-8e453f3cdfd5"
+    },
+    {
+      "role": "builder",
+      "ref": {
+        "kind": "server",
+        "id": "164935711"
+      },
+      "state": "absent",
+      "effectId": "dae92353-0bc1-4f8a-a5c7-e8d0c52a18af"
+    },
+    {
+      "role": "verifier",
+      "ref": {
+        "kind": "server",
+        "id": "164936376"
+      },
+      "state": "absent",
+      "effectId": "765558e5-9afa-431d-a5e9-0911f21a58ce"
+    },
+    {
+      "role": "snapshot",
+      "ref": {
+        "kind": "snapshot",
+        "id": "429149547"
+      },
+      "state": "absent",
+      "effectId": "35856919-6b6b-43f8-8ba4-8bc81f76b3a9"
+    },
+    {
+      "role": "access_key",
+      "ref": {
+        "kind": "ssh_key",
+        "id": "118462990"
+      },
+      "state": "absent",
+      "effectId": "a1ff5448-53ab-41ea-a63f-6ef3956caac7"
+    }
+  ],
+  "cleanupConfirmed": true,
+  "cleanup": {
+    "state": {
+      "kind": "cleaned",
+      "at": "2026-09-07T10:35:25.733Z"
+    },
+    "accessRemovedAt": "2026-09-07T10:35:23.762Z",
+    "providerInventory": {
+      "at": "2026-09-07T10:37:06.033Z",
+      "resources": {
+        "servers": 0,
+        "primaryIps": 0,
+        "snapshots": 0,
+        "firewalls": 0,
+        "sshKeys": 0
+      }
+    },
+    "replay": "passed",
+    "checks": {
+      "historicalSignatureValid": true,
+      "selectionAfterCleanup": "permission_denied",
+      "exactSnapshotAbsent": true,
+      "openBuilds": 0,
+      "localAccessAbsent": true,
+      "checkedAt": "2026-09-07T10:38:05.889Z"
+    }
+  },
+  "limits": [
+    "Historical signed release is audit evidence; its snapshot was deleted and selection now rejects it",
+    "This proves the image lifecycle on Hetzner, not customer application deployment, renewal or backups"
+  ]
+}

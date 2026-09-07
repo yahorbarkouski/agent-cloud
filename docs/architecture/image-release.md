@@ -1,6 +1,6 @@
 # Image publication
 
-Status: provenance, operator journals, builder/verifier lifecycle, retained cleanup, signed publication, allocation pins and durable Graphile scheduling are implemented. The configured image factory connects production API/worker ports and credential-independent recovery. Local and native protocol proofs pass; the paid Hetzner drill and customer activation remain open. See [operator runtime](operator-runtime.md).
+Status: provenance, operator journals, builder/verifier lifecycle, retained cleanup, signed publication, allocation pins and durable Graphile scheduling are implemented. The configured image factory connects production API/worker ports and credential-independent recovery. Local and native protocol proofs pass. The corrected paid Hetzner drill passed signed publication/selection and full cleanup; customer activation remains open. See [operator runtime](operator-runtime.md).
 
 An operator build owns its temporary machines, access resources and snapshot. Customer allocations retain their existing journal and budget rules. Every external mutation has a durable intent; a lost response requires reconciliation before another create. The build record remains useful even when credentials, SSH access or the operator process disappear.
 
@@ -89,13 +89,13 @@ Admission atomically queues only deadline cleanup. An early or duplicate job for
 
 `createImageTasks` supplies `advance_image_build` and `reconcile_image_builds`. Graphile persists jobs and retries ordinary errors, including filesystem failure after provider cleanup. Reconciliation queues every unfinished build and cleaned builds whose access-removal marker is still missing. Cleanup remains available after the build deadline and after lost provider responses. `createTasks` can compose these ports with customer guest provisioning; the image reconciliation cron must be registered by the production worker factory.
 
-Production admission must make release selection mandatory; optional injection currently supports local unpublished-image fixtures. The API and worker entrypoints still reject live activation. Operator image/signing-key configuration, a runnable image worker with its reconciliation cron, reachable enrollment, certificate renewal/recovery and a bounded real Hetzner drill remain open.
+Production admission must make release selection mandatory; optional injection currently supports local unpublished-image fixtures. The API and worker entrypoints still reject live activation. Operator configuration, the image worker/reconciliation cron and publicly reachable enrollment passed a bounded real Hetzner drill. Certificate renewal/recovery and mandatory customer runtime release selection remain open. The drill snapshot was deleted after publication and cannot be reused; see [live evidence](../research/m1-hetzner-durability-drill.json).
 
 ## Design comparison
 
 All three candidates converged on a sibling operator journal. Parent scores by rubric criteria 1–6 were A: 3/5/5/2/3/4 = 22, B: 5/4/3/2/3/4 = 21, C: 2/5/4/1/3/5 = 20. The independent judge scored A 24, B 22 and C 22 and selected A. The parent initially favored B's authenticated first connection, then accepted A's clearer spending and ownership model after comparing the complete designs. [Judge rationale](../research/image-release-review.md).
 
-Use A as the base. Graft B's acyclic input chain and injected disposable host key, correcting its plaintext journal contradiction. Graft C's pure planner, interruption matrix and transactional promotion. Reject A/C first-seen host-key trust, B's same-price fallback, C's manifest hash cycle and fake verifier allocation, and optional-field state bags in all three sketches. There were no dropouts. Runtime verification is implemented and locally verified; real provider boot proof remains open.
+Use A as the base. Graft B's acyclic input chain and injected disposable host key, correcting its plaintext journal contradiction. Graft C's pure planner, interruption matrix and transactional promotion. Reject A/C first-seen host-key trust, B's same-price fallback, C's manifest hash cycle and fake verifier allocation, and optional-field state bags in all three sketches. There were no dropouts. Runtime verification is implemented and passed locally and on a fresh Hetzner verifier. This proves image boot and publication, not customer application deployment.
 
 ## Implementation order
 

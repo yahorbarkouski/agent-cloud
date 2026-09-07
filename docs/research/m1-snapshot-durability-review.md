@@ -51,3 +51,11 @@ Final local evidence is complete. `docs/research/m1-snapshot-durability-verifica
 Final documentation formatting, an exact implementation commit, and exact-head CI remain pending. More importantly, only a fresh corrected Hetzner build through sanitation, graceful observed shutdown, snapshot, verifier enrollment/runtime, retained publication, and final cancellation will prove this durability change on the target provider. The failed drill and rescue diagnosis do not supply that positive proof.
 
 Customer release wiring, certificate renewal, backups, and the broader product remain open. The existing hard-power endpoint elsewhere in the general customer-machine adapter is outside this image-source snapshot path and should not be described as part of this correction.
+
+## Corrected Hetzner drill follow-up
+
+Reviewed by gpt-5.6-sol on 2026-09-07. Read-only artifact/trail audit of the final drill, signed release, verification ledger and referenced private evidence. No transcript directory was supplied and the reviewer did not run provider operations.
+
+No evidence or cleanup blocker found. Build, release and manifest identities align; observed graceful shutdown precedes snapshot creation; verifier evidence binds the fresh server and image and passes runtime checks. Signed selection precedes cancellation. All seven resources end absent, independent inventory is zero, historical signature verification succeeds, current selection refuses the cleaned release, cleanup replay passes and local access is absent. The in-progress CONTEXT and decision trail were updated after this review. The failed first drill remains separate.
+
+This proves one corrected image lifecycle on Hetzner. Customer application deployment, renewal and backups are not covered.

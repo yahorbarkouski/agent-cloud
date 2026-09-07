@@ -1,0 +1,197 @@
+{
+  "payload": {
+    "format": 1,
+    "buildId": "de7d3f33-0f3e-4512-afc6-d163b1cd7359",
+    "issuedAt": "2026-09-07T10:35:23.836Z",
+    "retainUntil": "2026-09-07T22:22:49.378Z",
+    "manifest": {
+      "format": 2,
+      "publicInputsDigest": "d71c36cede486069faa8e373ba98dff20a11677d63660066b8db620bd601cc8d",
+      "version": "dev-d71c36cede486069faa8e373",
+      "architecture": "x86",
+      "components": {
+        "node": "24.20.0",
+        "docker": "29.8.0",
+        "compose": "5.5.1",
+        "caddy": "2.11.4",
+        "step": "0.30.6",
+        "guestctlSha256": "f498affb4e6e02fc68c39be5b897ed9034cc1e2bc4ecc7e7e28107a8d3e758fb"
+      },
+      "trust": {
+        "sshUserCa": "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBCSi41rTBm4+Scvh0gGv/6iv5A/8qwTXWBy3i3bcRUyOZEAqifVzBJrSXikhzt39POUKIp0ChRe7lZ4OCom06pM=",
+        "sshHostCa": "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBGZi/bsMnnm+Wp2XZrYIimRHnRRiZL+NozgeREE4jAf6BG+75rFZUBJks8T5DktNU0/L8+O2l+AXFLwOOsh6NI0=",
+        "tlsRoot": "-----BEGIN CERTIFICATE-----\nMIIB3DCCAYGgAwIBAgIQI1MgeX9szo+oIQsuZeFMxDAKBggqhkjOPQQDAjBMMSAw\nHgYDVQQKExdhZ2VudC1jbG91ZC1kZXZlbG9wbWVudDEoMCYGA1UEAxMfYWdlbnQt\nY2xvdWQtZGV2ZWxvcG1lbnQgUm9vdCBDQTAeFw0yNjA5MDYyMjE3NTlaFw0zNjA5\nMDMyMjE3NTlaMEwxIDAeBgNVBAoTF2FnZW50LWNsb3VkLWRldmVsb3BtZW50MSgw\nJgYDVQQDEx9hZ2VudC1jbG91ZC1kZXZlbG9wbWVudCBSb290IENBMFkwEwYHKoZI\nzj0CAQYIKoZIzj0DAQcDQgAEypcFC7iLtgZWlVYiEhRmt3rPaTtfGDtlt+Vy0YhU\noAS+gvCuAmY7CDNP/5UkQLf4CXgNSP83ROC3xtm1l+W1paNFMEMwDgYDVR0PAQH/\nBAQDAgEGMBIGA1UdEwEB/wQIMAYBAf8CAQEwHQYDVR0OBBYEFJJ97bMAQEjvsvLK\nZzhowiGxoazDMAoGCCqGSM49BAMCA0kAMEYCIQDdEuKc1B0qBs/WfqF5LUWbaCHq\nRFH59oBRuIz9wE3MuQIhAI0EjUiPBS5bTCktIdI0BdOE/Nw7G6PpBqyuxuzcBEo7\n-----END CERTIFICATE-----\n"
+      }
+    },
+    "inputs": {
+      "format": 1,
+      "files": [
+        {
+          "path": "artifacts.json",
+          "sha256": "1fcc1eb5be252e96a5513cae4ad975fa8e83911b6b9bb4f825dfdbad2218ef17",
+          "bytes": 2429
+        },
+        {
+          "path": "artifacts/caddy.tar.gz",
+          "sha256": "527fbf917c39189a1e3b31d34fa955601680b2d5c8055d2a87b8b9588dec7bb9",
+          "bytes": 17238873
+        },
+        {
+          "path": "artifacts/containerd.io_2.3.4-2~ubuntu.24.04~noble_amd64.deb",
+          "sha256": "827e6809232311db8ae05fb8e0af7418148edeadc4c88c5a4360ca583f6e55ec",
+          "bytes": 22403192
+        },
+        {
+          "path": "artifacts/docker-buildx-plugin_0.37.0-1~ubuntu.24.04~noble_amd64.deb",
+          "sha256": "3e8923c8ad5b93650a28358e3f092aef3b812e83dd54c5d470e61399ac11714b",
+          "bytes": 17265164
+        },
+        {
+          "path": "artifacts/docker-ce-cli_29.8.0-1~ubuntu.24.04~noble_amd64.deb",
+          "sha256": "2b7468415014fecb1aef1250f5f493293d999593d6862af93e66412e891c7ac7",
+          "bytes": 17554044
+        },
+        {
+          "path": "artifacts/docker-ce_29.8.0-1~ubuntu.24.04~noble_amd64.deb",
+          "sha256": "0cd9936d80aade3f6a12c811b83f0f8e626d98821ae7f51418eec4c320632780",
+          "bytes": 24326496
+        },
+        {
+          "path": "artifacts/docker-compose-plugin_5.5.1-1~ubuntu.24.04~noble_amd64.deb",
+          "sha256": "82ff966149ca2c62e1a4e1fdebdf65fda8c3a8bea80b32deda6903b40afc2347",
+          "bytes": 8012228
+        },
+        {
+          "path": "artifacts/node.tar.xz",
+          "sha256": "2f2c0da162318f0de47665410c7c8c2ed3d36c8f3105de4bbc61176c70a7cbf2",
+          "bytes": 31838904
+        },
+        {
+          "path": "artifacts/step.tar.gz",
+          "sha256": "e44a5dc5f880a694b24a0f2941a69a81b0bc6ee053170fdfde18453d4d5816de",
+          "bytes": 14670500
+        },
+        {
+          "path": "guest-inspect.sudoers",
+          "sha256": "fed6258be59d1dbb0f804e2b634ee6c559a0b76afc6f5bee889757f99f27baaf",
+          "bytes": 166
+        },
+        {
+          "path": "guestctl.mjs",
+          "sha256": "f498affb4e6e02fc68c39be5b897ed9034cc1e2bc4ecc7e7e28107a8d3e758fb",
+          "bytes": 814956
+        },
+        {
+          "path": "install.sh",
+          "sha256": "e833b5a2053bf4debc261aad6fcfe5ca40cb256c639ea29e5d59f96e2a6a3556",
+          "bytes": 5368
+        },
+        {
+          "path": "sshd_config",
+          "sha256": "20cf1ec9aa257caf4f34cfff42c36d9d5a10352099d34472ebb2cf8782a79660",
+          "bytes": 526
+        },
+        {
+          "path": "systemd/agent-cloud-enroll.service",
+          "sha256": "68ae41a68b7a02f1f4d14d967eaad0aae55524d8b50d4f5485435888635d5d7d",
+          "bytes": 607
+        },
+        {
+          "path": "systemd/agent-cloud-proxy.service",
+          "sha256": "dc4e7f449a607f9c2babe71837ddef2e4941b0c724cfa8a96bc24a47c0f56031",
+          "bytes": 882
+        },
+        {
+          "path": "trust.json",
+          "sha256": "dde1ca94f0bf03dd012f1539515c8ac7c8681e531cb28260aac510130068edc7",
+          "bytes": 1081
+        }
+      ]
+    },
+    "artifacts": {
+      "architecture": "x86",
+      "node": {
+        "version": "24.20.0",
+        "file": "node.tar.xz",
+        "url": "https://nodejs.org/dist/v24.20.0/node-v24.20.0-linux-x64.tar.xz",
+        "sha256": "2f2c0da162318f0de47665410c7c8c2ed3d36c8f3105de4bbc61176c70a7cbf2"
+      },
+      "step": {
+        "version": "0.30.6",
+        "file": "step.tar.gz",
+        "url": "https://github.com/smallstep/cli/releases/download/v0.30.6/step_linux_0.30.6_amd64.tar.gz",
+        "sha256": "e44a5dc5f880a694b24a0f2941a69a81b0bc6ee053170fdfde18453d4d5816de"
+      },
+      "caddy": {
+        "version": "2.11.4",
+        "file": "caddy.tar.gz",
+        "url": "https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_linux_amd64.tar.gz",
+        "sha256": "527fbf917c39189a1e3b31d34fa955601680b2d5c8055d2a87b8b9588dec7bb9"
+      },
+      "dockerVersion": "29.8.0",
+      "composeVersion": "5.5.1",
+      "debs": [
+        {
+          "version": "5:29.8.0-1~ubuntu.24.04~noble",
+          "file": "docker-ce_29.8.0-1~ubuntu.24.04~noble_amd64.deb",
+          "url": "https://download.docker.com/linux/ubuntu/dists/noble/pool/stable/amd64/docker-ce_29.8.0-1~ubuntu.24.04~noble_amd64.deb",
+          "sha256": "0cd9936d80aade3f6a12c811b83f0f8e626d98821ae7f51418eec4c320632780",
+          "name": "docker-ce"
+        },
+        {
+          "version": "5:29.8.0-1~ubuntu.24.04~noble",
+          "file": "docker-ce-cli_29.8.0-1~ubuntu.24.04~noble_amd64.deb",
+          "url": "https://download.docker.com/linux/ubuntu/dists/noble/pool/stable/amd64/docker-ce-cli_29.8.0-1~ubuntu.24.04~noble_amd64.deb",
+          "sha256": "2b7468415014fecb1aef1250f5f493293d999593d6862af93e66412e891c7ac7",
+          "name": "docker-ce-cli"
+        },
+        {
+          "version": "5.5.1-1~ubuntu.24.04~noble",
+          "file": "docker-compose-plugin_5.5.1-1~ubuntu.24.04~noble_amd64.deb",
+          "url": "https://download.docker.com/linux/ubuntu/dists/noble/pool/stable/amd64/docker-compose-plugin_5.5.1-1~ubuntu.24.04~noble_amd64.deb",
+          "sha256": "82ff966149ca2c62e1a4e1fdebdf65fda8c3a8bea80b32deda6903b40afc2347",
+          "name": "docker-compose-plugin"
+        },
+        {
+          "version": "0.37.0-1~ubuntu.24.04~noble",
+          "file": "docker-buildx-plugin_0.37.0-1~ubuntu.24.04~noble_amd64.deb",
+          "url": "https://download.docker.com/linux/ubuntu/dists/noble/pool/stable/amd64/docker-buildx-plugin_0.37.0-1~ubuntu.24.04~noble_amd64.deb",
+          "sha256": "3e8923c8ad5b93650a28358e3f092aef3b812e83dd54c5d470e61399ac11714b",
+          "name": "docker-buildx-plugin"
+        },
+        {
+          "version": "2.3.4-2~ubuntu.24.04~noble",
+          "file": "containerd.io_2.3.4-2~ubuntu.24.04~noble_amd64.deb",
+          "url": "https://download.docker.com/linux/ubuntu/dists/noble/pool/stable/amd64/containerd.io_2.3.4-2~ubuntu.24.04~noble_amd64.deb",
+          "sha256": "827e6809232311db8ae05fb8e0af7418148edeadc4c88c5a4360ca583f6e55ec",
+          "name": "containerd.io"
+        }
+      ]
+    },
+    "sanitation": {
+      "kind": "sanitized",
+      "builderId": "de7d3f33-0f3e-4512-afc6-d163b1cd7359",
+      "serverId": "164935711",
+      "manifestDigest": "61b1e3972798d86ebba0d8d104912aa9a9158d98e1f91ef76bb3d3ac8ec62329"
+    },
+    "snapshot": {
+      "provider": "hetzner",
+      "id": "429149547",
+      "sourceServerId": "164935711",
+      "diskGb": 40,
+      "sourceStoppedAt": "2026-09-07T10:33:47.932Z",
+      "createdAt": "2026-09-07T10:33:49.000Z"
+    },
+    "verifiedBoot": {
+      "serverId": "164936376",
+      "bootId": "245d83b9-829a-4c73-a9ca-5bda98a9eed1",
+      "manifestDigest": "61b1e3972798d86ebba0d8d104912aa9a9158d98e1f91ef76bb3d3ac8ec62329",
+      "checkedAt": "2026-09-07T10:34:52.354Z"
+    }
+  },
+  "signature": {
+    "algorithm": "Ed25519",
+    "keyId": "6c4eb920bf75d1b753253c327082b3c1386136928830e50779b9efc2e1c1a481",
+    "value": "GG1oIMxBrfBEjNS1vCbWeMFlwb68ouYNE1uStz0mMVxTjFMTl7xDxrsueJk9xyjY-Gx2HadWOkv-EFonbUEcDQ"
+  }
+}
