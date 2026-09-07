@@ -1,6 +1,9 @@
 import { setTimeout } from 'node:timers/promises';
 import type { z } from 'zod';
 import {
+  referenceInputSchema,
+  referenceResponseSchema,
+  type ReferenceInput,
   credentialsSchema,
   errorResponseSchema,
   CloudError,
@@ -43,6 +46,7 @@ export class CloudClient {
     method?: 'POST' | 'DELETE';
     body?: unknown;
     key?: string;
+    timeoutMs?: number;
   }): Promise<T> {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.credentials.token}`,
@@ -55,7 +59,7 @@ export class CloudClient {
       method: input.method ?? 'GET',
       headers,
       redirect: 'error',
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(input.timeoutMs ?? 15_000),
       ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
     });
     const body: unknown = await response.json();
@@ -74,6 +78,16 @@ export class CloudClient {
       );
     }
     return input.schema.parse(body);
+  }
+
+  internalReference(machineId: MachineId, command: ReferenceInput) {
+    return this.request({
+      path: `/internal/v1/machines/${machineId}/reference`,
+      method: 'POST',
+      body: referenceInputSchema.parse(command),
+      schema: referenceResponseSchema,
+      timeoutMs: 60_000,
+    });
   }
 
   whoami() {

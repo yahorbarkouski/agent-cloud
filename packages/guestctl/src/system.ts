@@ -2,7 +2,7 @@ import { guestSubject, sameGuestSubject } from '@agent-cloud/contracts';
 import type { Dirent } from 'node:fs';
 import { chmod, chown, copyFile, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { probePrincipal, runtimePrincipal } from '@agent-cloud/pki';
+import { probePrincipal, runtimePrincipal, deploymentPrincipal } from '@agent-cloud/pki';
 import { atomicWrite, ensureDirectory, isMissing } from './files.js';
 import type { EnrollmentSystem } from './enrollment.js';
 import { runTool } from './tools.js';
@@ -33,6 +33,12 @@ export function guestSystem(
         probePrincipal(guestSubject(proof)) + '\n' + runtimePrincipal(guestSubject(proof)) + '\n',
         0o644,
       );
+      if (proof.version === 1)
+        await atomicWrite(
+          join(configuration.state, 'deployment-principals'),
+          deploymentPrincipal(guestSubject(proof)) + '\n',
+          0o644,
+        );
       // Stopping Ubuntu's socket unit may remove its sshd runtime directory.
       await ensureDirectory('/run/sshd', 0o755);
       await run('/usr/sbin/sshd', ['-t']);

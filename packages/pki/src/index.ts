@@ -63,7 +63,11 @@ export function runtimePrincipal(subject: GuestSubject): string {
   return `runtime-${guestSubjectKey(subject)}`;
 }
 
-export interface ProbeCredential<K extends 'probe' | 'runtime' = 'probe'> {
+export function deploymentPrincipal(subject: GuestSubject): string {
+  return `deployment-${guestSubjectKey(subject)}`;
+}
+
+export interface ProbeCredential<K extends 'probe' | 'runtime' | 'deployment' = 'probe'> {
   kind: K;
   subject: GuestSubject;
   privateKey: string;
@@ -77,15 +81,17 @@ export function createSigner(configuration: SignerConfiguration) {
   async function signSsh(input: {
     subject: GuestSubject;
     publicKey: string;
-    kind: 'host' | 'probe' | 'runtime';
+    kind: 'host' | 'probe' | 'runtime' | 'deployment';
   }) {
     const key = guestEnrollmentInputSchema.shape.sshHostPublicKey.parse(input.publicKey);
     const principal =
       input.kind === 'host'
         ? guestName(input.subject)
-        : input.kind === 'runtime'
-          ? runtimePrincipal(input.subject)
-          : probePrincipal(input.subject);
+        : input.kind === 'deployment'
+          ? deploymentPrincipal(input.subject)
+          : input.kind === 'runtime'
+            ? runtimePrincipal(input.subject)
+            : probePrincipal(input.subject);
     return inWorkspace({
       work: async (directory, run, flags) => {
         const keyPath = join(directory, 'identity.pub');
@@ -165,7 +171,7 @@ export function createSigner(configuration: SignerConfiguration) {
       },
     });
   }
-  async function issueCredential<K extends 'probe' | 'runtime'>(
+  async function issueCredential<K extends 'probe' | 'runtime' | 'deployment'>(
     value: GuestSubject,
     kind: K,
   ): Promise<ProbeCredential<K>> {
@@ -198,6 +204,7 @@ export function createSigner(configuration: SignerConfiguration) {
       (await signSsh({ ...input, kind: 'host' })).certificate,
     issueProbeCredential: (subject: GuestSubject) => issueCredential(subject, 'probe'),
     issueRuntimeCredential: (subject: GuestSubject) => issueCredential(subject, 'runtime'),
+    issueDeploymentCredential: (subject: GuestSubject) => issueCredential(subject, 'deployment'),
     validateTlsRequest,
     signTls,
   });

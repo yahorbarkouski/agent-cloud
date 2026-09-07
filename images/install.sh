@@ -65,12 +65,15 @@ chmod 0644 /usr/lib/agent-cloud/ssh_user_ca.pub /usr/lib/agent-cloud/root_ca.crt
 cat > /usr/local/bin/guestctl <<'COMMAND'
 #!/bin/sh
 case "${1:-}" in
+  reference) exec /usr/bin/flock --wait 5 /run/agent-cloud-reference-admission.lock /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@" ;;
+  reference-work) exec /usr/bin/flock --nonblock /run/agent-cloud-reference-work.lock /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@" ;;
   enroll|renew|prepare-image) exec /usr/bin/flock --nonblock /run/agent-cloud-guest.lock /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@" ;;
 esac
 exec /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@"
 COMMAND
 chmod 0755 /usr/local/bin/guestctl
 if ! id agent-probe >/dev/null 2>&1; then useradd --system --create-home --home-dir /var/lib/agent-probe --shell /bin/sh agent-probe; fi
+if ! id agent-deploy >/dev/null 2>&1; then useradd --system --create-home --home-dir /var/lib/agent-deploy --shell /bin/sh agent-deploy; fi
 if ! id agent-proxy >/dev/null 2>&1; then useradd --system --no-create-home --home-dir /var/lib/agent-cloud-proxy --shell /usr/sbin/nologin agent-proxy; fi
 install -m 0440 "$image_input/guest-inspect.sudoers" /etc/sudoers.d/agent-cloud-inspect
 visudo -cf /etc/sudoers.d/agent-cloud-inspect
@@ -80,6 +83,35 @@ cat > /etc/docker/daemon.json <<'DOCKER'
 {"log-driver":"local","log-opts":{"max-size":"10m","max-file":"3"},"live-restore":true,"userland-proxy":false}
 DOCKER
 systemctl daemon-reload
+cat > /etc/systemd/system/agent-cloud-reference.service <<'REFERENCE'
+[Unit]
+Description=Apply the internal reference application
+After=docker.service network-online.target
+Requires=docker.service
+ConditionPathExists=/var/lib/agent-cloud/reference/state.json
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/guestctl reference-work --json
+TimeoutStartSec=900
+UMask=0077
+StandardOutput=null
+StandardError=journal
+[Install]
+WantedBy=multi-user.target
+REFERENCE
+cat > /etc/systemd/system/agent-cloud-reference.timer <<'REFERENCE_TIMER'
+[Unit]
+Description=Resume a recorded reference deployment after a lost wakeup
+[Timer]
+OnBootSec=15s
+OnUnitInactiveSec=15s
+AccuracySec=1s
+Unit=agent-cloud-reference.service
+[Install]
+WantedBy=timers.target
+REFERENCE_TIMER
+systemctl daemon-reload
+systemctl enable agent-cloud-reference.service agent-cloud-reference.timer
 systemctl enable docker.service agent-cloud-enroll.service agent-cloud-proxy.service agent-cloud-renew.timer
 systemctl restart docker.service
 [ "$(/usr/local/bin/node --version)" = "v$(jq -r .components.node "$image_input/image.json")" ]

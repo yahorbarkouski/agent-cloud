@@ -9,7 +9,7 @@ KbdInteractiveAuthentication no
 PermitEmptyPasswords no
 PermitRootLogin no
 UsePAM yes
-AllowUsers agent-probe
+AllowUsers agent-probe agent-deploy
 AllowAgentForwarding no
 AllowTcpForwarding no
 X11Forwarding no
@@ -18,3 +18,7 @@ PermitTTY no
 PermitUserEnvironment no
 MaxAuthTries 3
 LogLevel INFO
+
+Match User agent-deploy
+    AuthorizedPrincipalsFile /var/lib/agent-cloud/deployment-principals
+    ForceCommand /usr/bin/sudo -n -- /usr/local/bin/guestctl reference --json

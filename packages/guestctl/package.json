@@ -16,6 +16,7 @@
     "@agent-cloud/contracts": "workspace:*",
     "@agent-cloud/pki": "workspace:*",
     "zod": "4.5.4",
-    "@agent-cloud/images": "workspace:*"
+    "@agent-cloud/images": "workspace:*",
+    "pg": "8.23.0"
   }
 }

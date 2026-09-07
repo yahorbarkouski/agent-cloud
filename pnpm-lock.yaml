@@ -258,6 +258,9 @@ importers:
       '@agent-cloud/pki':
         specifier: workspace:*
         version: link:../pki
+      pg:
+        specifier: 8.23.0
+        version: 8.23.0
       zod:
         specifier: 4.5.4
         version: 4.5.4

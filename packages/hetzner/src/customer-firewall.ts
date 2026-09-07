@@ -30,7 +30,9 @@ const firewallSchema = z.object({
 export async function checkCustomerFirewalls(
   request: ReturnType<typeof createHetznerRequest>,
   ids: number[],
+  internalReference = false,
 ) {
+  const expectedPorts = internalReference ? [...ingressPorts, '80', '443'] : ingressPorts;
   for (const id of ids) {
     let firewall;
     try {
@@ -44,12 +46,12 @@ export async function checkCustomerFirewalls(
         true,
       );
     }
-    const allowed = new Set(ingressPorts);
+    const allowed = new Set(expectedPorts);
     if (
       firewall.id !== id ||
       firewall.labels.managed_by !== 'agent-cloud' ||
       firewall.labels.role !== 'customer_access' ||
-      firewall.rules.length !== ingressPorts.length ||
+      firewall.rules.length !== expectedPorts.length ||
       !firewall.rules.every((rule) => {
         if (
           rule.direction !== 'in' ||

@@ -16,6 +16,7 @@ import type { GuestSubject } from '@agent-cloud/contracts';
 import { guestName, type ProbeCredential } from '@agent-cloud/pki';
 import { withSshFiles } from './ssh-files.js';
 export { createImageBuilder } from './image-builder.js';
+export { runReferenceCommand } from './reference.js';
 
 type GuestTarget = {
   subject: GuestSubject;

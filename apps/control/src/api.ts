@@ -29,6 +29,7 @@ const app = createApp({
         enrollment: runtime.enrollment,
         renewal: runtime.renewal,
         imageRelease: runtime.imageRelease,
+        ...(runtime.internalReference ? { internalReference: runtime.internalReference } : {}),
       }
     : {}),
 });

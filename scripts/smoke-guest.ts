@@ -1,3 +1,6 @@
+import { createInternalReference } from '../apps/control/src/internal-reference.js';
+import { runReferenceCommand } from '../packages/remote/dist/index.js';
+import { exerciseReferenceScenario } from './support/reference-scenario.js';
 import { prepareGuestBootstrap } from '../apps/control/dist/guest-bootstrap.js';
 import { imageInstallCommand } from '../packages/images/dist/index.js';
 import { readGuestBuild } from './support/guest-build.js';
@@ -259,6 +262,24 @@ try {
     limits: fixture.limits,
     catalog: fixture.catalog,
     enrollment,
+    ...(process.env.AGENT_CLOUD_REFERENCE_SCENARIO === '1'
+      ? {
+          internalReference: createInternalReference({
+            connection: database.connection,
+            provider: fixture.provider,
+            grantId: fixture.account.principal.grantId,
+            signer: () => Promise.resolve(signer),
+            remote: (input) =>
+              runReferenceCommand({
+                ...input,
+                command:
+                  input.command.kind === 'apply'
+                    ? { ...input.command, hostname: 'reference.localhost' }
+                    : input.command,
+              }),
+          }),
+        }
+      : {}),
     renewal: createGuestRenewalService({
       connection: database.connection,
       signer,
@@ -349,242 +370,264 @@ try {
     imageVersion: z.literal(image.version),
   });
   health.parse(JSON.parse(await vm(['curl', '--fail', '--silent', 'http://127.0.0.1:8081/ready'])));
-  progress('verifying renewal timer and certificate reload preserve proxy configuration');
-  await vm(['systemctl', 'is-enabled', '--quiet', 'agent-cloud-renew.timer']);
-  await vm(['systemctl', 'is-active', '--quiet', 'agent-cloud-renew.timer']);
-  const proxyConfiguration = await vm(['cat', '/var/lib/agent-cloud/caddy.json']);
-  await vm(['systemctl', 'start', 'agent-cloud-renew.service']);
-  assert.equal(
-    (
-      await vm(['systemctl', 'show', '--property=Result', '--value', 'agent-cloud-renew.service'])
-    ).trim(),
-    'success',
-  );
-  assert.equal(await vm(['cat', '/var/lib/agent-cloud/caddy.json']), proxyConfiguration);
-  health.parse(JSON.parse(await vm(['curl', '--fail', '--silent', 'http://127.0.0.1:8081/ready'])));
-  progress('testing restricted runtime inspection and unhealthy services');
-  await assert.rejects(
-    vm([
-      '/usr/sbin/runuser',
-      '-u',
-      'agent-probe',
-      '--',
-      '/usr/bin/sudo',
-      '-n',
-      '--',
-      '/usr/bin/id',
-    ]),
-  );
-  await assert.rejects(
-    vm([
-      '/usr/sbin/runuser',
-      '-u',
-      'agent-probe',
-      '--',
-      '/usr/local/bin/guestctl',
-      'inspect',
-      '--json',
-    ]),
-  );
-  const runtimeCredential = await signer.issueRuntimeCredential(guestSubject(proof));
-  const readRuntime = () =>
-    probe.readRuntime({
-      subject: guestSubject(proof),
+  if (process.env.AGENT_CLOUD_REFERENCE_SCENARIO === '1') {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await tick();
+      if (z.object({ kind: z.literal('succeeded') }).safeParse(await operationProgress()).success)
+        break;
+      await setTimeout(1000);
+    }
+    assert.partialDeepStrictEqual(await operationProgress(), { kind: 'succeeded' });
+    await exerciseReferenceScenario({
+      app,
+      machineId: fixture.operation.machineId,
+      token: fixture.account.token,
+      scratch,
       address: info.ip4,
-      credential: runtimeCredential,
-      trust: { kind: 'host_ca', publicKey: signer.trust.sshHostCa },
+      vm,
     });
-  const firstRuntime = await readRuntime();
-  assert.equal(firstRuntime.checks.docker.kind, 'ok');
-  assert.equal(firstRuntime.checks.proxy.kind, 'ok');
-  await vm(['systemctl', 'stop', 'docker.service', 'docker.socket']);
-  try {
-    assert.equal((await readRuntime()).checks.docker.kind, 'unavailable');
+  } else {
+    progress('verifying renewal timer and certificate reload preserve proxy configuration');
+    await vm(['systemctl', 'is-enabled', '--quiet', 'agent-cloud-renew.timer']);
+    await vm(['systemctl', 'is-active', '--quiet', 'agent-cloud-renew.timer']);
+    const proxyConfiguration = await vm(['cat', '/var/lib/agent-cloud/caddy.json']);
+    await vm(['systemctl', 'start', 'agent-cloud-renew.service']);
+    assert.equal(
+      (
+        await vm(['systemctl', 'show', '--property=Result', '--value', 'agent-cloud-renew.service'])
+      ).trim(),
+      'success',
+    );
+    assert.equal(await vm(['cat', '/var/lib/agent-cloud/caddy.json']), proxyConfiguration);
+    health.parse(
+      JSON.parse(await vm(['curl', '--fail', '--silent', 'http://127.0.0.1:8081/ready'])),
+    );
+    progress('testing restricted runtime inspection and unhealthy services');
+    await assert.rejects(
+      vm([
+        '/usr/sbin/runuser',
+        '-u',
+        'agent-probe',
+        '--',
+        '/usr/bin/sudo',
+        '-n',
+        '--',
+        '/usr/bin/id',
+      ]),
+    );
+    await assert.rejects(
+      vm([
+        '/usr/sbin/runuser',
+        '-u',
+        'agent-probe',
+        '--',
+        '/usr/local/bin/guestctl',
+        'inspect',
+        '--json',
+      ]),
+    );
+    const runtimeCredential = await signer.issueRuntimeCredential(guestSubject(proof));
+    const readRuntime = () =>
+      probe.readRuntime({
+        subject: guestSubject(proof),
+        address: info.ip4,
+        credential: runtimeCredential,
+        trust: { kind: 'host_ca', publicKey: signer.trust.sshHostCa },
+      });
+    const firstRuntime = await readRuntime();
+    assert.equal(firstRuntime.checks.docker.kind, 'ok');
+    assert.equal(firstRuntime.checks.proxy.kind, 'ok');
+    await vm(['systemctl', 'stop', 'docker.service', 'docker.socket']);
+    try {
+      assert.equal((await readRuntime()).checks.docker.kind, 'unavailable');
+      await tick();
+      assert.partialDeepStrictEqual(await operationProgress(), {
+        kind: 'waiting_guest',
+        stage: 'runtime',
+      });
+    } finally {
+      await vm(['systemctl', 'start', 'docker.service']);
+    }
+    await vm(['systemctl', 'stop', 'agent-cloud-proxy.service']);
+    try {
+      assert.equal((await readRuntime()).checks.proxy.kind, 'unavailable');
+      await tick();
+      assert.partialDeepStrictEqual(await operationProgress(), {
+        kind: 'waiting_guest',
+        stage: 'runtime',
+      });
+    } finally {
+      await vm(['systemctl', 'start', 'agent-cloud-proxy.service']);
+    }
+    // Give only this owned VM's state directory a small temporary filesystem. Never fill a disk.
+    await vm(['cp', '-a', '/var/lib/agent-cloud', '/tmp/agent-cloud-runtime-state']);
+    let mounted = false;
+    try {
+      await vm([
+        'mount',
+        '-t',
+        'tmpfs',
+        '-o',
+        'size=32m,mode=0700',
+        'agent-cloud-runtime-smoke',
+        '/var/lib/agent-cloud',
+      ]);
+      mounted = true;
+      await vm(['cp', '-a', '/tmp/agent-cloud-runtime-state/.', '/var/lib/agent-cloud/']);
+      const limited = await readRuntime();
+      assert.equal(limited.checks.disk.kind, 'ok');
+      assert.ok(limited.checks.disk.availableBytes < 1024 ** 3);
+      await tick();
+      assert.partialDeepStrictEqual(await operationProgress(), {
+        kind: 'waiting_guest',
+        stage: 'runtime',
+      });
+    } finally {
+      if (mounted) await vm(['umount', '/var/lib/agent-cloud']);
+      await vm(['rm', '-rf', '/tmp/agent-cloud-runtime-state']);
+    }
     await tick();
-    assert.partialDeepStrictEqual(await operationProgress(), {
-      kind: 'waiting_guest',
-      stage: 'runtime',
-    });
-  } finally {
-    await vm(['systemctl', 'start', 'docker.service']);
-  }
-  await vm(['systemctl', 'stop', 'agent-cloud-proxy.service']);
-  try {
-    assert.equal((await readRuntime()).checks.proxy.kind, 'unavailable');
-    await tick();
-    assert.partialDeepStrictEqual(await operationProgress(), {
-      kind: 'waiting_guest',
-      stage: 'runtime',
-    });
-  } finally {
-    await vm(['systemctl', 'start', 'agent-cloud-proxy.service']);
-  }
-  // Give only this owned VM's state directory a small temporary filesystem. Never fill a disk.
-  await vm(['cp', '-a', '/var/lib/agent-cloud', '/tmp/agent-cloud-runtime-state']);
-  let mounted = false;
-  try {
-    await vm([
-      'mount',
-      '-t',
-      'tmpfs',
-      '-o',
-      'size=32m,mode=0700',
-      'agent-cloud-runtime-smoke',
-      '/var/lib/agent-cloud',
-    ]);
-    mounted = true;
-    await vm(['cp', '-a', '/tmp/agent-cloud-runtime-state/.', '/var/lib/agent-cloud/']);
-    const limited = await readRuntime();
-    assert.equal(limited.checks.disk.kind, 'ok');
-    assert.ok(limited.checks.disk.availableBytes < 1024 ** 3);
-    await tick();
-    assert.partialDeepStrictEqual(await operationProgress(), {
-      kind: 'waiting_guest',
-      stage: 'runtime',
-    });
-  } finally {
-    if (mounted) await vm(['umount', '/var/lib/agent-cloud']);
-    await vm(['rm', '-rf', '/tmp/agent-cloud-runtime-state']);
-  }
-  await tick();
-  assert.partialDeepStrictEqual(await operationProgress(), { kind: 'succeeded' });
-  progress('runtime completion requires healthy Docker, proxy and disk headroom');
-  // The server leaf is trusted, but a client without a certificate must fail the handshake.
-  await assert.rejects(
-    new Promise<void>((resolve, reject) => {
-      const check = request(
-        {
-          host: info.ip4,
-          port: 8443,
-          servername: guestName(guestSubject(proof)),
-          ca: signer.trust.tlsRoot,
-          timeout: 5000,
-        },
-        (response) => {
-          response.resume();
-          resolve();
-        },
-      );
-      check.once('error', reject);
-      check.once('timeout', () => check.destroy(new Error('Guest TLS timeout.')));
-      check.end();
-    }),
-  );
-  await vm([
-    '/bin/sh',
-    '-c',
-    'test -f /etc/cloud/cloud-init.disabled && test ! -e /var/lib/agent-cloud/bootstrap.json && test ! -e /var/lib/cloud/seed',
-  ]);
-  // Never put the token in argv/output; remove the diagnostic copies even if scanning fails.
-  let scan;
-  try {
-    await writeFile(join(scratch, 'needle'), fixture.bootstrap.token, { mode: 0o600 });
-    await vm([
-      'install',
-      '-m',
-      '0600',
-      '/mnt/mac' + join(scratch, 'needle'),
-      '/tmp/agent-cloud-token-needle',
-    ]);
-    await vm([
-      'install',
-      '-m',
-      '0600',
-      '/mnt/mac' + resolve('tests/fixtures/guest/scan-bootstrap.mjs'),
-      '/tmp/agent-cloud-scan.mjs',
-    ]);
+    assert.partialDeepStrictEqual(await operationProgress(), { kind: 'succeeded' });
+    progress('runtime completion requires healthy Docker, proxy and disk headroom');
+    // The server leaf is trusted, but a client without a certificate must fail the handshake.
+    await assert.rejects(
+      new Promise<void>((resolve, reject) => {
+        const check = request(
+          {
+            host: info.ip4,
+            port: 8443,
+            servername: guestName(guestSubject(proof)),
+            ca: signer.trust.tlsRoot,
+            timeout: 5000,
+          },
+          (response) => {
+            response.resume();
+            resolve();
+          },
+        );
+        check.once('error', reject);
+        check.once('timeout', () => check.destroy(new Error('Guest TLS timeout.')));
+        check.end();
+      }),
+    );
     await vm([
       '/bin/sh',
       '-c',
-      'umask 077; journalctl --no-pager --output cat > /tmp/agent-cloud-journal',
+      'test -f /etc/cloud/cloud-init.disabled && test ! -e /var/lib/agent-cloud/bootstrap.json && test ! -e /var/lib/cloud/seed',
     ]);
-    scan = z
-      .object({
-        files: z.number().positive(),
-        bytes: z.number().positive(),
-        matches: z.array(z.string()),
-      })
-      .parse(JSON.parse(await vm(['/usr/local/bin/node', '/tmp/agent-cloud-scan.mjs'])));
-  } finally {
-    await vm([
-      'rm',
-      '-f',
-      '/tmp/agent-cloud-token-needle',
-      '/tmp/agent-cloud-journal',
-      '/tmp/agent-cloud-scan.mjs',
-    ]);
+    // Never put the token in argv/output; remove the diagnostic copies even if scanning fails.
+    let scan;
+    try {
+      await writeFile(join(scratch, 'needle'), fixture.bootstrap.token, { mode: 0o600 });
+      await vm([
+        'install',
+        '-m',
+        '0600',
+        '/mnt/mac' + join(scratch, 'needle'),
+        '/tmp/agent-cloud-token-needle',
+      ]);
+      await vm([
+        'install',
+        '-m',
+        '0600',
+        '/mnt/mac' + resolve('tests/fixtures/guest/scan-bootstrap.mjs'),
+        '/tmp/agent-cloud-scan.mjs',
+      ]);
+      await vm([
+        '/bin/sh',
+        '-c',
+        'umask 077; journalctl --no-pager --output cat > /tmp/agent-cloud-journal',
+      ]);
+      scan = z
+        .object({
+          files: z.number().positive(),
+          bytes: z.number().positive(),
+          matches: z.array(z.string()),
+        })
+        .parse(JSON.parse(await vm(['/usr/local/bin/node', '/tmp/agent-cloud-scan.mjs'])));
+    } finally {
+      await vm([
+        'rm',
+        '-f',
+        '/tmp/agent-cloud-token-needle',
+        '/tmp/agent-cloud-journal',
+        '/tmp/agent-cloud-scan.mjs',
+      ]);
+    }
+    process.stdout.write(JSON.stringify({ bootstrapScan: scan }) + '\n');
+    assert.deepEqual(scan.matches, [], 'Bootstrap token remains in guest state.');
+    // A completed provider action alone is insufficient: the old boot must remain waiting.
+    const [machineRow] = await database.connection.db
+      .select()
+      .from(machines)
+      .where(eq(machines.id, fixture.operation.machineId));
+    if (!machineRow) throw new Error('Expected enrolled machine.');
+    const machine = machineRecord(machineRow);
+    const rebootResponse = await app.request(`/v1/machines/${machine.id}/actions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${fixture.account.token}`,
+        'Idempotency-Key': randomUUID(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ kind: 'reboot', expectedVersion: machine.version }),
+    });
+    assert.equal(rebootResponse.status, 202);
+    const reboot = operationResponseSchema.parse(await rebootResponse.json()).operation;
+    for (let i = 0; i < 4; i++) await tick(reboot.id);
+    assert.partialDeepStrictEqual(await operationProgress(reboot.id), {
+      kind: 'waiting_guest',
+      stage: 'runtime',
+    });
+    // Cloud-init stays disabled and installed identity survives a normal reboot.
+    await command('orb', ['restart', owner.name], 120_000);
+    assert.deepEqual(
+      guestProofSchema.parse(
+        JSON.parse(await vm(['/usr/local/bin/guestctl', 'identity', '--json'])),
+      ),
+      proof,
+    );
+    for (let i = 0; i < 15; i++) {
+      await tick(reboot.id);
+      if (
+        z.object({ kind: z.literal('succeeded') }).safeParse(await operationProgress(reboot.id))
+          .success
+      )
+        break;
+      await setTimeout(1000);
+    }
+    assert.partialDeepStrictEqual(await operationProgress(reboot.id), { kind: 'succeeded' });
+    assert.notEqual((await readRuntime()).bootId, firstRuntime.bootId);
+    assert.equal(
+      (await vm(['systemctl', 'is-active', 'agent-cloud-proxy.service'])).trim(),
+      'active',
+    );
+    assert.deepEqual(
+      await probe.readIdentity({
+        subject: guestSubject(proof),
+        address: info.ip4,
+        credential: await signer.issueProbeCredential(guestSubject(proof)),
+        trust: { kind: 'host_ca', publicKey: signer.trust.sshHostCa },
+      }),
+      proof,
+    );
+    progress('passed real Ubuntu first boot and restart; provider remains simulated');
+    await vm(['/bin/sh', '-c', 'test ! -e /usr/lib/agent-cloud/image-build.json']);
+    const leaf = new X509Certificate(
+      await vm(['cat', '/var/lib/agent-cloud/certificates/current/guest.crt']),
+    );
+    process.stdout.write(
+      JSON.stringify({
+        result: 'guest-verified',
+        machineId: (await vm(['cat', '/etc/machine-id'])).trim(),
+        sshIdentity: createHash('sha256').update(proof.sshHostPublicKey).digest('hex'),
+        tlsIdentity: createHash('sha256')
+          .update(leaf.publicKey.export({ type: 'spki', format: 'der' }))
+          .digest('hex'),
+        allocationId: proof.allocationId,
+      }) + '\n',
+    );
   }
-  process.stdout.write(JSON.stringify({ bootstrapScan: scan }) + '\n');
-  assert.deepEqual(scan.matches, [], 'Bootstrap token remains in guest state.');
-  // A completed provider action alone is insufficient: the old boot must remain waiting.
-  const [machineRow] = await database.connection.db
-    .select()
-    .from(machines)
-    .where(eq(machines.id, fixture.operation.machineId));
-  if (!machineRow) throw new Error('Expected enrolled machine.');
-  const machine = machineRecord(machineRow);
-  const rebootResponse = await app.request(`/v1/machines/${machine.id}/actions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${fixture.account.token}`,
-      'Idempotency-Key': randomUUID(),
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ kind: 'reboot', expectedVersion: machine.version }),
-  });
-  assert.equal(rebootResponse.status, 202);
-  const reboot = operationResponseSchema.parse(await rebootResponse.json()).operation;
-  for (let i = 0; i < 4; i++) await tick(reboot.id);
-  assert.partialDeepStrictEqual(await operationProgress(reboot.id), {
-    kind: 'waiting_guest',
-    stage: 'runtime',
-  });
-  // Cloud-init stays disabled and installed identity survives a normal reboot.
-  await command('orb', ['restart', owner.name], 120_000);
-  assert.deepEqual(
-    guestProofSchema.parse(JSON.parse(await vm(['/usr/local/bin/guestctl', 'identity', '--json']))),
-    proof,
-  );
-  for (let i = 0; i < 15; i++) {
-    await tick(reboot.id);
-    if (
-      z.object({ kind: z.literal('succeeded') }).safeParse(await operationProgress(reboot.id))
-        .success
-    )
-      break;
-    await setTimeout(1000);
-  }
-  assert.partialDeepStrictEqual(await operationProgress(reboot.id), { kind: 'succeeded' });
-  assert.notEqual((await readRuntime()).bootId, firstRuntime.bootId);
-  assert.equal(
-    (await vm(['systemctl', 'is-active', 'agent-cloud-proxy.service'])).trim(),
-    'active',
-  );
-  assert.deepEqual(
-    await probe.readIdentity({
-      subject: guestSubject(proof),
-      address: info.ip4,
-      credential: await signer.issueProbeCredential(guestSubject(proof)),
-      trust: { kind: 'host_ca', publicKey: signer.trust.sshHostCa },
-    }),
-    proof,
-  );
-  progress('passed real Ubuntu first boot and restart; provider remains simulated');
-  await vm(['/bin/sh', '-c', 'test ! -e /usr/lib/agent-cloud/image-build.json']);
-  const leaf = new X509Certificate(
-    await vm(['cat', '/var/lib/agent-cloud/certificates/current/guest.crt']),
-  );
-  process.stdout.write(
-    JSON.stringify({
-      result: 'guest-verified',
-      machineId: (await vm(['cat', '/etc/machine-id'])).trim(),
-      sshIdentity: createHash('sha256').update(proof.sshHostPublicKey).digest('hex'),
-      tlsIdentity: createHash('sha256')
-        .update(leaf.publicKey.export({ type: 'spki', format: 'der' }))
-        .digest('hex'),
-      allocationId: proof.allocationId,
-    }) + '\n',
-  );
   await command('orb', ['delete', '--force', owner.name], 60_000);
   await rm(ownershipPath);
 } finally {

@@ -154,6 +154,39 @@ operation
     if (result.operation.progress.kind === 'blocked') process.exitCode = 2;
   });
 
+const reference = program
+  .command('internal')
+  .description('Explicitly configured operator-only capabilities.')
+  .command('reference');
+reference
+  .command('apply <machine>')
+  .requiredOption('--release <uuid>', 'Stable release identity; reuse after a lost response')
+  .requiredOption('--revision <revision>', 'Reference application revision: 1 or 2')
+  .option('--expected-release <uuid>', 'Current release; omit only for the first deployment')
+  .action(async (id: string, raw: unknown) => {
+    const options = z
+      .object({
+        release: z.uuid(),
+        revision: z.enum(['1', '2']),
+        expectedRelease: z.uuid().optional(),
+      })
+      .parse(raw);
+    output(
+      await (
+        await client()
+      ).internalReference(machineIdSchema.parse(id), {
+        kind: 'apply',
+        releaseId: options.release,
+        revision: options.revision,
+        expectedReleaseId: options.expectedRelease ?? null,
+      }),
+    );
+  });
+for (const kind of ['inspect', 'logs'] satisfies Array<'inspect' | 'logs'>)
+  reference.command(`${kind} <machine>`).action(async (id: string) => {
+    output(await (await client()).internalReference(machineIdSchema.parse(id), { kind }));
+  });
+
 try {
   await program.parseAsync();
 } catch (error) {

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { resolve } from 'node:path';
 import { offerConfigurationSchema } from '@agent-cloud/hetzner';
-import { currencySchema, decimalLimitToMicros } from '@agent-cloud/contracts';
+import { currencySchema, decimalLimitToMicros, grantIdSchema } from '@agent-cloud/contracts';
 
 const environmentSchema = z.object({
   DATABASE_URL: z.url(),
@@ -31,6 +31,9 @@ export function readConfig(environment: NodeJS.ProcessEnv = process.env) {
     host: env.HOST,
     port: env.PORT,
     publicUrl: env.PUBLIC_URL,
+    ...(environment.INTERNAL_REFERENCE_GRANT
+      ? { internalReferenceGrant: grantIdSchema.parse(environment.INTERNAL_REFERENCE_GRANT) }
+      : {}),
     logLevel: env.LOG_LEVEL,
     limits: {
       maxMachines: env.MAX_LIVE_MACHINES,

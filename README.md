@@ -2,7 +2,7 @@
 
 An open-source cloud that customers operate through their existing coding agents. The product supplies machines, credentials, lifecycle operations, and eventually application deployment and recovery. It does not contain an AI agent.
 
-**Current status:** the CLI/API/worker can create and operate a real Hetzner machine from a verified signed image. The bounded live drill passed snapshot boot, enrollment, create replay, graceful power-off/on, reboot and automatic certificate renewal after35minutes. All test resources were removed. [Evidence](docs/research/m1-customer-live-verification.json) distinguishes that provider proof from local failure tests. Customer SSH, device login, application deployment, routes and backups remain in progress. Stripe is deferred.
+**Current status:** machine provisioning, lifecycle, signed-image boot and certificate renewal have passed bounded Hetzner verification with complete cleanup. The internal reference application now passes the actual CLI/API/SSH/systemd/Compose path on a local Ubuntu VM, including trusted local HTTPS, disconnect/reconnect, logs and an update preserving PostgreSQL data. Public HTTPS and Hetzner application verification are next. Customer authentication/access, general deployments, routes and protected backup/recovery remain unfinished. Stripe is excluded. See [the current handoff](docs/CONTEXT.md) and [internal reference commands](docs/architecture/internal-reference.md).
 
 ## Run locally
 
@@ -91,6 +91,7 @@ For an actual local Ubuntu first-boot check on macOS with OrbStack installed, ke
 ```sh
 pnpm build:guest
 pnpm smoke:guest
+pnpm smoke:reference
 pnpm smoke:image
 pnpm smoke:builder
 ```
@@ -183,4 +184,4 @@ Stop the API and worker while applying migrations from an earlier checkpoint, th
 | `skills/agent-cloud`     | Customer agent instructions matching implemented commands             |
 | `docs`                   | Architecture, progress, decisions, research, and handoff context      |
 
-Read [AGENTS.md](AGENTS.md) before contributing and [docs/PROGRESS.md](docs/PROGRESS.md) for verification status. The [original plan](docs/archive/original-plan.md) is historical context. Code is licensed under [Apache 2.0](LICENSE).
+Read [AGENTS.md](AGENTS.md) before contributing and [docs/CONTEXT.md](docs/CONTEXT.md) for verification status. The [original plan](docs/archive/original-plan.md) is historical context. Code is licensed under [Apache 2.0](LICENSE).

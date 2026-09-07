@@ -5,6 +5,7 @@ import { secureHeaders } from 'hono/secure-headers';
 import { ZodError } from 'zod';
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import {
+  referenceInputSchema,
   CloudError,
   errorStatus,
   type CatalogSource,
@@ -34,6 +35,7 @@ import {
   projectRecord,
   type Database,
 } from '@agent-cloud/db';
+import type { InternalReference } from './internal-reference.js';
 import { authenticate, authorize, issueGrant, loadPrincipal, revokeGrant } from './auth.js';
 import { admit, lockAccount } from './lifecycle.js';
 import type { ImageReleaseSelection } from './allocation-image.js';
@@ -52,6 +54,7 @@ export function createApp(input: {
   imageEnrollment?: ImageVerifierEnrollment;
   imageRelease?: ImageReleaseSelection;
   customerAccess?: 'enabled' | 'disabled';
+  internalReference?: InternalReference;
 }) {
   const app = new Hono<{ Variables: { principal: Principal; requestId: string } }>();
   app.use('*', async (c, next) => {
@@ -122,6 +125,19 @@ export function createApp(input: {
         ),
       ),
     );
+  if (input.internalReference) {
+    const reference = input.internalReference;
+    app.post('/internal/v1/machines/:id/reference', async (c) => {
+      const principal = await authenticate(input.db, c.req.header('Authorization'));
+      return c.json(
+        await reference(
+          principal,
+          machineIdSchema.parse(c.req.param('id')),
+          referenceInputSchema.parse(await c.req.json<unknown>()),
+        ),
+      );
+    });
+  }
   app.use('/v1/*', async (c, next) => {
     if (input.customerAccess === 'disabled')
       throw new CloudError('permission_denied', 'Customer API is disabled in image factory mode.');

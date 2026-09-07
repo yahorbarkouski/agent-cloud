@@ -95,6 +95,9 @@ try {
     format: 'esm',
     target: 'node24',
     sourcemap: false,
+    banner: {
+      js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);",
+    },
   });
   const trust = guestManifestSchema.shape.trust.parse({
     sshHostCa: (await readFile('.local/pki/public/ssh_host_ca_key.pub', 'utf8')).trim(),

@@ -1,3 +1,4 @@
+import { createInternalReference } from './internal-reference.js';
 import { isDeepStrictEqual } from 'node:util';
 import { CloudError, type GuestImage } from '@agent-cloud/contracts';
 import type { Connection } from '@agent-cloud/db';
@@ -109,7 +110,11 @@ export async function createCustomerRuntime(input: {
   async function resolveImage(allocation: Parameters<typeof resolvePinnedImage>[0]) {
     const image = await resolvePinnedImage(allocation);
     await Promise.all([requireSignerTrust(image), getIdentity()]);
-    await checkCustomerFirewalls(request, runtime.firewallIds);
+    await checkCustomerFirewalls(
+      request,
+      runtime.firewallIds,
+      Boolean(config.internalReferenceGrant),
+    );
     return image;
   }
   const guest: GuestProvisioning = {
@@ -126,6 +131,16 @@ export async function createCustomerRuntime(input: {
   return {
     provider,
     guest,
+    ...(config.internalReferenceGrant
+      ? {
+          internalReference: createInternalReference({
+            connection,
+            provider,
+            grantId: config.internalReferenceGrant,
+            signer: async () => (await getServices()).signer,
+          }),
+        }
+      : {}),
     imageRelease: { buildId: runtime.releaseBuildId, readKeys },
     enrollment: {
       enroll: async (value: Parameters<ReturnType<typeof createEnrollmentService>['enroll']>[0]) =>
@@ -137,7 +152,11 @@ export async function createCustomerRuntime(input: {
     },
     checkConfiguration: async () => {
       await Promise.all([getIdentity(), getServices()]);
-      await checkCustomerFirewalls(request, runtime.firewallIds);
+      await checkCustomerFirewalls(
+        request,
+        runtime.firewallIds,
+        Boolean(config.internalReferenceGrant),
+      );
       const selected = await readPublishedImage({
         connection,
         provider: images,
