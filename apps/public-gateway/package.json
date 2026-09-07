@@ -1,0 +1,12 @@
+{
+  "name": "@agent-cloud/public-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@agent-cloud/contracts": "workspace:*",
+    "zod": "4.5.4",
+    "@agent-cloud/pki": "workspace:*"
+  }
+}

@@ -135,7 +135,7 @@ export async function verifyCustomerSsh(
       };
       if (
         Object.entries(expected).some(([key, value]) => effective.get(key) !== value) ||
-        allowedUsers.sort().join(' ') !== 'agent-customer agent-deploy agent-probe'
+        allowedUsers.sort().join(' ') !== 'agent-customer agent-deploy agent-hosting agent-probe'
       )
         throw new Error('Effective guest SSH policy does not support isolated customer access.');
     }

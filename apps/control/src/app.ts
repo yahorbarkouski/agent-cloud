@@ -1,8 +1,8 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash, timingSafeEqual } from 'node:crypto';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { secureHeaders } from 'hono/secure-headers';
-import { ZodError } from 'zod';
+import { ZodError, z } from 'zod';
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import {
   referenceInputSchema,
@@ -31,6 +31,10 @@ import {
   type MachineProvider,
   githubTokenSchema,
   loginRequestSchema,
+  routePublishSchema,
+  routeRemoveSchema,
+  hostnameSchema,
+  domainCreateSchema,
 } from '@agent-cloud/contracts';
 import {
   projects,
@@ -43,6 +47,7 @@ import {
   type Database,
 } from '@agent-cloud/db';
 import type { InternalReference } from './internal-reference.js';
+import type { HostingService } from './hosting.js';
 import type { CustomerLogin } from './customer-login.js';
 import type { AccessService } from './access-sessions.js';
 import {
@@ -73,6 +78,7 @@ export function createApp(input: {
   internalReference?: InternalReference;
   access?: AccessService;
   login?: CustomerLogin;
+  hosting?: { service: HostingService; gatewayToken: string };
 }) {
   const app = new Hono<{ Variables: { principal: Principal; requestId: string } }>();
   app.use('*', async (c, next) => {
@@ -208,6 +214,87 @@ export function createApp(input: {
     );
     app.post('/gateway/v1/close', async (c) =>
       c.json(await access.close(gatewayCloseSchema.parse(await c.req.json<unknown>()))),
+    );
+  }
+  if (input.hosting && input.customerAccess !== 'disabled') {
+    const hosting = input.hosting.service;
+    const token = z
+      .string()
+      .regex(/^acld_hosting_[A-Za-z0-9_-]{43}$/)
+      .parse(input.hosting.gatewayToken);
+    const expected = createHash('sha256').update(`Bearer ${token}`).digest();
+    app.use('/hosting/v1/*', async (c, next) => {
+      if (
+        !timingSafeEqual(
+          expected,
+          createHash('sha256')
+            .update(c.req.header('Authorization') ?? '')
+            .digest(),
+        )
+      )
+        throw new CloudError('unauthenticated', 'Public gateway authentication is required.');
+      await next();
+    });
+    app.get('/hosting/v1/snapshot', async (c) => c.json(await hosting.snapshot()));
+    app.post('/hosting/v1/ack', async (c) =>
+      c.json(
+        await hosting.acknowledge(
+          z
+            .strictObject({ revision: z.string().regex(/^[a-f0-9]{64}$/) })
+            .parse(await c.req.json<unknown>()).revision,
+        ),
+      ),
+    );
+    app.get('/v1/routes', async (c) => c.json({ routes: await hosting.list(c.get('principal')) }));
+    app.get('/v1/routes/:hostname', async (c) =>
+      c.json({
+        route: await hosting.inspect(
+          c.get('principal'),
+          hostnameSchema.parse(c.req.param('hostname')),
+        ),
+      }),
+    );
+    app.post('/v1/routes', async (c) =>
+      c.json(
+        {
+          route: await hosting.publish(
+            c.get('principal'),
+            routePublishSchema.parse(await c.req.json<unknown>()),
+          ),
+        },
+        202,
+      ),
+    );
+    app.post('/v1/routes/:hostname/remove', async (c) =>
+      c.json(
+        {
+          route: await hosting.remove(
+            c.get('principal'),
+            hostnameSchema.parse(c.req.param('hostname')),
+            routeRemoveSchema.parse(await c.req.json<unknown>()),
+          ),
+        },
+        202,
+      ),
+    );
+    app.post('/v1/domains', async (c) =>
+      c.json(
+        {
+          domain: await hosting.domains.create(
+            c.get('principal'),
+            domainCreateSchema.parse(await c.req.json<unknown>()).hostname,
+          ),
+        },
+        201,
+      ),
+    );
+    app.post('/v1/domains/:id/verify', async (c) =>
+      c.json({
+        domain: await hosting.domains.verify(
+          c.get('principal'),
+          z.uuidv4().parse(c.req.param('id')),
+        ),
+      }),
     );
   }
   app.get('/v1/catalog', (c) => c.json(input.catalog()));

@@ -3,6 +3,15 @@ export { loginConfiguration, exchangeGithubLogin, readLoginJson } from './login.
 import type { z } from 'zod';
 import {
   referenceInputSchema,
+  routePublishSchema,
+  routeRemoveSchema,
+  routeResponseSchema,
+  routesResponseSchema,
+  domainCreateSchema,
+  domainResponseSchema,
+  hostnameSchema,
+  type RoutePublish,
+  type RouteRemove,
   accessSessionResponseSchema,
   accessSessionRequestSchema,
   type AccessSessionRequest,
@@ -96,6 +105,46 @@ export class CloudClient {
     });
   }
 
+  publishRoute(request: RoutePublish) {
+    return this.request({
+      path: '/v1/routes',
+      method: 'POST',
+      body: routePublishSchema.parse(request),
+      schema: routeResponseSchema,
+    });
+  }
+  removeRoute(hostname: string, request: RouteRemove) {
+    return this.request({
+      path: `/v1/routes/${hostnameSchema.parse(hostname)}/remove`,
+      method: 'POST',
+      body: routeRemoveSchema.parse(request),
+      schema: routeResponseSchema,
+    });
+  }
+  routes() {
+    return this.request({ path: '/v1/routes', schema: routesResponseSchema });
+  }
+  route(hostname: string) {
+    return this.request({
+      path: `/v1/routes/${hostnameSchema.parse(hostname)}`,
+      schema: routeResponseSchema,
+    });
+  }
+  createDomain(hostname: string) {
+    return this.request({
+      path: '/v1/domains',
+      method: 'POST',
+      body: domainCreateSchema.parse({ hostname }),
+      schema: domainResponseSchema,
+    });
+  }
+  verifyDomain(id: string) {
+    return this.request({
+      path: `/v1/domains/${encodeURIComponent(id)}/verify`,
+      method: 'POST',
+      schema: domainResponseSchema,
+    });
+  }
   whoami() {
     return this.request({ path: '/v1/whoami', schema: whoamiResponseSchema });
   }

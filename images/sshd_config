@@ -11,7 +11,7 @@ KbdInteractiveAuthentication no
 PermitEmptyPasswords no
 PermitRootLogin no
 UsePAM yes
-AllowUsers agent-probe agent-deploy agent-customer
+AllowUsers agent-probe agent-deploy agent-customer agent-hosting
 AllowAgentForwarding no
 AllowTcpForwarding no
 AllowStreamLocalForwarding no
@@ -31,3 +31,7 @@ Match User agent-deploy
 Match User agent-customer
     AuthorizedPrincipalsFile /var/lib/agent-cloud/customer-principals
     PermitTTY yes
+
+Match User agent-hosting
+    AuthorizedPrincipalsFile /var/lib/agent-cloud/hosting-principals
+    ForceCommand /usr/bin/sudo -n -- /usr/local/bin/guestctl hosting --json

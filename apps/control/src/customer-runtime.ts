@@ -1,3 +1,4 @@
+import { createHostingRuntime } from './hosting-runtime.js';
 import { createInternalReference } from './internal-reference.js';
 import { isDeepStrictEqual } from 'node:util';
 import { CloudError, accessServiceConfigSchema, type GuestImage } from '@agent-cloud/contracts';
@@ -146,6 +147,16 @@ export async function createCustomerRuntime(input: {
             config: accessConfig,
             signer: () => readRuntimeCustomerSigner(runtime.pki),
             checkNetwork,
+          }),
+        }
+      : {}),
+    ...(config.hostingConfigFile
+      ? {
+          hosting: await createHostingRuntime({
+            connection,
+            provider,
+            path: config.hostingConfigFile,
+            signer: async () => (await getServices()).signer,
           }),
         }
       : {}),

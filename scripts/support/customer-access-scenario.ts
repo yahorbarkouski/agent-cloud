@@ -15,16 +15,19 @@ import { createTasks } from '../../apps/control/src/tasks.js';
 import { createAccessGateway } from '../../apps/access-gateway/src/server.js';
 import { hashToken } from '../../apps/control/src/auth.js';
 import type { Connection } from '../../packages/db/src/index.js';
-import type { CustomerSshSigner } from '../../packages/pki/dist/index.js';
+import type { CustomerSshSigner, Signer } from '../../packages/pki/dist/index.js';
 import type { prepareEnrollmentFixture } from './enrollment-fixture.js';
 import { exerciseDurableRuns } from './durable-runs-scenario.js';
 import { exerciseCompose } from './compose-scenario.js';
+import { prepareHostingFixture } from './hosting-fixture.js';
+import { exerciseHosting } from './hosting-scenario.js';
 
 /** Actual CLI, Graphile worker, gateway, native SSH/SFTP and owned Ubuntu guest. No paid provider. */
 export async function exerciseCustomerAccess(input: {
   connection: Connection;
   fixture: Awaited<ReturnType<typeof prepareEnrollmentFixture>>;
   signer: CustomerSshSigner;
+  controlSigner: Signer;
   scratch: string;
   address: string;
   reboot: () => Promise<void>;
@@ -77,12 +80,25 @@ export async function exerciseCustomerAccess(input: {
     signer: () => Promise.resolve(input.signer),
     checkNetwork: async () => {},
   });
+  const hosting =
+    process.env.AGENT_CLOUD_HOSTING_SCENARIO === '1'
+      ? await prepareHostingFixture({
+          connection: input.connection,
+          provider: f.provider,
+          signer: input.controlSigner,
+          scratch: input.scratch,
+          controlUrl,
+        })
+      : undefined;
   const app = createApp({
     db: input.connection.db,
     provider: f.provider.kind,
     catalog: f.catalog,
     limits: f.limits,
     access,
+    ...(hosting
+      ? { hosting: { service: hosting.runtime.service, gatewayToken: hosting.gatewayToken } }
+      : {}),
   });
   handle = (request) => app.fetch(request);
   const worker = await run({
@@ -94,6 +110,7 @@ export async function exerciseCustomerAccess(input: {
       provider: f.provider,
       limits: f.limits,
       access,
+      ...(hosting ? { hosting: hosting.runtime.service } : {}),
     }),
   });
   const ownerFile = join(input.scratch, 'ssh-owner.json');
@@ -105,7 +122,7 @@ export async function exerciseCustomerAccess(input: {
         ['apps/cli/dist/index.js', ...args],
         {
           env: { ...process.env, ACLD_CREDENTIALS: credentials },
-          timeout: process.env.AGENT_CLOUD_COMPOSE_SCENARIO === '1' ? 330_000 : 100_000,
+          timeout: process.env.AGENT_CLOUD_COMPOSE_SCENARIO === '1' || hosting ? 330_000 : 100_000,
           maxBuffer: 262_144,
         },
         (error, stdout, stderr) => {
@@ -173,10 +190,11 @@ export async function exerciseCustomerAccess(input: {
     }
   }
   try {
+    hosting?.start();
     await success(['login', '--server', controlUrl, '--token-stdin'], ownerFile, f.account.token);
     const policy = {
       ...f.account.principal.policy,
-      capabilities: ['machine:read', 'machine:exec'],
+      capabilities: ['machine:read', 'machine:exec', ...(hosting ? ['route:publish'] : [])],
       projects: { kind: 'selected', ids: [f.account.projectId] },
       maxMachines: 0,
       maxHourlyMicros: 0,
@@ -200,6 +218,22 @@ export async function exerciseCustomerAccess(input: {
           ]),
         ),
       );
+    if (hosting) {
+      await exerciseHosting({
+        machine,
+        credentials: agentFile,
+        scratch: input.scratch,
+        gatewayState: hosting.gatewayState,
+        httpsPort: hosting.httpsPort,
+        cli,
+        apiAvailable: (value) => {
+          available = value;
+        },
+        restartGateway: hosting.restart,
+        reboot: input.reboot,
+      });
+      return;
+    }
     if (process.env.AGENT_CLOUD_COMPOSE_SCENARIO === '1') {
       await exerciseCompose({
         machine,
@@ -268,6 +302,7 @@ export async function exerciseCustomerAccess(input: {
     );
   } finally {
     available = true;
+    await hosting?.stop();
     await gateway.close();
     await worker.stop();
     if ('closeAllConnections' in server) server.closeAllConnections();

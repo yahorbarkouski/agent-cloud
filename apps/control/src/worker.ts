@@ -25,7 +25,11 @@ const taskList =
                 catalog: () => simulatedCatalog(config.limits.currency),
               }),
         ...(runtime?.mode === 'customer'
-          ? { guest: runtime.guest, ...(runtime.access ? { access: runtime.access } : {}) }
+          ? {
+              guest: runtime.guest,
+              ...(runtime.access ? { access: runtime.access } : {}),
+              ...(runtime.hosting ? { hosting: runtime.hosting.service } : {}),
+            }
           : {}),
       });
 const runner = await run({

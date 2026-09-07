@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { HostingService } from './hosting.js';
 import type { Config } from './config.js';
 import { eq, sql } from 'drizzle-orm';
 import type { TaskList, JobHelpers } from 'graphile-worker';
@@ -29,8 +30,18 @@ export function createTasks(input: {
   guest?: GuestProvisioning;
   images?: Parameters<typeof createImageTasks>[0]['advance'];
   access?: AccessService;
+  hosting?: HostingService;
 }): TaskList {
   return {
+    ...(input.hosting
+      ? {
+          apply_hosting_route: async (payload: unknown) => {
+            await input.hosting?.advance(
+              z.object({ hostname: z.string() }).parse(payload).hostname,
+            );
+          },
+        }
+      : {}),
     ...(input.access
       ? {
           issue_access_session: async (payload: unknown, helpers: JobHelpers) => {
@@ -81,6 +92,15 @@ export function createTasks(input: {
       );
     },
     reconcile_operations: async () => {
+      if (input.hosting) {
+        const routes = await input.connection.db.execute<{ hostname: string }>(
+          sql`SELECT hostname FROM hosting_routes WHERE record->'application'->>'kind' = 'pending' LIMIT 1000`,
+        );
+        for (const row of routes.rows)
+          await input.connection.db.execute(
+            sql`SELECT graphile_worker.add_job('apply_hosting_route', ${JSON.stringify({ hostname: row.hostname })}::json, job_key := ${`hosting:${row.hostname}`}, max_attempts := 10)`,
+          );
+      }
       if (input.access) {
         const pendingAccess = await input.connection.db
           .select({ id: accessSessions.id })

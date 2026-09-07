@@ -10,6 +10,7 @@ import {
   rm,
   readdir,
   chmod,
+  open,
 } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -68,8 +69,17 @@ try {
       }
     }
   }
+  await prepareGateway(destination, config);
+  await publishPrivate(configPath, JSON.stringify(config, null, 2) + '\n');
   // Matching files cannot establish what an already-running CA loaded before a crash.
-  process.stdout.write(JSON.stringify({ ...state, created: false, restartRequired: true }) + '\n');
+  process.stdout.write(
+    JSON.stringify({
+      ...state,
+      created: false,
+      restartRequired: true,
+      gateway: gatewayMetadata(),
+    }) + '\n',
+  );
 } catch (error) {
   if (
     !(
@@ -190,6 +200,7 @@ async function initialize() {
       defaultUserSSHCertDuration: '5m',
       maxUserSSHCertDuration: '5m',
     };
+    await prepareGateway(staging, config);
     await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });
     await mkdir(join(staging, 'offline'), { mode: 0o700 });
     await rename(join(issuer, 'secrets/root_ca_key'), join(staging, 'offline/root_ca_key'));
@@ -217,10 +228,155 @@ async function initialize() {
       { mode: 0o600, flag: 'wx' },
     );
     await rename(staging, destination);
-    process.stdout.write(JSON.stringify({ ...state, created: true }) + '\n');
+    process.stdout.write(
+      JSON.stringify({ ...state, created: true, gateway: gatewayMetadata() }) + '\n',
+    );
   } finally {
     await rm(staging, { recursive: true, force: true });
   }
+}
+
+function gatewayMetadata() {
+  return {
+    provisioner: 'agent-cloud-gateway',
+    provisionerPasswordFile: join(destination, 'gateway-provisioner-password'),
+    tlsRootFile: join(destination, 'public/root_ca.crt'),
+    templateFile: join(destination, 'issuer/config/gateway-leaf.tpl'),
+  };
+}
+
+async function publishPrivate(path: string, value: string | Buffer) {
+  const temporary = path + '.' + randomBytes(8).toString('hex') + '.next';
+  try {
+    const file = await open(temporary, 'wx', 0o600);
+    try {
+      await file.writeFile(value);
+      await file.sync();
+    } finally {
+      await file.close();
+    }
+    await rename(temporary, path);
+    const directory = await open(resolve(path, '..'), 'r');
+    try {
+      await directory.sync();
+    } finally {
+      await directory.close();
+    }
+  } finally {
+    await rm(temporary, { force: true });
+  }
+}
+
+/** A separate key and provisioner allow gateway renewal without enabling guest renewal. */
+async function prepareGateway(pki: string, config: Record<string, unknown>) {
+  const authority = z.record(z.string(), z.unknown()).parse(config['authority']);
+  const claims = z.record(z.string(), z.unknown()).parse(authority['claims']);
+  if (claims['disableRenewal'] !== true)
+    throw new Error('Guest renewal must remain disabled in the CA authority.');
+  const provisioners = z.array(z.record(z.string(), z.unknown())).parse(authority['provisioners']);
+  const matches = provisioners.filter((entry) => entry['name'] === 'agent-cloud-gateway');
+  if (matches.length > 1) throw new Error('Expected at most one gateway provisioner.');
+  const existing = matches[0];
+  const passwordPath = join(pki, 'gateway-provisioner-password');
+  try {
+    const info = await lstat(passwordPath);
+    if (
+      !info.isFile() ||
+      info.mode & 0o077 ||
+      info.uid !== process.getuid?.() ||
+      info.size < 32 ||
+      info.size > 512
+    )
+      throw new Error('Gateway provisioner password must be an owner-only regular file.');
+  } catch (error) {
+    if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+    if (existing)
+      throw new Error(
+        'Existing gateway provisioner password is missing; restore it without replacing its key.',
+        { cause: error },
+      );
+    await publishPrivate(passwordPath, randomBytes(32).toString('base64url') + '\n');
+  }
+  let provisioner: Record<string, unknown>;
+  if (existing) {
+    z.object({
+      type: z.literal('JWK'),
+      key: z.object({ kty: z.literal('EC'), crv: z.literal('P-256'), kid: z.string() }),
+      encryptedKey: z.string().min(1),
+    }).parse(existing);
+    provisioner = existing;
+  } else {
+    const directory = await mkdtemp(join(pki, 'gateway-key-'));
+    try {
+      const publicPath = join(directory, 'public.json');
+      const privatePath = join(directory, 'private.jwe');
+      try {
+        await promisify(execFile)(
+          binary,
+          [
+            'crypto',
+            'jwk',
+            'create',
+            publicPath,
+            privatePath,
+            '--kty',
+            'EC',
+            '--curve',
+            'P-256',
+            '--use',
+            'sig',
+            '--alg',
+            'ES256',
+            '--password-file',
+            passwordPath,
+          ],
+          {
+            env: { PATH: '/usr/bin:/bin', LANG: 'C', STEPPATH: directory },
+            timeout: 20_000,
+            killSignal: 'SIGKILL',
+            maxBuffer: 16_384,
+          },
+        );
+      } catch {
+        throw new Error('Gateway provisioner key generation failed.');
+      }
+      const key = z
+        .strictObject({
+          kty: z.literal('EC'),
+          crv: z.literal('P-256'),
+          kid: z.string(),
+          x: z.string(),
+          y: z.string(),
+          use: z.literal('sig'),
+          alg: z.literal('ES256'),
+        })
+        .parse(JSON.parse(await readFile(publicPath, 'utf8')));
+      const encryptedKey = z
+        .string()
+        .min(1)
+        .max(16_384)
+        .parse((await readFile(privatePath, 'utf8')).trim());
+      provisioner = { type: 'JWK', name: 'agent-cloud-gateway', key, encryptedKey };
+      provisioners.push(provisioner);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  }
+  provisioner['claims'] = {
+    enableSSHCA: false,
+    disableRenewal: false,
+    allowRenewalAfterExpiry: false,
+    minTLSCertDuration: '5m',
+    defaultTLSCertDuration: '1h',
+    maxTLSCertDuration: '1h',
+  };
+  provisioner['options'] = { x509: { templateFile: '/home/step/config/gateway-leaf.tpl' } };
+  await publishPrivate(
+    join(pki, 'issuer/config/gateway-leaf.tpl'),
+    await readFile(resolve('infra/pki/gateway-leaf.tpl')),
+  );
+  authority['provisioners'] = provisioners;
+  config['authority'] = authority;
 }
 
 async function privateTree(path: string): Promise<void> {

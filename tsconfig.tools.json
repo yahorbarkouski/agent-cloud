@@ -41,6 +41,7 @@
     },
     {
       "path": "apps/access-gateway"
-    }
+    },
+    { "path": "apps/public-gateway" }
   ]
 }

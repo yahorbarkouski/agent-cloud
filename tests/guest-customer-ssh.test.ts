@@ -103,7 +103,7 @@ permituserrc no
 permittty ${user === 'agent-customer' ? 'yes' : 'no'}
 forcecommand none
 subsystem sftp internal-sftp
-allowusers agent-probe agent-deploy agent-customer
+allowusers agent-probe agent-deploy agent-customer agent-hosting
 `,
     );
   const system = {
@@ -147,8 +147,8 @@ it('accepts native Ubuntu sshd formatting and rejects an extra user', async () =
       policy
         .replace('subsystem sftp internal-sftp\n', 'subsystem sftp internal-sftp \n')
         .replace(
-          'allowusers agent-probe agent-deploy agent-customer',
-          'allowusers agent-probe\nallowusers agent-deploy\nallowusers agent-customer',
+          'allowusers agent-probe agent-deploy agent-customer agent-hosting',
+          'allowusers agent-probe\nallowusers agent-deploy\nallowusers agent-customer\nallowusers agent-hosting',
         ),
     );
   await verifyCustomerSsh(configuration, guest.manifest, guest.proof, guest.system);

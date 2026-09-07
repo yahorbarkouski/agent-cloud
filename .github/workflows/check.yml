@@ -72,6 +72,8 @@ jobs:
       - if: needs.scope.outputs.code_changed == 'true'
         run: npm exec --yes --package=pnpm@12.3.4 -- pnpm smoke:pki
       - if: needs.scope.outputs.code_changed == 'true'
+        run: npm exec --yes --package=pnpm@12.3.4 -- pnpm smoke:gateway-pki
+      - if: needs.scope.outputs.code_changed == 'true'
         run: npm exec --yes --package=pnpm@12.3.4 -- pnpm smoke:ssh
       - if: needs.scope.outputs.code_changed == 'true'
         run: npm exec --yes --package=pnpm@12.3.4 -- pnpm smoke:customer-pki

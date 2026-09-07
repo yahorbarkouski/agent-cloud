@@ -34,7 +34,7 @@ for image_state in /var/lib/agent-cloud /usr/lib/agent-cloud; do
     [ -z "$(ls -A "$image_state")" ]
   fi
 done
-for image_account in agent-probe agent-proxy agent-customer; do
+for image_account in agent-probe agent-proxy agent-customer agent-hosting; do
   if getent passwd "$image_account" >/dev/null; then exit 1; fi
   [ ! -e "/var/lib/$image_account" ]
   [ ! -L "/var/lib/$image_account" ]
@@ -74,6 +74,7 @@ case "${1:-}" in
     exec /usr/bin/flock --nonblock "/run/agent-cloud-run-$2.lock" /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@" ;;
   reference) exec /usr/bin/flock --wait 5 /run/agent-cloud-reference-admission.lock /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@" ;;
   reference-work) exec /usr/bin/flock --nonblock /run/agent-cloud-reference-work.lock /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@" ;;
+  hosting) exec /usr/bin/flock --wait 5 /run/agent-cloud-guest.lock /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@" ;;
   enroll|renew|prepare-image) exec /usr/bin/flock --nonblock /run/agent-cloud-guest.lock /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@" ;;
 esac
 exec /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@"
@@ -82,6 +83,7 @@ chmod 0755 /usr/local/bin/guestctl
 if ! id agent-probe >/dev/null 2>&1; then useradd --system --create-home --home-dir /var/lib/agent-probe --shell /bin/sh agent-probe; fi
 if ! id agent-deploy >/dev/null 2>&1; then useradd --system --create-home --home-dir /var/lib/agent-deploy --shell /bin/sh agent-deploy; fi
 useradd --system --create-home --home-dir /var/lib/agent-customer --shell /bin/sh agent-customer
+useradd --system --no-create-home --home-dir /var/lib/agent-hosting --shell /bin/sh agent-hosting
 if ! id agent-proxy >/dev/null 2>&1; then useradd --system --no-create-home --home-dir /var/lib/agent-cloud-proxy --shell /usr/sbin/nologin agent-proxy; fi
 install -m 0440 "$image_input/guest-inspect.sudoers" /etc/sudoers.d/agent-cloud-inspect
 visudo -cf /etc/sudoers.d/agent-cloud-inspect

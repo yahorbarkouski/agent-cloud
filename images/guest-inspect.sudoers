@@ -2,3 +2,6 @@ Defaults:agent-probe env_reset, !setenv, secure_path="/usr/local/bin:/usr/bin:/b
 agent-probe ALL=(root) NOPASSWD: NOSETENV: /usr/local/bin/guestctl inspect --json
 
 agent-deploy ALL=(root) NOPASSWD: /usr/local/bin/guestctl reference --json
+
+Defaults:agent-hosting env_reset, !setenv, secure_path="/usr/local/bin:/usr/bin:/bin"
+agent-hosting ALL=(root) NOPASSWD: NOSETENV: /usr/local/bin/guestctl hosting --json

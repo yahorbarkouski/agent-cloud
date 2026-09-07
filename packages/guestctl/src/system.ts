@@ -2,7 +2,12 @@ import { guestSubject, sameGuestSubject } from '@agent-cloud/contracts';
 import type { Dirent } from 'node:fs';
 import { chmod, chown, copyFile, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { probePrincipal, runtimePrincipal, deploymentPrincipal } from '@agent-cloud/pki';
+import {
+  probePrincipal,
+  runtimePrincipal,
+  deploymentPrincipal,
+  hostingPrincipal,
+} from '@agent-cloud/pki';
 import { atomicWrite, ensureDirectory, isMissing } from './files.js';
 import type { EnrollmentSystem } from './enrollment.js';
 import { runTool } from './tools.js';
@@ -38,6 +43,12 @@ export function guestSystem(
         await atomicWrite(
           join(configuration.state, 'deployment-principals'),
           deploymentPrincipal(guestSubject(proof)) + '\n',
+          0o644,
+        );
+      if (proof.version === 1)
+        await atomicWrite(
+          join(configuration.state, 'hosting-principals'),
+          hostingPrincipal(guestSubject(proof)) + '\n',
           0o644,
         );
       await publishCustomerPrincipal(configuration.state, spec);
@@ -92,6 +103,8 @@ export function guestSystem(
               },
               guest: {
                 listen: [':8443'],
+                // Gateway SNI authenticates this allocation; HTTP Host names the owned application.
+                strict_sni_host: false,
                 automatic_https: { disable: true },
                 tls_connection_policies: [
                   {

@@ -6,8 +6,10 @@ import {
   runIdSchema,
   CloudError,
   composeCommandSchema,
+  hostingGuestCommandSchema,
   composeAppSchema,
 } from '@agent-cloud/contracts';
+import { createGuestHosting } from './hosting.js';
 import { createComposeDeployments } from './compose.js';
 import { composeSystem } from './compose-system.js';
 import { readJsonInput } from './input.js';
@@ -30,7 +32,14 @@ const configuration = {
   keygen: '/usr/bin/ssh-keygen',
 };
 try {
-  if (['compose', 'compose-work', 'compose-wait'].includes(process.argv[2] ?? '')) {
+  if (process.argv[2] === 'hosting') {
+    if (process.getuid?.() !== 0 || process.argv[3] !== '--json' || process.argv.length !== 4)
+      throw new Error('Hosting requires its fixed root command.');
+    const result = await createGuestHosting({ state: configuration.state }).command(
+      hostingGuestCommandSchema.parse(await readJsonInput(process.stdin, 4096)),
+    );
+    process.stdout.write(JSON.stringify(result) + '\n');
+  } else if (['compose', 'compose-work', 'compose-wait'].includes(process.argv[2] ?? '')) {
     if (process.getuid?.() !== 0) throw new Error('Compose administration requires root.');
     const deployment = createComposeDeployments({
       directory: '/var/lib/agent-cloud/compose',

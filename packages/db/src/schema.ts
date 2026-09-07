@@ -664,3 +664,61 @@ export const runtimeSigningAttempts = pgTable(
     check('runtime_signing_attempt_budget', sql`${t.sequence} BETWEEN 1 AND 12`),
   ],
 );
+
+export const hostingRoutes = pgTable(
+  'hosting_routes',
+  {
+    hostname: text('hostname').primaryKey(),
+    accountId: text('account_id')
+      .notNull()
+      .references(() => accounts.id),
+    projectId: text('project_id').notNull(),
+    machineId: text('machine_id').notNull(),
+    record: jsonb('record').notNull(),
+    target: jsonb('target'),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.accountId, t.projectId],
+      foreignColumns: [projects.accountId, projects.id],
+    }),
+    foreignKey({
+      columns: [t.accountId, t.machineId],
+      foreignColumns: [machines.accountId, machines.id],
+    }),
+    unique().on(t.accountId, t.hostname),
+    index('hosting_routes_machine').on(t.machineId),
+  ],
+);
+export const hostingCommands = pgTable(
+  'hosting_commands',
+  {
+    id: text('id').primaryKey(),
+    accountId: text('account_id').notNull(),
+    hostname: text('hostname').notNull(),
+    digest: text('digest').notNull(),
+    version: integer('version').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.accountId, t.hostname],
+      foreignColumns: [hostingRoutes.accountId, hostingRoutes.hostname],
+    }),
+  ],
+);
+export const domainChallenges = pgTable(
+  'domain_challenges',
+  {
+    id: text('id').primaryKey(),
+    accountId: text('account_id')
+      .notNull()
+      .references(() => accounts.id),
+    hostname: text('hostname').notNull(),
+    value: text('value').notNull(),
+    createdAt: createdAt(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
+  },
+  (t) => [index('domain_challenges_account').on(t.accountId, t.createdAt)],
+);

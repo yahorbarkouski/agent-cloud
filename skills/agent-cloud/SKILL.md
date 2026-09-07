@@ -5,7 +5,7 @@ description: Operate agent-cloud machines through its JSON CLI, inspect durable 
 
 # Agent-cloud
 
-Use the installed `acld` CLI. In a source checkout, use `pnpm acld`. Run `acld --help` when unsure about available commands. The current release supports GitHub device sign-in, machine lifecycle, scoped delegation, SSH, single-file transfer, durable commands and Compose deployment/recovery. Managed routes and protected backups are still being implemented.
+Use the installed `acld` CLI. In a source checkout, use `pnpm acld`. Run `acld --help` when unsure about available commands. The current release supports GitHub device sign-in, machine lifecycle, scoped delegation, SSH, single-file transfer, durable commands, Compose deployment/recovery and managed HTTPS routing. Protected backups are still being implemented.
 
 ## Establish context
 
@@ -116,3 +116,19 @@ acld usage
 Check for `destroyed` and released usage reservations. Deletion completes only after the VM and its owned Primary IP are confirmed absent. The same destroy command cancels an active blocked create or cleans a failed create with a retained allocation. Active cancellation returns the original create operation and eventually `cancelled`; failed-create recovery returns a new destroy operation and preserves the failed source result. Accepted cleanup continues after its initiating grant expires or is revoked, within the recorded allocation scope.
 
 Unknown source creates never resubmit and empty inventory never proves absence. Duplicate resources remain recorded; automatic IP deletion or mismatched assignment can block VM cleanup. `cleanup_retry_exhausted` means the initial three attempts and any explicitly authorized operator retries were used. Report the operation/resource IDs for operator recovery; do not create replacements or assume reservations were released. New request keys do not reset this retry budget. The operator has a separate recovery command requiring database access and evidence. Do not fabricate provider confirmation or use this skill as authority to run it.
+
+## Publish HTTPS
+
+Bind the application's HTTP port on the VM's loopback interface, for example `127.0.0.1:3000`. The public gateway handles HTTPS and forwards through the private guest proxy. Keep database ports private. Routing requires `route:publish` for the machine's project.
+
+```sh
+acld route publish vm_... --name example --port 3000 --key <UUIDv4>
+acld route wait <returned-hostname>
+acld route inspect <returned-hostname>
+acld route publish vm_... --name example --port 3001 --expected-version 1 --key <new-UUIDv4>
+acld route remove <hostname> --expected-version 2 --key <new-UUIDv4>
+```
+
+Keep the command UUID and input after a lost response. Retry the same command, then inspect the hostname if a later version superseded it. Do not invent a fresh key to conceal an uncertain result. A blocked change has exhausted five guest attempts; diagnose the guest/application and submit a new change with the current expected version. Route application confirms proxy configuration, not application readiness. Make an HTTPS request and check the expected application behavior/data after deployment or update.
+
+For a custom hostname, run `acld domain add <hostname>`, publish the returned TXT record and point all A/AAAA records at the operator's gateway addresses. Run `acld domain verify <challenge-id>`, then publish with `--hostname <hostname> --challenge <challenge-id>` instead of `--name`. Challenges expire after 30 minutes. Removed names remain reserved to the owning account; do not try another account to bypass a reservation. Read [routing semantics](../../docs/architecture/https-routing.md) when diagnosing ownership or an interrupted update.

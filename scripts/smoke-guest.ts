@@ -389,6 +389,7 @@ try {
         connection: database.connection,
         fixture,
         signer: createCustomerSshSigner(signerConfiguration),
+        controlSigner: signer,
         scratch,
         address: info.ip4,
         reboot: async () => {

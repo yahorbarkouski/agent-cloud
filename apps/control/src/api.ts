@@ -1,3 +1,4 @@
+import { readPrivateFile } from './private-file.js';
 import { serve } from '@hono/node-server';
 import { connect } from '@agent-cloud/db';
 import { createApp } from './app.js';
@@ -46,6 +47,14 @@ const app = createApp({
         imageRelease: runtime.imageRelease,
         ...(runtime.internalReference ? { internalReference: runtime.internalReference } : {}),
         ...(runtime.access ? { access: runtime.access } : {}),
+        ...(runtime.hosting
+          ? {
+              hosting: {
+                service: runtime.hosting.service,
+                gatewayToken: await readPrivateFile(runtime.hosting.gatewayTokenFile),
+              },
+            }
+          : {}),
       }
     : {}),
 });

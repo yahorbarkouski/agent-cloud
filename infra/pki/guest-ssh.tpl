@@ -29,6 +29,6 @@
   "keyId": {{ toJson .KeyID }},
   "principals": {{ toJson .Principals }},
   "extensions": {},
-  "criticalOptions": {{ if eq .Type "user" }}{"force-command": {{ if hasPrefix "deployment-alloc_" .KeyID }}"/usr/bin/sudo -n -- /usr/local/bin/guestctl reference --json"{{ else if or (hasPrefix "runtime-alloc_" .KeyID) (hasPrefix "runtime-verify_" .KeyID) }}"/usr/bin/sudo -n -- /usr/local/bin/guestctl inspect --json"{{ else }}"/usr/local/bin/guestctl identity --json"{{ end }}}{{ else }}{}{{ end }}
+  "criticalOptions": {{ if eq .Type "user" }}{"force-command": {{ if hasPrefix "hosting-alloc_" .KeyID }}"/usr/bin/sudo -n -- /usr/local/bin/guestctl hosting --json"{{ else if hasPrefix "deployment-alloc_" .KeyID }}"/usr/bin/sudo -n -- /usr/local/bin/guestctl reference --json"{{ else if or (hasPrefix "runtime-alloc_" .KeyID) (hasPrefix "runtime-verify_" .KeyID) }}"/usr/bin/sudo -n -- /usr/local/bin/guestctl inspect --json"{{ else }}"/usr/local/bin/guestctl identity --json"{{ end }}}{{ else }}{}{{ end }}
 }
 {{- end -}}

@@ -19,6 +19,7 @@ import { CloudClient } from '@agent-cloud/sdk';
 import { registerGrants } from './grants.js';
 import { registerSsh } from './ssh.js';
 import { registerRuns } from './runs.js';
+import { registerHosting } from './hosting.js';
 import { registerCompose } from './compose.js';
 import { loginWithDevice, logout } from './login.js';
 import { syncCredentialDirectories, withCredentialLock } from './credential-file.js';
@@ -43,6 +44,7 @@ registerGrants({ program, client, output });
 registerSsh({ program, client, output });
 registerRuns({ program, client, output });
 registerCompose({ program, client, output });
+registerHosting({ program, client, output });
 
 program
   .command('login')
