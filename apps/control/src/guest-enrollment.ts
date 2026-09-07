@@ -25,8 +25,10 @@ import {
   enqueueOperation,
   operationRecord,
   withMachineLock,
+  databaseTime,
   type Connection,
   type Database,
+  type Executor,
   type Transaction,
 } from '@agent-cloud/db';
 import type { Signer, ProbeCredential } from '@agent-cloud/pki';
@@ -45,7 +47,7 @@ type EnrollmentPorts = {
   provider: MachineProvider;
 };
 
-async function loadBootstrap(db: Database, seal: BootstrapSeal, input: GuestEnrollmentInput) {
+async function loadBootstrap(db: Executor, seal: BootstrapSeal, input: GuestEnrollmentInput) {
   const [row] = await db
     .select({ bootstrap: guestBootstraps, allocation: allocations })
     .from(guestBootstraps)
@@ -62,10 +64,11 @@ async function loadBootstrap(db: Database, seal: BootstrapSeal, input: GuestEnro
         isNull(allocations.retiredAt),
       ),
     );
+  const now = await databaseTime(db);
   if (
     !row ||
     !seal.matches(input.token, row.bootstrap.tokenHash) ||
-    row.bootstrap.expiresAt.getTime() <= Date.now()
+    row.bootstrap.expiresAt.getTime() <= now.getTime()
   )
     throw new CloudError('unauthenticated', 'Guest bootstrap credentials are invalid or expired.');
   const spec = bootstrapSpecSchema.parse(row.bootstrap.spec);
@@ -79,7 +82,7 @@ async function loadBootstrap(db: Database, seal: BootstrapSeal, input: GuestEnro
     throw new CloudError('internal_error', 'Guest bootstrap ownership is inconsistent.');
   if (input.imageVersion !== spec.image.version)
     throw new CloudError('permission_denied', 'Guest image does not match its bootstrap.');
-  return { ...row, spec };
+  return { ...row, spec, now };
 }
 
 async function readIdentity(db: Database, input: GuestEnrollmentInput) {
@@ -159,7 +162,7 @@ async function reserveSigning(
         'quota_exceeded',
         'Guest signing attempt limit reached; operator recovery is required.',
       );
-    if (previous && Date.now() - previous.createdAt.getTime() < 30_000)
+    if (previous && (await databaseTime(tx)).getTime() - previous.createdAt.getTime() < 30_000)
       throw new CloudError(
         'resource_busy',
         'Guest signing retry must wait at least 30 seconds.',
@@ -178,7 +181,7 @@ export function createEnrollmentService(ports: EnrollmentPorts) {
   const credentials = new Map<AllocationId, ProbeCredential>();
   async function credential(db: Database, context: Awaited<ReturnType<typeof loadBootstrap>>) {
     for (const [id, current] of credentials)
-      if (Date.parse(current.expiresAt) <= Date.now() + 15_000) credentials.delete(id);
+      if (Date.parse(current.expiresAt) <= context.now.getTime() + 15_000) credentials.delete(id);
     const current = credentials.get(context.spec.allocationId);
     if (current) return current;
     if (credentials.size >= 1024)
@@ -312,32 +315,37 @@ export function createEnrollmentService(ports: EnrollmentPorts) {
           subject: guestSubject(context.spec),
           csr: input.tlsCsr,
         });
-        const issued = issuedGuestIdentitySchema.parse({
-          kind: 'issued',
-          sshHostPublicKey: input.sshHostPublicKey,
-          tlsCsr: input.tlsCsr,
-          imageVersion: input.imageVersion,
-          sshHostCertificate,
-          tlsCertificate,
-          issuedAt: new Date().toISOString(),
-        });
-        await db.transaction(async (tx) => {
+        const issued = await db.transaction(async (tx) => {
+          await tx
+            .select()
+            .from(allocations)
+            .where(eq(allocations.id, context.spec.allocationId))
+            .for('update');
           await tx
             .select()
             .from(guestBootstraps)
             .where(eq(guestBootstraps.allocationId, context.spec.allocationId))
             .for('update');
-          if (context.bootstrap.expiresAt.getTime() <= Date.now())
-            throw new CloudError('unauthenticated', 'Guest bootstrap expired during issuance.');
+          const final = await loadBootstrap(tx, ports.seal, input);
+          const identity = issuedGuestIdentitySchema.parse({
+            kind: 'issued',
+            sshHostPublicKey: input.sshHostPublicKey,
+            tlsCsr: input.tlsCsr,
+            imageVersion: input.imageVersion,
+            sshHostCertificate,
+            tlsCertificate,
+            issuedAt: final.now.toISOString(),
+          });
           await tx
             .update(guestIdentities)
-            .set({ identity: issued })
+            .set({ identity })
             .where(eq(guestIdentities.allocationId, context.spec.allocationId));
           await tx
             .update(guestBootstraps)
-            .set({ consumedAt: new Date(), sealedToken: null })
+            .set({ consumedAt: final.now, sealedToken: null })
             .where(eq(guestBootstraps.allocationId, context.spec.allocationId));
-          await handoffRuntime(tx, context);
+          await handoffRuntime(tx, final);
+          return identity;
         });
         credentials.delete(context.spec.allocationId);
         return issued;

@@ -1,3 +1,4 @@
+import * as databaseClock from '../packages/db/dist/index.js';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
@@ -16,6 +17,7 @@ import {
   guestImageSchema,
   guestEnrollmentInputSchema,
   guestProofSchema,
+  issuedGuestIdentitySchema,
   simulatedCatalog,
   CloudError,
   newId,
@@ -372,7 +374,7 @@ it('serializes concurrent enrollment and retains one key claim when TLS issuance
   expect((await guest.request({ ...guest.proposal, tlsCsr: 'replacement-csr' })).status).toBe(403);
   expect((await guest.request()).status).toBe(409);
   const now = Date.now();
-  vi.spyOn(Date, 'now').mockReturnValue(now + 31_000);
+  vi.spyOn(databaseClock, 'databaseTime').mockResolvedValue(new Date(now + 31_000));
   expect((await guest.request()).status).toBe(200);
   expect(guest.signer.issueProbeCredential).toHaveBeenCalledTimes(1);
   expect(guest.signer.signHost).toHaveBeenCalledTimes(2);
@@ -384,14 +386,14 @@ it('persists signing budgets across process restarts and never erases failed iss
     new CloudError('provider_unavailable', 'CA response lost.', true),
   );
   const now = Date.now();
-  const time = vi.spyOn(Date, 'now');
+  const time = vi.spyOn(databaseClock, 'databaseTime');
   for (let count = 0; count < 12; count++) {
-    time.mockReturnValue(now + 31_000 * count);
+    time.mockResolvedValue(new Date(now + 31_000 * count));
     await expect(createEnrollmentService(guest.ports).enroll(guest.proposal)).rejects.toThrow(
       'CA response lost',
     );
   }
-  time.mockReturnValue(now + 31_000 * 13);
+  time.mockResolvedValue(new Date(now + 31_000 * 13));
   await expect(createEnrollmentService(guest.ports).enroll(guest.proposal)).rejects.toThrow(
     'attempt limit',
   );
@@ -412,7 +414,7 @@ it('does not persist issued identity if the bootstrap expires during signing and
   const [bootstrap] = await fixture.connection.db.select().from(guestBootstraps);
   if (!bootstrap) throw new Error('Expected bootstrap.');
   guest.signer.signTls.mockImplementationOnce(() => {
-    vi.spyOn(Date, 'now').mockReturnValue(bootstrap.expiresAt.getTime());
+    vi.spyOn(databaseClock, 'databaseTime').mockResolvedValue(bootstrap.expiresAt);
     return Promise.resolve('fixture-tls-cert');
   });
   expect((await guest.request()).status).toBe(401);
@@ -433,4 +435,49 @@ it('does not persist issued identity if the bootstrap expires during signing and
       ),
     );
   expect((await guest.request()).status).toBe(401);
+});
+
+it.each([-86_400_000, 86_400_000])(
+  'uses database expiry and issuance when the application clock drifts by %i ms',
+  async (skew) => {
+    const guest = await admittedGuest();
+    const before = await databaseClock.databaseTime(fixture.connection.db);
+    vi.spyOn(Date, 'now').mockReturnValue(before.getTime() + skew);
+    const response = await guest.request();
+    expect(response.status).toBe(200);
+    const identity: unknown = await response.json();
+    const after = await databaseClock.databaseTime(fixture.connection.db);
+    const issued = Date.parse(issuedGuestIdentitySchema.parse(identity).issuedAt);
+    expect(issued).toBeGreaterThanOrEqual(before.getTime());
+    expect(issued).toBeLessThanOrEqual(after.getTime());
+  },
+);
+
+it('application clock drift cannot bypass a failed signing cooldown', async () => {
+  const guest = await admittedGuest();
+  guest.signer.issueProbeCredential.mockRejectedValue(
+    new CloudError('provider_unavailable', 'CA failed.', true),
+  );
+  expect((await guest.request()).status).toBe(503);
+  vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 86_400_000);
+  expect((await guest.request()).status).toBe(409);
+  expect(guest.signer.issueProbeCredential).toHaveBeenCalledTimes(1);
+});
+
+it('retirement during certificate signing prevents publication', async () => {
+  const guest = await admittedGuest();
+  guest.signer.signTls.mockImplementationOnce(async () => {
+    await fixture.connection.db
+      .update(allocations)
+      .set({ retiredAt: new Date() })
+      .where(eq(allocations.id, guest.reference.allocationId));
+    return 'fixture-tls-cert';
+  });
+  expect((await guest.request()).status).toBe(401);
+  expect((await fixture.connection.db.select().from(guestIdentities))[0]?.identity).toMatchObject({
+    kind: 'claimed',
+  });
+  expect(
+    (await fixture.connection.db.select().from(guestBootstraps))[0]?.sealedToken,
+  ).not.toBeNull();
 });

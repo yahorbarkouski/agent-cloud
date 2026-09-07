@@ -1,5 +1,11 @@
 # Implementation progress
 
+## Enrollment clock follow-up
+
+Initial enrollment now uses PostgreSQL time for authorization expiry, signing cooldown, credential reuse and issuance. Its final transaction locks and reloads allocation/bootstrap ownership, so retirement or expiry during CA signing prevents certificate publication and token erasure. The schema is unchanged.
+
+Full check27453 passed372tests/34files, typecheck/lint and formatting. Native95533 passed actual Smallstep/OpenSSH/TLS enrollment and renewal with cleanup. New tests exercise application clock drift and retirement during signing. Earlier full32711 failed on a test response typing error, which was corrected before the final run. The [review](research/m1-enrollment-clock-review.md) found no material blocker. Exact CI for this follow-up remains pending.
+
 ## Current renewal checkpoint
 
 - [x] Implement customer `/guest/renew` with original-key signed requests, database-time freshness, active ownership and pinned SSH proof. Persist signing attempts and enforce four per rolling hour with a thirty-second cooldown. Preserve initial enrollment evidence.
@@ -8,7 +14,7 @@
 - [x] Apply immutable migration0017 and verify all18 hashes. Restarted CLI/API/worker smoke29835 passed create/inspect/destroy/cleanup; SQL confirms zero active allocations, unfinished image builds and simulator resources. Formatting passed. [Verification](research/m1-guest-renewal-verification.json) and [review](research/m1-guest-renewal-review.md).
 - [ ] Wire mandatory renewal-capable release selection and renewal ports into customer runtime; complete remaining operator recovery, customer access and deployment milestones.
 
-See [renewal design](architecture/guest-renewal.md). The full goal remains active.
+Implementation `7843b036da6f9d3bf968366576549912f183e6af` is pushed. [Linux CI34115440102](https://github.com/yahorbarkouski/agent-cloud/actions/runs/34115440102) passed full checks, fresh PKI, native smokes and cleanup. See [renewal design](architecture/guest-renewal.md). The full goal remains active.
 
 ## Previous image runtime checkpoint
 
