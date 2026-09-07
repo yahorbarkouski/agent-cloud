@@ -24,3 +24,53 @@ Reviewed 2026-09-07 from the isolated `.local/customer-ssh` worktree against the
 - Malformed issuance/connection objects generally fail closed through exact-key checks and timestamp/UUID casts. Closing pending/unclaimed authority without enabling later signing is covered. The contract tests catch arithmetic boundaries, changed pins, malformed SSH wire keys, caller-added request fields, unsafe origins/CIDRs, invalid claim timing, and missing retained receipts.
 
 After the three items above, this is a sound persistence foundation. Authorization, idempotent admission/rate queries, database-time ancestry rechecks, signer certificate inspection, exact resource claim predicates, revocation/destroy closure, and gateway transport remain separate unimplemented checkpoints.
+
+## Fix review
+
+The revised draft migration and tests resolve all three original P1 findings.
+
+- Admission now validates exact JSON object keys and scalar/container types, provider/ID bounds, canonical Ed25519 customer and guest-host wire keys, accepted Ed25519/P-256 CA wire forms, allocation host alias, gateway identity/origin, and a bounded unique CIDR array. Raw PostgreSQL tests cover JSON null, missing/extra keys, wrong containers, invalid wire values, unsafe origins and invalid CIDRs before a valid insert proves the guard did not reserve an identity.
+- `access_signing_attempts` is a one-to-one receipt keyed by session. The `pending -> attempted` update creates it in an `AFTER UPDATE` trigger in the same transaction; the receipt guard rejects direct inconsistent insertion, update, and deletion. Rollback coverage proves state and receipt disappear together. The receipt survives terminal replacement of the discriminated issuance state.
+- Real concurrent updates prove exactly one signing attempt/receipt and exactly one distinct terminal result. The earlier simultaneous-claim test still proves one claimant. New coverage proves a closed session retains the gateway/instance/connection tuple uniqueness and that the same instance/connection IDs remain usable under a different gateway ID, matching the index scope.
+
+The regenerated0020 contains both tables and places the new allocation uniqueness before its dependent foreign key. The reported fifteen targeted tests passed after the recorded SQL alias correction. The migration remains a draft not applied to a retained/main database, so regeneration did not alter an applied migration. The full check had not completed at this review point.
+
+### Remaining P2 compatibility finding
+
+Canonicalize the gateway origin in the TypeScript contract or make its acceptance profile exactly match SQL before endpoint admission. `accessGatewaySchema` checks a JavaScript `URL`, whose protocol and hostname accessors normalize case, but returns the original string. It therefore accepts spellings such as `WSS://GATEWAY.EXAMPLE` and a trailing-dot hostname such as `wss://gateway.example.`; `valid_access_gateway()` applies its lowercase label regex to the original stored string and rejects them. This is fail-closed rather than an authority bypass, but it means contract-valid input can fail durable admission.
+
+Prefer a contract transform to one canonical serialized origin, followed by validation of that exact output, or share an explicit lexical profile and add contract/SQL parity cases for uppercase scheme/host, trailing dot, default/nondefault ports, IPv4 and bracketed IPv6. The CIDR and key profiles otherwise appear aligned for the tested forms.
+
+With that compatibility correction, no storage blocker remains. Endpoint authorization, signer validation, live claim predicates, revocation closure, and gateway behavior remain deliberately outside this checkpoint.
+
+## P2 correction
+
+The remaining P2 above was stale and is withdrawn. The current `packages/contracts/src/access.ts` no longer uses `z.url()` for the gateway origin. `gatewayOriginSchema` applies a lowercase raw-string regex, explicit DNS label and length checks, literal loopback handling, port bounds, and bracketed IPv6 validation. It rejects uppercase scheme/host spellings and trailing-dot/slash spellings before any URL normalization.
+
+I independently exercised the two cited examples against the current TypeScript schema and a disposable PostgreSQL database freshly migrated through draft0020:
+
+| Origin | TypeScript | PostgreSQL insert |
+| --- | --- | --- |
+| `WSS://GATEWAY.EXAMPLE` | rejected | rejected |
+| `wss://gateway.example.` | rejected | rejected |
+
+The disposable database was closed by the fixture. This check found no different mismatch in those profiles. Permanent parity cases remain useful to prevent the TypeScript and PL/pgSQL copies from drifting, but they are regression coverage rather than a present blocker.
+
+All three original P1 findings remain resolved, and no storage blocker remains in the reviewed scope. The fifteen-test log covers the corrected source; the broader full check was still pending when this correction was requested.
+
+## Final storage status
+
+The last lexical deltas preserve the reviewed authority boundary. TypeScript now requires exact 64-character hashes, rejects surrounding whitespace in request/gateway identifiers, and requires the gateway-origin regex match to consume the entire raw string, including a trailing newline. PostgreSQL independently checks exact hash length and permitted request-key/gateway characters before reserving immutable identities. These additions close end-anchor newline behavior without widening accepted URLs or CIDRs.
+
+The permanent parity test runs a matrix of lowercase/uppercase and trailing-dot/path/newline origins, port bounds, strict IPv4, compressed/mapped IPv6, DNS labels, CIDR prefix spellings, public `/0`, null/empty arrays, and gateway IDs through both `accessGatewaySchema` and `valid_access_gateway()`, requiring identical results for every candidate. This is meaningful drift detection for the duplicated lexical policy. The admission test separately proves these invalid immutable fields fail before a valid insert.
+
+Final evidence supplied for this source state:
+
+- `.local/m2-access-storage-parity-test.log`: 16 focused contract/real PostgreSQL tests passed.
+- `.local/m2-access-storage-receipts-check.log`: 444 tests across 38 files plus typecheck and lint passed in 109.46 seconds before the final parity case.
+- `.local/m2-access-storage-final-check.log`: final typecheck, lint, and 445 tests across 38 files passed in 103.50 seconds.
+- Isolated `docs/research/m2-access-storage-verification.json` records the checkpoint; formatting was still running when this final review update was requested.
+
+No storage blocker remains. This verifies only the contract and durable storage foundation: it does not establish access admission/idempotency/rate enforcement, current authority or provider ownership checks, CA behavior, revocation/destroy closure, control RPC authentication, gateway transport, guest capability, native SSH, or customer usage. Migration0020 remains an unapplied isolated draft until checkpoint integration, while applied migrations0000–0019 remain immutable. The full cloud goal remains active.
+
+At the time of this read, root CONTEXT/PROGRESS and the latest `m2-storage` decision row still described the prior three blockers and pending review/check. Refresh those status lines and evidence references before presenting or committing the storage checkpoint; their chronology is accurate but their current-summary wording is stale.

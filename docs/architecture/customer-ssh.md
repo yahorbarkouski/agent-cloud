@@ -1,6 +1,6 @@
 # Customer SSH access design
 
-Design selected on 2026-09-07. The shared authority loader is implemented. Verified authority2ece39a is integrated into the main checkout; subsequent session work remains isolated. Session storage, issuance, gateway, customer certificates and CLI remain planned below. Existing opaque delegated grants authorize this slice. Browser/device login, persistent commands, deployment and forwarding remain later work. The current probe/runtime SSH path stays restricted.
+Design selected on 2026-09-07. The shared authority loader is integrated into the main development branch. Session storage is implemented and verified locally. Admission, issuance, gateway, customer certificates and CLI remain planned below. Existing opaque delegated grants authorize this slice. Browser/device login, persistent commands, deployment and forwarding remain later work. The current probe/runtime SSH path stays restricted.
 
 ## Customer usage
 
@@ -37,7 +37,14 @@ Add a branded `AccessSessionId` with the repository's UUID convention. Contracts
 type AccessIssuance =
   | { kind: 'pending' }
   | { kind: 'attempted'; attemptedAt: string }
-  | { kind: 'issued'; certificate: string; issuedAt: string; target: OwnedSshTarget }
+  | {
+      kind: 'issued';
+      certificate: string;
+      issuedAt: string;
+      ticketDeadline: string;
+      certificateExpiresAt: string;
+      target: OwnedSshTarget;
+    }
   | {
       kind: 'unavailable';
       reason:
@@ -52,7 +59,20 @@ type AccessIssuance =
 type AccessConnection =
   | { kind: 'unclaimed' }
   | { kind: 'claimed'; gatewayInstanceId: string; connectionId: string; claimedAt: string }
-  | { kind: 'closed'; closedAt: string; reason: AccessCloseReason };
+  | {
+      kind: 'closed';
+      closedAt: string;
+      reason: AccessCloseReason;
+      previous: UnclaimedConnection | ClaimedConnection;
+    };
+
+type UnclaimedConnection = { kind: 'unclaimed' };
+type ClaimedConnection = {
+  kind: 'claimed';
+  gatewayInstanceId: string;
+  connectionId: string;
+  claimedAt: string;
+};
 
 type OwnedSshTarget = {
   provider: 'hetzner' | 'simulated';
@@ -74,6 +94,16 @@ One session permits one persisted CA submission, with a ninety-second admission-
 From one admission-time database timestamp, persist `issueDeadline = admittedAt + 90s` and `hardDeadline = min(admittedAt + 1h, ancestryExpiry)`. At publication, persist `ticketDeadline = min(issuedAt + 60s, issueDeadline, ancestryExpiry)` once. Certificate validity is at most five minutes and never after the original hard/ancestry deadline. No replay, queue delay or renewed authority check moves these absolute limits.
 
 `loadAuthority(db, grantId)` returns `{ principal, checkedAt, expiresAt }` where expiry is the earliest validated ancestor. One bounded recursive SQL statement reads the complete ancestry from one MVCC snapshot. It materializes the traversal before reading PostgreSQL time for the expiry decision. `loadPrincipal` remains the useful principal-only wrapper for existing authentication/lifecycle callers. Grant delegation consumes the full horizon directly. Admission, issue, claim and session checks must use this shared walk under their stated locks. A consistent snapshot does not prevent a revocation that commits after that snapshot. Future gateways must subtract RPC latency when anchoring remaining lifetime. Do not duplicate an access-only ancestor query.
+
+## Implemented storage boundary
+
+Migration0020 creates `access_sessions` and `access_signing_attempts`. The attempt table has one row per session, with the original attempt timestamp. Its ownership comes from the immutable session foreign key. An AFTER UPDATE trigger inserts that receipt in the same transaction as the first signing transition; receipt insertion requires that exact session state. Updates and deletes are refused. Generic operator audit records are not the signing authority.
+
+Closed sessions retain the preceding unclaimed or claimed state. The unique gateway/instance/connection index reads that retained claim after closure, so closing cannot release the tuple for reuse. Instance and connection IDs are canonical lowercase UUIDv4 values. A different configured gateway has its own namespace. Customer ticket hashes remain globally unique independently of connection IDs.
+
+SQL validates immutable request keys, canonical Ed25519 wire keys, Ed25519 or P-256 host CA wire keys, complete typed identity pins, bounded gateway origins and explicit IPv4/IPv6 CIDRs before admission. The same access profile is enforced in contracts. Origins have no path, trailing slash, credentials, query or fragment; WSS is required except WS on localhost,127.0.0.1 or[::1]. DNS labels are lowercase and bounded; ports are1–65535. CIDR/0 and duplicate sources are refused. These checks establish readable stored configuration, not provider ownership or certificate trust.
+
+Contract and PostgreSQL tests cover malformed raw inserts, source/key boundaries, immutable receipts, rollback, competing signing attempts and outcomes, competing claims, closure, expiry and closed tuple uniqueness. SQL alone does not establish grant ancestry, current machine state, admission rate limits, live provider ownership or cryptographic certificate validity. Those remain the service boundaries described below. Migration0020 passed disposable database tests, is applied to the main local database and is now immutable. All21 migration hashes match; the restarted simulated CLI lifecycle passed cleanup.
 
 ## Issue, claim and close
 
@@ -123,7 +153,7 @@ checkAccessAuthority(input: { connection: Connection;
 Use a pinned `ws` dependency and native Node/OpenSSH. Disable compression. Set a32KiB message limit and1MiB per-direction queued-byte limit, plus explicit connect and pre-auth timeouts. Bridge with Node streams and verified backpressure. Test whether the library's stream close behavior preserves SSH's expected EOF/disconnect behavior; do not claim generic TCP half-close without evidence. Destroy the whole connection on a failed bridge, limit concurrent handshakes and store only metadata, close reasons and byte counts.
 
 - `packages/contracts/src/access.ts`: schemas, branded IDs and public outcomes.
-- `packages/db` plus next immutable migration0020: sessions, constraints, indexes and notifications.
+- `packages/db` plus next immutable migration0020: sessions, immutable signing receipts, constraints and indexes.
 - `apps/control/src/access-sessions.ts`: admission, single-attempt issuance and returned metadata; customer worker registration uses the existing Graphile queue.
 - `apps/control/src/access-authority.ts`: SQL claim/current-authority/closure using the existing grant loader; narrow gateway RPC routes stay in control.
 - `apps/access-gateway/src/index.ts`: bounded WSS upgrade and live byte connections.

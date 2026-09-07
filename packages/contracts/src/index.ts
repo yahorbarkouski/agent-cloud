@@ -16,3 +16,4 @@ export * from './image-provider.js';
 export * from './image-builder.js';
 export * from './guest-renewal.js';
 export * from './operator-recovery.js';
+export * from './access.js';

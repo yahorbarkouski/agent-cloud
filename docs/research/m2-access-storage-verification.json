@@ -1,0 +1,69 @@
+{
+  "checkpoint": "M2 access session persistence",
+  "date": "2026-09-07",
+  "baseCommit": "2ece39a4304f8c27ddba92e5bdf5207b32474cd7",
+  "branch": "yahor/customer-ssh",
+  "behavior": [
+    "Immutable session request, ownership, image/host/gateway pins and absolute deadlines.",
+    "One signing attempt with an immutable receipt committed atomically with its state transition.",
+    "One-way signing and claim/close states; closure retains gateway connection identity.",
+    "Contract and PostgreSQL validation of keys, gateway origins/CIDRs and deadline arithmetic."
+  ],
+  "verification": {
+    "targeted": {
+      "tests": 16,
+      "result": "passed",
+      "log": ".local/m2-access-storage-parity-test.log"
+    },
+    "full": {
+      "tests": 445,
+      "files": 38,
+      "seconds": 103.5,
+      "result": "passed",
+      "typecheck": "passed",
+      "lint": "passed",
+      "log": ".local/m2-access-storage-final-check.log"
+    },
+    "review": "m2-access-storage-review.md",
+    "formatting": {
+      "result": "passed",
+      "log": ".local/m2-access-storage-final-format-check.log"
+    },
+    "ci": "not yet submitted",
+    "rootIntegration": {
+      "sourceMatches": "49f949fef7916ec10c8c81c4ea983aed6232475d",
+      "typecheck": "passed",
+      "typecheckLog": ".local/access-storage-integration-typecheck.log",
+      "migrationHashes": {
+        "applied": 21,
+        "expected": 21,
+        "matches": true,
+        "log": ".local/access-storage-integration-migration-check.log",
+        "accessSessionsHash": "8aba369eaf07a3d028ac848d3228b478ea820d25ee776890d5bcafffdf23b25f"
+      },
+      "cliSmoke": {
+        "result": "passed",
+        "provider": "simulated",
+        "machineId": "vm_cae6e7df-7048-4998-90a5-633cb7688501",
+        "cleanup": "passed",
+        "log": ".local/access-storage-integration-cli.log"
+      }
+    }
+  },
+  "corrections": [
+    "Earlier fixture extraction typo and SQL target-expression precedence failure were corrected before the initial439-test checkpoint.",
+    "Independent review required SQL admission validation, immutable signing receipts, and actual signing/closed-claim races.",
+    "A private backup path did not exist during draft regeneration; the shell continued. The unpublished0020 was regenerated again from committed0019 and all guards reconstructed before testing. No retained database used the failed draft.",
+    "The generated allocation uniqueness constraint was moved before the dependent foreign key.",
+    "A PL/pgSQL variable/column alias collision rejected valid admission; a qualified source alias fixed it, with the failed test log retained.",
+    "A later URL-normalization review concern was stale; the reviewer checked current contracts and a disposable PostgreSQL database and withdrew it. Permanent parity cases were added.",
+    "Exact raw origin matching and explicit identifier/hash boundaries reject trailing newline forms.",
+    "Generated Drizzle metadata needed ordinary Prettier formatting; final formatting passed."
+  ],
+  "limits": [
+    "No access admission endpoint, rate policy, signer, gateway, CLI SSH or access-capable guest image exists yet.",
+    "Storage fixtures prove transitions and persistence, not current grant authorization, live provider ownership or certificate cryptography.",
+    "Migration0020 is now applied to the main local development database and is immutable. All21 migration hashes match. No live Hetzner database remains.",
+    "No paid resource was created. All M1 Hetzner resources remain removed."
+  ]
+}

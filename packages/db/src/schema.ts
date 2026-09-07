@@ -248,9 +248,82 @@ export const allocations = pgTable(
       .where(sql`${t.retiredAt} IS NULL`),
     unique().on(t.provider, t.serverId),
     unique('allocation_account_identity').on(t.accountId, t.id),
+    unique('allocation_machine_identity').on(t.accountId, t.machineId, t.id),
     check('allocation_price', sql`${t.hourlyMicros} >= 0`),
   ],
 );
+
+export const accessSessions = pgTable(
+  'access_sessions',
+  {
+    id: text('id').primaryKey(),
+    accountId: text('account_id').notNull(),
+    projectId: text('project_id').notNull(),
+    grantId: text('grant_id').notNull(),
+    machineId: text('machine_id').notNull(),
+    allocationId: text('allocation_id').notNull(),
+    machineVersion: integer('machine_version').notNull(),
+    requestKey: text('request_key').notNull(),
+    fingerprint: text('fingerprint').notNull(),
+    publicKey: text('public_key').notNull(),
+    ticketHash: text('ticket_hash').notNull().unique(),
+    identityPin: jsonb('identity_pin').notNull(),
+    gateway: jsonb('gateway').notNull(),
+    admittedAt: timestamp('admitted_at', { withTimezone: true }).notNull(),
+    issueDeadline: timestamp('issue_deadline', { withTimezone: true }).notNull(),
+    hardDeadline: timestamp('hard_deadline', { withTimezone: true }).notNull(),
+    issuance: jsonb('issuance').notNull().default({ kind: 'pending' }),
+    connection: jsonb('connection').notNull().default({ kind: 'unclaimed' }),
+  },
+  (t) => [
+    unique('access_request_identity').on(t.accountId, t.grantId, t.requestKey),
+    foreignKey({
+      name: 'access_machine_scope',
+      columns: [t.accountId, t.projectId, t.machineId],
+      foreignColumns: [machines.accountId, machines.projectId, machines.id],
+    }),
+    foreignKey({
+      name: 'access_allocation_scope',
+      columns: [t.accountId, t.machineId, t.allocationId],
+      foreignColumns: [allocations.accountId, allocations.machineId, allocations.id],
+    }),
+    foreignKey({
+      name: 'access_grant_scope',
+      columns: [t.accountId, t.grantId],
+      foreignColumns: [grants.accountId, grants.id],
+    }),
+    index('access_account_window').on(t.accountId, t.admittedAt),
+    index('access_grant_window').on(t.grantId, t.admittedAt),
+    index('access_machine_connections')
+      .on(t.machineId)
+      .where(sql`${t.connection}->>'kind' <> 'closed'`),
+    uniqueIndex('access_gateway_connection').on(
+      sql`(${t.gateway}->>'id')`,
+      sql`COALESCE(${t.connection}->>'gatewayInstanceId', ${t.connection}->'previous'->>'gatewayInstanceId')`,
+      sql`COALESCE(${t.connection}->>'connectionId', ${t.connection}->'previous'->>'connectionId')`,
+    ),
+    check('access_machine_version', sql`${t.machineVersion} > 0`),
+    check(
+      'access_hashes',
+      sql`${t.ticketHash} ~ '^[0-9a-f]{64}$' AND ${t.fingerprint} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'access_deadlines',
+      sql`${t.issueDeadline} > ${t.admittedAt}
+      AND ${t.issueDeadline} <= ${t.admittedAt} + interval '90 seconds'
+      AND ${t.hardDeadline} > ${t.admittedAt}
+      AND ${t.hardDeadline} <= ${t.admittedAt} + interval '1 hour'`,
+    ),
+  ],
+);
+
+// Ownership is inherited through the immutable session, avoiding a second mutable copy.
+export const accessSigningAttempts = pgTable('access_signing_attempts', {
+  sessionId: text('session_id')
+    .primaryKey()
+    .references(() => accessSessions.id),
+  attemptedAt: timestamp('attempted_at', { withTimezone: true }).notNull(),
+});
 
 export const operations = pgTable(
   'operations',
