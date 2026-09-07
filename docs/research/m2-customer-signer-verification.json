@@ -1,0 +1,76 @@
+{
+  "scope": "Customer certificate signer and local native protocol fixture; not the customer access workflow",
+  "validation": {
+    "fullCheck": {
+      "tests": 448,
+      "files": 39,
+      "seconds": 108.6,
+      "typecheck": true,
+      "lint": true
+    },
+    "format": true,
+    "native": [
+      {
+        "transportFaults": [
+          "lost_response",
+          "rejected",
+          "redirect",
+          "oversized",
+          "truncated",
+          "cancelled"
+        ],
+        "exactlyOnePostPerAttempt": true,
+        "lostResponseAfterRealIssuance": true
+      },
+      {
+        "nativeCustomerSsh": "command and PTY authenticated using the signed certificate",
+        "rejected": [
+          "invalid signature",
+          "wrong key",
+          "wrong user",
+          "wrong source",
+          "foreign allocation",
+          "port forwarding",
+          "wrong host CA"
+        ],
+        "probeForcedCommand": "preserved on the same server",
+        "boundary": "local OpenSSH fixture, not a published access-capable image"
+      },
+      {
+        "customerCertificate": "issued with exact key, allocation, sources, PTY-only permission and absolute validity",
+        "keySubstitution": "rejected by native CA",
+        "malformedOrUnsignedClaims": "rejected",
+        "requestPermissions": "cannot expand signed policy",
+        "nearExpiry": "issued without widening ancestry expiry",
+        "existingHostProbeRuntime": "native inspectors passed",
+        "paidResourcesCreated": 0
+      },
+      {
+        "cleanup": "fresh CA container and all private fixture keys removed",
+        "caTokenLogging": "absent"
+      }
+    ]
+  },
+  "fixtures": {
+    "ca": "Fresh private authority and database, loopback Docker256MiB/.5CPU",
+    "ssh": "Disposable OpenSSH64MiB/.25CPU; private NAT CIDRs and PerSourcePenalties no are fixture-only",
+    "cleanup": "Both containers and generated private fixture trees removed"
+  },
+  "history": [
+    "Initial draft native positive exposed four consumed fixture OTTs in default Step access logging; corrected in b79a3d0 and tested with fresh CA output scans",
+    "Reproducible key-substitution test initially expected403; actual fail-closed template status is400",
+    "First native SSH sequence rejected its final positive after rapid deliberate authentication failures; fixture source penalties disabled and rerun passed",
+    "Typecheck/lint caught fixture narrowing, unused imports and callback-expression issues before the final full pass"
+  ],
+  "trust": [
+    "Pinned HTTPS authenticates the CA response; Step inspection checks exact policy; native OpenSSH verifies signatures",
+    "Complete CIDR validation belongs to typed session claims; template validates bounded lexical source shape"
+  ],
+  "remaining": [
+    "Durable issuer/admission and post-signing authorization",
+    "Gateway and active revocation",
+    "Access-capable image and real provider egress proof",
+    "SDK and CLI workflow",
+    "No root-level customer sudo proof in this fixture"
+  ]
+}
