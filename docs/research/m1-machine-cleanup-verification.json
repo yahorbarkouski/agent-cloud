@@ -1,9 +1,9 @@
 {
   "date": "2026-09-07",
-  "status": "verified_locally",
+  "status": "verified_locally_and_linux_ci",
   "scope": "Machine destroy during active provisioning, terminal allocation cleanup, durable authority, bounded deletion retries and local CLI/API/worker recovery.",
   "baseCommit": "dd73cdd",
-  "implementationCommit": "pending",
+  "implementationCommit": "950ba8c137dc5a44e36e44646ee62dd0a4251536",
   "checks": {
     "full": {
       "session": 33158,
@@ -135,6 +135,20 @@
     "No customer Hetzner boot, general customer SSH access, application deployment, backup/restore, or completed product is claimed."
   ],
   "ci": {
-    "status": "pending_private_push"
+    "status": "passed",
+    "runId": 34124600353,
+    "headSha": "950ba8c137dc5a44e36e44646ee62dd0a4251536",
+    "url": "https://github.com/yahorbarkouski/agent-cloud/actions/runs/34124600353",
+    "evidence": ".local/cleanup-ci-result.json",
+    "checks": [
+      "full check",
+      "format",
+      "CLI cleanup smoke",
+      "fresh PKI",
+      "PKI smoke",
+      "SSH smoke",
+      "enrollment smoke",
+      "disposal"
+    ]
   }
 }

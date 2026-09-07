@@ -1,6 +1,6 @@
 # Provider resource lifecycle
 
-The resource controller is implemented and verified with persisted simulator state and Hetzner transport fixtures. The running API and worker still reject Hetzner activation until guest boot, identity, runtime catalog refresh, and operational limits are ready.
+The resource controller is implemented and verified with persisted simulator state and Hetzner transport fixtures. Explicit customer runtime now connects the guest image, identity and lifecycle controller. A customer Hetzner boot remains unverified. See [operator runtime](operator-runtime.md) and [machine cleanup](machine-cleanup.md) for the current activation and recovery boundaries.
 
 ## Choice
 
@@ -22,7 +22,7 @@ Submission receipts are generalized to a discriminated resource reference, `serv
 2. Check current authorization, offer, and limits; journal and submit Primary IP creation with allocation/operation/attempt labels.
 3. Reconcile the IP result. One matching resource can be adopted. Zero inventory does not prove absence; multiple matches block for operator resolution. Never blindly repeat an uncertain create.
 4. Recheck before the VM effect. Journal creation with the owned IP ID, image, firewall and SSH identity. Record the returned VM and its attached IP IDs.
-5. Verify the returned resource IDs, labels, region, server type, attached IP, and power. Live guest readiness remains pending. Guest boot and SSH identity verification are the next implementation slice.
+5. Verify the returned resource IDs, labels, region, server type, attached IP, and power. The guest readiness controller then verifies pinned identity and runtime evidence. Live customer boot remains unverified.
 
 If no VM effect was submitted, or the provider definitively rejected that request, a revoked credential or rejected offer can stop provisioning and compensate the confirmed unassigned IP. Cleanup is part of the admitted operation and must not be blocked by a lowered spending ceiling. An uncertain VM outcome must be reconciled before touching its IP. A confirmed VM with possible data retains its allocation for explicit authorized deletion. An error after submission cannot start compensation using stale history. The controller reloads attempts and keeps an unresolved effect blocked. A receipt is saved before the ownership claim so an ownership conflict cannot erase the provider result.
 
@@ -40,4 +40,4 @@ Provider credentials stay in the control plane. Shared firewall/key/image config
 
 The persistent simulator has faults scoped by resource kind. `tests/resources.test.ts` covers exits after IP creation/deletion, delayed inventory, duplicate IPs, revocation between effects, rejected and uncertain VM creation, foreign/assigned IPs, lost delete responses, conflicting receipts, reservation retention, immutable resolutions, and tenant ownership constraints. The original VM crash test still uses a separate exiting process. `tests/hetzner-transport.test.ts` checks outgoing IP/VM requests, HTTP 204, assignment consistency, pagination, error classification, and uncertain responses. Upgrade tests exercise queued, prepared, accepted, and completed create/resize operations from M0. None of these fixtures proves live provider behavior.
 
-After guest and operator recovery support is ready, run a bounded inexpensive live test with a cleanup deadline and known resources. Current pricing evidence is USD 0.027798/hour for CPX12 plus IPv4, including VAT, but refresh it before provisioning. No paid resource has been created so far.
+After guest and operator recovery support is ready, run a bounded inexpensive live test with a cleanup deadline and known resources. Current pricing evidence is USD 0.027798/hour for CPX12 plus IPv4, including VAT, but refresh it before provisioning. The separate [image factory drill](../research/m1-hetzner-durability-drill.json) created and removed paid resources. Its snapshot proof does not establish customer lifecycle behavior.
