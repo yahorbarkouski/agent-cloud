@@ -103,5 +103,25 @@
     "The real clones still use the customer enrollment smoke with protocol observations; this is not the future platform verifier lifecycle",
     "Filesystem scans are bounded residual-secret checks, not forensic disk erasure",
     "Native VM cloning requires macOS OrbStack and is not in Linux CI"
-  ]
+  ],
+  "implementationCommit": "cbc8cc62184639246c9356a04febfed192c8253a",
+  "linuxCi": {
+    "runId": 34089677202,
+    "url": "https://github.com/yahorbarkouski/agent-cloud/actions/runs/34089677202",
+    "headSha": "cbc8cc62184639246c9356a04febfed192c8253a",
+    "conclusion": "success",
+    "durationSeconds": 169,
+    "verified": [
+      "frozen install",
+      "typecheck",
+      "lint",
+      "288-test suite",
+      "format",
+      "fresh PKI setup",
+      "native PKI",
+      "native SSH",
+      "native enrollment",
+      "cleanup"
+    ]
+  }
 }
