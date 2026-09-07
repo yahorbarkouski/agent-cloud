@@ -59,5 +59,26 @@
     "command": "pnpm format:check",
     "session": "73724",
     "result": "passed"
+  },
+  "linuxCi": {
+    "result": "passed",
+    "commit": "1e7bdfffe3a386d3baf07971edf2dd6fec34a30d",
+    "runId": 34083050344,
+    "url": "https://github.com/yahorbarkouski/agent-cloud/actions/runs/34083050344",
+    "jobDuration": "2m27s",
+    "verified": [
+      "frozen install",
+      "232-test full check",
+      "format",
+      "fresh PKI setup",
+      "native PKI",
+      "native SSH",
+      "native enrollment",
+      "cleanup"
+    ]
+  },
+  "patchWhitespace": {
+    "result": "warnings",
+    "note": "Staged patch check reported one extra EOF blank line in each applied0011/0012 migration. Preserve their already-applied hashes; SQL is excluded from Prettier. No semantic or runtime failure."
   }
 }
