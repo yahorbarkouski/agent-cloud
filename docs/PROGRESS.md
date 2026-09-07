@@ -1,8 +1,20 @@
 # Implementation progress
 
+## M2 customer access workflow
+
+- [ ] Ground: trace account/grant/CLI authentication and guest/SSH trust in parallel; parent owns the live M1 drill.
+- [ ] Sketch: compare bounded customer access designs against traced ownership and revocation behavior.
+- [ ] Agree: autonomous implementation is authorized; no human checkpoint requested.
+- [ ] Implement: fill the selected access contracts after the running M1 drill is safe.
+- [ ] Scrap audit: revisit the shape if implementation needs repeated exceptions.
+
+## Customer firewall listener correction
+
+Before the fresh paid customer attempt, source inspection found the initial guest HTTPS listener on8443 while the setup policy allowed80/443. The correction admits exactlySSH22 and protected HTTPS8443. Tests reject missing8443, unused web ports, duplicates and outbound rules. The exact owned free firewall was updated after persisted intent and verified by read-back. No VM was running during this change. Fullcheck47080 passed423tests/36files, typecheck/lint in104.68s. Independent gpt-5.6-sol review found no blocker. Restarted customer services passed full dependency/public preflight. The live lifecycle probe now targets8443; certificate observation is not an authenticated application request.
+
 ## First customer drill exposed a provider response mismatch
 
-The renewed guest image reached verified retained publication. The first customer creation allocated an IP, then the parser rejected Hetzner's actual `assignee_type: server` with null ID. No VM was created. Customer destroy admitted cleanup on the original operation. The corrected parser accepts both documented unassigned forms, preserves exact server assignments and rejects contradictory non-null unassigned IDs. After restart, the worker discovered and deleted the original IP without another create. Exact provider absence and zero live customer allocation/resources were verified at13:57:35Z. Nine transport tests and build passed. Fullcheck2086 passed422tests/36files, typecheck/lint in100.17s. Independent gpt-5.6-sol review found no blocker. Formatting passed; push and exact Linux CI pending. The snapshot and separate customer firewall remain owned and retained for a fresh bounded test. Customer boot and real timer renewal remain unverified.
+The renewed guest image reached verified retained publication. The first customer creation allocated an IP, then the parser rejected Hetzner's actual `assignee_type: server` with null ID. No VM was created. Customer destroy admitted cleanup on the original operation. The corrected parser accepts both documented unassigned forms, preserves exact server assignments and rejects contradictory non-null unassigned IDs. After restart, the worker discovered and deleted the original IP without another create. Exact provider absence and zero live customer allocation/resources were verified at13:57:35Z. Nine transport tests and build passed. Fullcheck2086 passed422tests/36files, typecheck/lint in100.17s. Independent gpt-5.6-sol review found no blocker. Formatting passed. Parser6ad8e7ef577f92bb951fb9cf12a92ecca230f9e5 is pushed; [Linux CI34130515183](https://github.com/yahorbarkouski/agent-cloud/actions/runs/34130515183) passed full checks and fresh native smokes. The snapshot and separate customer firewall remain owned and retained for a fresh bounded test. Customer boot and real timer renewal remain unverified.
 
 ## Operator recovery verified locally and in Linux CI
 

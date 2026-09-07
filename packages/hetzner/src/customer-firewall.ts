@@ -3,7 +3,8 @@ import { CloudError } from '@agent-cloud/contracts';
 import { HttpError, type createHetznerRequest } from './http.js';
 
 /** Guest services authenticate SSH with certificates and control HTTPS with mutual TLS. */
-export const customerFirewallRules = ['22', '80', '443'].map((port) => ({
+const ingressPorts = ['22', '8443'];
+export const customerFirewallRules = ingressPorts.map((port) => ({
   direction: 'in',
   protocol: 'tcp',
   port,
@@ -43,12 +44,12 @@ export async function checkCustomerFirewalls(
         true,
       );
     }
-    const allowed = new Set(['22', '80', '443']);
+    const allowed = new Set(ingressPorts);
     if (
       firewall.id !== id ||
       firewall.labels.managed_by !== 'agent-cloud' ||
       firewall.labels.role !== 'customer_access' ||
-      firewall.rules.length !== 3 ||
+      firewall.rules.length !== ingressPorts.length ||
       !firewall.rules.every((rule) => {
         if (
           rule.direction !== 'in' ||

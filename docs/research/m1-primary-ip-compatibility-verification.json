@@ -1,6 +1,6 @@
 {
   "updatedAt": "2026-09-07T13:58:00Z",
-  "status": "local_checks_and_review_passed",
+  "status": "verified_and_pushed",
   "wire": {
     "observedAt": "2026-09-07T13:56:19.172Z",
     "id": 148478037,
@@ -176,6 +176,10 @@
     "scope": "Artifacts and repository; no active transcript directory supplied."
   },
   "ci": {
-    "result": "pending_exact_commit"
+    "result": "passed",
+    "commit": "6ad8e7ef577f92bb951fb9cf12a92ecca230f9e5",
+    "runId": 34130515183,
+    "url": "https://github.com/yahorbarkouski/agent-cloud/actions/runs/34130515183",
+    "evidence": ".local/customer-ip-parser-ci-result.json"
   }
 }

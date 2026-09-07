@@ -1,0 +1,122 @@
+{
+  "updatedAt": "2026-09-07T14:05:30Z",
+  "status": "local_checks_and_review_passed",
+  "cause": "Guest Caddy configuration listens on8443, while the original customer firewall allowed22/80/443 and the private live driver probed443.",
+  "discoveredBeforeCustomerVm": true,
+  "source": "packages/guestctl/src/system.ts",
+  "change": "Customer ingress is exactly22/8443. Private live certificate probe targets8443. Guest image inputs are unchanged.",
+  "providerCorrection": {
+    "id": 11587191,
+    "labels": {
+      "drill_id": "2224a90a-acad-42f4-9081-e8fc08822ff7",
+      "managed_by": "agent-cloud",
+      "role": "customer_access"
+    },
+    "preparedAt": "2026-09-07T14:04:33.193Z",
+    "before": [
+      {
+        "description": null,
+        "direction": "in",
+        "port": "22",
+        "protocol": "tcp",
+        "destination_ips": [],
+        "source_ips": [
+          "0.0.0.0/0"
+        ]
+      },
+      {
+        "description": null,
+        "direction": "in",
+        "port": "80",
+        "protocol": "tcp",
+        "destination_ips": [],
+        "source_ips": [
+          "0.0.0.0/0"
+        ]
+      },
+      {
+        "description": null,
+        "direction": "in",
+        "port": "443",
+        "protocol": "tcp",
+        "destination_ips": [],
+        "source_ips": [
+          "0.0.0.0/0"
+        ]
+      }
+    ],
+    "desired": [
+      {
+        "direction": "in",
+        "protocol": "tcp",
+        "port": "22",
+        "source_ips": [
+          "0.0.0.0/0"
+        ]
+      },
+      {
+        "direction": "in",
+        "protocol": "tcp",
+        "port": "8443",
+        "source_ips": [
+          "0.0.0.0/0"
+        ]
+      }
+    ],
+    "state": "verified",
+    "response": {
+      "actions": [
+        {
+          "id": 653848646256269,
+          "status": "success",
+          "command": "set_firewall_rules",
+          "progress": 100,
+          "started": "2026-09-07T14:04:33Z",
+          "finished": "2026-09-07T14:04:33Z",
+          "error": null,
+          "resources": [
+            {
+              "id": 11587191,
+              "type": "firewall"
+            }
+          ]
+        }
+      ]
+    },
+    "verifiedAt": "2026-09-07T14:04:33.314Z"
+  },
+  "verification": {
+    "full": {
+      "result": "passed",
+      "session": 47080,
+      "tests": 423,
+      "files": 36,
+      "typecheck": "passed",
+      "lint": "passed",
+      "durationSeconds": 104.68,
+      "log": ".local/customer-firewall-check.log"
+    },
+    "publicPreflight": {
+      "result": "passed",
+      "evidence": ".local/customer-drill-customer-preflight-firewall.json"
+    },
+    "format": {
+      "result": "passed",
+      "session": 9767,
+      "log": ".local/customer-firewall-format.log"
+    }
+  },
+  "limits": [
+    "The customer firewall is temporarily public IPv4 ingress protected by SSH certificates and guest mutual TLS. Gateway source restrictions are future access/routing work.",
+    "Certificate leaf observation validates the server identity and served generation, not an authenticated customer application request.",
+    "Customer VM boot and real timer renewal remain pending."
+  ],
+  "review": {
+    "model": "gpt-5.6-sol",
+    "result": "no_blocker",
+    "report": "docs/research/m1-customer-firewall-review.md"
+  },
+  "ci": {
+    "result": "pending_exact_commit"
+  }
+}

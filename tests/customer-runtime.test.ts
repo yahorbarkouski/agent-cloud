@@ -381,12 +381,38 @@ it('refuses changed firewall ownership before the first paid effect and exposes 
   }).toThrow('renewal-capable');
 });
 
-it('rejects an added ingress port, duplicate required rule or outbound restriction', async () => {
+it('admits the guest SSH and protected HTTPS listeners and rejects unused web ports', async () => {
+  expect(customerFirewallRules.map((rule) => rule.port)).toEqual(['22', '8443']);
+  const request = createHetznerRequest({
+    token: 'fixture-token'.padEnd(64, 'x'),
+    transport: () =>
+      Promise.resolve(
+        Response.json({
+          firewall: {
+            id: 123,
+            labels: { managed_by: 'agent-cloud', role: 'customer_access' },
+            rules: ['22', '8443'].map((port) => ({
+              direction: 'in',
+              protocol: 'tcp',
+              port,
+              source_ips: ['0.0.0.0/0'],
+              destination_ips: [],
+            })),
+          },
+        }),
+      ),
+  });
+  await expect(checkCustomerFirewalls(request, [123])).resolves.toBeUndefined();
+});
+
+it('rejects missing HTTPS ingress, extra ports, duplicate rules and outbound restrictions', async () => {
   const rule = { ...customerFirewallRules[0], destination_ips: [] };
   for (const rules of [
     [...customerFirewallRules, { ...rule, port: '5432' }],
-    [rule, rule, { ...rule, port: '443' }],
-    [rule, { ...rule, port: '80' }, { ...rule, port: '443', direction: 'out' }],
+    [rule, rule],
+    [rule, { ...rule, port: '8443', direction: 'out' }],
+    [rule, { ...rule, port: '443' }],
+    [rule, { ...rule, port: '80' }, { ...rule, port: '443' }],
   ]) {
     const request = createHetznerRequest({
       token: 'fixture-token'.padEnd(64, 'x'),
