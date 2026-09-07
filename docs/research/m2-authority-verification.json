@@ -1,0 +1,60 @@
+{
+  "checkpoint": "M2 shared grant authority",
+  "date": "2026-09-07",
+  "baseCommit": "224a56a09e1868b8acfa2b315e9da951560c65f4",
+  "worktree": ".local/customer-ssh",
+  "branch": "yahor/customer-ssh",
+  "behavior": [
+    "One bounded recursive SQL statement reads one grant ancestry snapshot.",
+    "PostgreSQL expiry time is sampled after materialized traversal.",
+    "Authority and delegated expiry use the earliest validated ancestor.",
+    "Existing principal-only callers share the same loader."
+  ],
+  "verification": {
+    "targeted": {
+      "tests": 11,
+      "result": "passed",
+      "log": ".local/m2-authority-snapshot-targeted-final.log"
+    },
+    "full": {
+      "tests": 429,
+      "files": 36,
+      "seconds": 102.76,
+      "typecheck": "passed",
+      "lint": "passed",
+      "result": "passed",
+      "log": ".local/m2-authority-snapshot-check-final.log"
+    },
+    "review": "m2-authority-review.md",
+    "formatting": "passed",
+    "ci": {
+      "headSha": "2ece39a4304f8c27ddba92e5bdf5207b32474cd7",
+      "conclusion": "success",
+      "url": "https://github.com/yahorbarkouski/agent-cloud/actions/runs/34136058956",
+      "firstAttempt": "Registry HTTP500 during PostgreSQL image setup, before tests; retry passed."
+    },
+    "formattingLog": ".local/m2-authority-format-check.log",
+    "rootIntegration": {
+      "sourceMatches": "2ece39a4304f8c27ddba92e5bdf5207b32474cd7",
+      "typecheck": "passed",
+      "typecheckLog": ".local/authority-integration-typecheck.log",
+      "cliSmoke": "passed",
+      "cliSmokeLog": ".local/authority-integration-cli.log",
+      "machineId": "vm_ab96ae3c-ccf6-4f5e-9be7-07e51ecde738",
+      "provider": "simulated",
+      "cleanup": "passed"
+    }
+  },
+  "corrections": [
+    "An initial targeted invocation could not resolve unbuilt workspace packages; building the isolated checkout fixed setup.",
+    "The first multi-statement implementation passed426tests but review found mixed READ COMMITTED snapshots. It was replaced, not accepted.",
+    "Delayed-query tests initially asserted code rather than CloudError.failure.code; corrected assertion field.",
+    "Strict lint rejected deprecated Zod finite no-ops; removed them."
+  ],
+  "limits": [
+    "No access-session admission, gateway, CLI SSH or customer signing exists at this checkpoint.",
+    "A snapshot cannot prevent later revocation; mutations must keep account-lock revalidation.",
+    "Future gateway expiry must conservatively subtract RPC latency.",
+    "No migration changed. Root simulated API and worker were rebuilt/restarted and passed the actual CLI lifecycle with cleanup. M1 paid resources are all removed."
+  ]
+}

@@ -1,6 +1,6 @@
 # Customer SSH access design
 
-Design selected on 2026-09-07. Implementation has not started. Existing opaque delegated grants authorize this slice. Browser/device login, persistent commands, deployment and forwarding remain later work. The current probe/runtime SSH path stays restricted.
+Design selected on 2026-09-07. The shared authority loader is implemented. Verified authority2ece39a is integrated into the main checkout; subsequent session work remains isolated. Session storage, issuance, gateway, customer certificates and CLI remain planned below. Existing opaque delegated grants authorize this slice. Browser/device login, persistent commands, deployment and forwarding remain later work. The current probe/runtime SSH path stays restricted.
 
 ## Customer usage
 
@@ -73,7 +73,7 @@ One session permits one persisted CA submission, with a ninety-second admission-
 
 From one admission-time database timestamp, persist `issueDeadline = admittedAt + 90s` and `hardDeadline = min(admittedAt + 1h, ancestryExpiry)`. At publication, persist `ticketDeadline = min(issuedAt + 60s, issueDeadline, ancestryExpiry)` once. Certificate validity is at most five minutes and never after the original hard/ancestry deadline. No replay, queue delay or renewed authority check moves these absolute limits.
 
-Refactor the existing grant walk into `loadAuthority(db, grantId)` returning `{ principal, checkedAt, expiresAt }` where expiry is the earliest validated ancestor. It reads database time once. Keep `loadPrincipal` as a compatibility wrapper temporarily while migrating all callers, then remove the wrapper if it has no purpose. Admission, grant delegation, lifecycle, issue, claim and session checks use this one authority walk and PostgreSQL clock. Do not duplicate an access-only ancestor query.
+`loadAuthority(db, grantId)` returns `{ principal, checkedAt, expiresAt }` where expiry is the earliest validated ancestor. One bounded recursive SQL statement reads the complete ancestry from one MVCC snapshot. It materializes the traversal before reading PostgreSQL time for the expiry decision. `loadPrincipal` remains the useful principal-only wrapper for existing authentication/lifecycle callers. Grant delegation consumes the full horizon directly. Admission, issue, claim and session checks must use this shared walk under their stated locks. A consistent snapshot does not prevent a revocation that commits after that snapshot. Future gateways must subtract RPC latency when anchoring remaining lifetime. Do not duplicate an access-only ancestor query.
 
 ## Issue, claim and close
 
