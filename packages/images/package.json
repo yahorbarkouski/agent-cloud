@@ -1,5 +1,5 @@
 {
-  "name": "@agent-cloud/guestctl",
+  "name": "@agent-cloud/images",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -13,9 +13,6 @@
     }
   },
   "dependencies": {
-    "@agent-cloud/contracts": "workspace:*",
-    "@agent-cloud/pki": "workspace:*",
-    "zod": "4.5.4",
-    "@agent-cloud/images": "workspace:*"
+    "@agent-cloud/contracts": "workspace:*"
   }
 }

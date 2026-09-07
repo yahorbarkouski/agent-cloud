@@ -40,7 +40,8 @@ beforeEach(async () => {
 async function scenario() {
   const db = database.connection.db;
   const manifest = guestManifestSchema.parse({
-    format: 1,
+    format: 2,
+    publicInputsDigest: 'd'.repeat(64),
     version: 'runtime-fixture',
     architecture: 'x86',
     components: {

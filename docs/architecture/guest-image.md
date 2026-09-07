@@ -1,6 +1,6 @@
 # Guest image and first boot
 
-The development image targets Ubuntu 24.04 on x86. `pnpm build:guest` bundles the TypeScript CLI and verifies eight downloaded artifacts against `images/artifacts.json`. It stages only public CA trust, the guest bundle, tool archives, configuration and checksums in `.local/guest-build`. It does not copy provider tokens, provisioner credentials or CA private keys.
+The development image targets Ubuntu 24.04 on x86. `pnpm build:guest` bundles the TypeScript CLI and verifies eight downloaded artifacts against `images/artifacts.json`. It stages only public CA trust, the guest bundle, tool archives, configuration and checksums in `.local/guest-builds/<manifest-digest>`, with a separate current-build pointer. Manifest format 2 binds the full public input inventory; see [image publication](image-release.md). It does not copy provider tokens, provisioner credentials or CA private keys.
 
 Node 24.20.0, Smallstep 0.30.6, Caddy 2.11.4, Docker 29.8.0 and Compose 5.5.1 are pinned. Compose uses the current `docker compose` plugin. This updates the original plan's v2 wording. Ubuntu packages, including OpenSSH and cloud-init, receive the repository's security updates during installation. The installer records their exact versions in `/usr/lib/agent-cloud/os-packages.txt`. This is a recorded development build, not a claim of bit-for-bit reproducibility or a finished snapshot release pipeline.
 

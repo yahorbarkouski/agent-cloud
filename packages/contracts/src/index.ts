@@ -7,3 +7,5 @@ export * from './provider.js';
 export * from './client.js';
 export * from './money.js';
 export * from './guest.js';
+export * from './image-inputs.js';
+export * from './image-release.js';

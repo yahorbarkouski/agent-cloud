@@ -1,3 +1,4 @@
+import { readGuestBuild } from './support/guest-build.js';
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -25,6 +26,7 @@ import { testDatabase } from '../tests/database.js';
 import { prepareEnrollmentFixture } from './support/enrollment-fixture.js';
 import { withSshFixture } from './support/ssh-fixture.js';
 
+const guestBuild = await readGuestBuild();
 const database = await testDatabase();
 try {
   await withSshFixture(async ({ scratch, fixture, run, start, installHostCertificate }) => {
@@ -41,8 +43,8 @@ try {
     });
     const configuration = {
       state: join(scratch, 'guest-state'),
-      manifest: resolve('.local/guest-build/image.json'),
-      binary: resolve('.local/guest-build/guestctl.mjs'),
+      manifest: join(guestBuild.directory, 'image.json'),
+      binary: join(guestBuild.directory, 'guestctl.mjs'),
       step,
       keygen: '/usr/bin/ssh-keygen',
     };

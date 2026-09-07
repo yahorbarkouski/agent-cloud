@@ -1,0 +1,67 @@
+{
+  "verifiedAt": "2026-09-07T02:56:50.859Z",
+  "command": "pnpm build:guest && pnpm exec tsx scripts/smoke-image.ts",
+  "session": "59921",
+  "provider": "local OrbStack with simulated control-plane provider observations",
+  "cloudResourcesCreated": 0,
+  "manifestDigest": "7792e6add5b2e008c3b8e2e9bd681f4909c4e221bb43fcd66b2896f76ccf0db1",
+  "imageVersion": "dev-ec3deebee0cd9c819a50eb27",
+  "publicInputsDigest": "ec3deebee0cd9c819a50eb2732b23121908dd6314d1e22617bffcf4bf964891f",
+  "checksumDigest": "9e365a2c22e2bb16db47848103bb13912b296a667a769c7099a4ce6b137387cf",
+  "publicInputFiles": 16,
+  "verified": [
+    "trusted transfer preflight and actual Ubuntu installation",
+    "sanitation refusal and interrupted recovery",
+    "two fresh cloned identities",
+    "restricted SSH and runtime checks",
+    "Docker/proxy/disk failure recovery",
+    "reboot with changed boot ID",
+    "bootstrap-token erasure",
+    "all owned VMs and records removed"
+  ],
+  "clones": [
+    {
+      "machineId": "3e4e3faf41674850872d143fff31dcb2",
+      "sshIdentity": "6a8a2aac2ddbf043c00f23ab849f279498ce1b4d1a19676cdfa22b69fac98887",
+      "tlsIdentity": "6f1f2d9121228c5aac238edd61609048f0b8311d5bbe37b72f6bcdc9087d6763",
+      "allocationId": "alloc_12b39daf-8f5c-4f51-a45a-37cffeeb0135",
+      "bootstrapScan": {
+        "files": 125,
+        "bytes": 592500,
+        "matches": 0
+      }
+    },
+    {
+      "machineId": "d2e82103f22e42b8a9339c757b3ee69a",
+      "sshIdentity": "8fd215e89140f2bc201700e407bbc76949626fd9bcc76d2001a8e96123fb9018",
+      "tlsIdentity": "12bd84a5cdfe3116a042afde54e8f7be4c14fb443a6ba46aba50f6bf057b8522",
+      "allocationId": "alloc_91987b67-c483-4256-bee6-9172de0a4db9",
+      "bootstrapScan": {
+        "files": 125,
+        "bytes": 590270,
+        "matches": 0
+      }
+    }
+  ],
+  "subsequentPublicationCheck": {
+    "session": "44164",
+    "sameManifest": true,
+    "readOnlyFiles": "0444",
+    "readOnlyDirectories": "0555",
+    "temporaryStagingAbsent": true
+  },
+  "limitations": [
+    "No Hetzner snapshot or provider boot has run",
+    "No operator image journal or release promotion exists yet",
+    "Read-only publication does not resist a hostile filesystem owner"
+  ],
+  "cleanup": {
+    "checkedAt": "2026-09-07T03:00:25.412Z",
+    "localVmInventory": [],
+    "absentOwnershipRecords": [
+      ".local/guest-image-builder.json",
+      ".local/guest-image-refusal.json",
+      ".local/guest-image-machine.json"
+    ]
+  }
+}

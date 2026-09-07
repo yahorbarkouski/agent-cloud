@@ -1,3 +1,5 @@
+import { imageInstallCommand } from '../packages/images/dist/index.js';
+import { readGuestBuild } from './support/guest-build.js';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -31,6 +33,7 @@ async function run(binary: string, args: string[], timeout = 30_000, environment
     );
   }
 }
+const guestBuild = await readGuestBuild();
 await mkdir('.local', { recursive: true, mode: 0o700 });
 const builder = builderSchema.parse({
   purpose: 'agent-cloud-local-image-builder',
@@ -47,7 +50,7 @@ await run(
 const vm = (args: string[], timeout?: number) =>
   run('orb', ['run', '-m', builder.name, '-u', 'root', '-w', '/tmp', ...args], timeout);
 progress('installing owned image builder');
-await vm(['cp', '-R', '/mnt/mac' + resolve('.local/guest-build'), '/tmp/agent-cloud-input']);
+await vm(['cp', '-R', '/mnt/mac' + guestBuild.directory, '/tmp/agent-cloud-input']);
 // A package-manager sentinel proves installer refusal precedes package mutation.
 await vm([
   '/bin/sh',
@@ -63,6 +66,7 @@ const refuseInstallation = async () => {
       '/tmp/agent-cloud-input/install.sh',
       '/tmp/agent-cloud-input',
       builder.builderId,
+      guestBuild.manifestDigest,
     ]),
   );
   await vm(['test', '!', '-e', '/tmp/agent-cloud-preflight-ran']);
@@ -96,17 +100,16 @@ await vm([
   '/tmp/agent-cloud-preflight-state',
 ]);
 await vm(
-  [
-    '/bin/sh',
-    '-c',
-    '/bin/sh /tmp/agent-cloud-input/install.sh /tmp/agent-cloud-input "$1" > /tmp/agent-cloud-install.log 2>&1',
-    'image-install',
-    builder.builderId,
-  ],
+  imageInstallCommand({
+    directory: '/tmp/agent-cloud-input',
+    builderId: builder.builderId,
+    manifestDigest: guestBuild.manifestDigest,
+    checksumDigest: guestBuild.checksumDigest,
+  }),
   600_000,
 );
 const manifest = guestManifestSchema.parse(
-  JSON.parse(await readFile('.local/guest-build/image.json', 'utf8')),
+  JSON.parse(await readFile(guestBuild.directory + '/image.json', 'utf8')),
 );
 const refusalBootstrap = guestBootstrapFileSchema.parse({
   token: 'a'.repeat(43),
@@ -304,7 +307,11 @@ for (let clone = 1; clone <= 2; clone++) {
     process.execPath,
     ['--import', 'tsx', 'scripts/smoke-guest.ts'],
     600_000,
-    { ...process.env, AGENT_CLOUD_SANITIZED_IMAGE: '1' },
+    {
+      ...process.env,
+      AGENT_CLOUD_SANITIZED_IMAGE: '1',
+      AGENT_CLOUD_INPUT_DIGEST: guestBuild.manifestDigest,
+    },
   );
   const reports = output
     .trim()

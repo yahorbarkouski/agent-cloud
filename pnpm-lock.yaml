@@ -246,6 +246,9 @@ importers:
       '@agent-cloud/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@agent-cloud/images':
+        specifier: workspace:*
+        version: link:../images
       '@agent-cloud/pki':
         specifier: workspace:*
         version: link:../pki
@@ -261,6 +264,12 @@ importers:
       zod:
         specifier: 4.5.4
         version: 4.5.4
+
+  packages/images:
+    dependencies:
+      '@agent-cloud/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/pki:
     dependencies:

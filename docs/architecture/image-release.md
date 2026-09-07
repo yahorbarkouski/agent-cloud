@@ -1,0 +1,58 @@
+# Image publication
+
+Status: selected design, implementation in progress. Local sanitation and clone boot are verified. Provider publication and production consumption are not enabled.
+
+An operator build owns its temporary machines, access resources and snapshot. Customer allocations retain their existing journal and budget rules. Every external mutation has a durable intent; a lost response requires reconciliation before another create. The build record remains useful even when credentials, SSH access or the operator process disappear.
+
+## Inputs and release identity
+
+`build:guest` stages a complete public input tree. Its sorted inventory hashes the executable bundle, installer, service units, SSH and sudo policy, pinned downloaded artifacts, artifact metadata and public trust. It excludes derived `image.json`, `image-inputs.json` and `SHA256SUMS` to avoid a hash cycle. Manifest format 2 includes the inventory digest. Its version changes when any public input changes. There are no deployed format 1 guests requiring compatibility.
+
+The build publishes a directory named by the manifest digest and a separate current-build pointer. Consumers capture the digest once. They validate the complete tree against that digest before use; later builds cannot replace their selected directory. Regular-file, path, size, duplicate and checksum checks reject unsafe or incomplete inputs. Publication makes files read-only; a same-owner process can still change permissions, so digest verification remains required. The controller captures the transfer-checksum digest after full validation, then sends its own shell preflight over authenticated management access. Base OS checksum tools validate that digest, every listed file and the absence of extra files or symlinks before any uploaded installer, Node or guestctl executes. The staged verifier is a second consistency check, not the initial trust source. This is provenance of admitted inputs, not a claim of bit-reproducible Ubuntu packages or independent attestation of a hostile builder.
+
+The authenticated chain is inputs → manifest → sanitation receipt → stopped source/snapshot observation → fresh verification boot → signed release. A release carries the full manifest and provider snapshot identity; `GuestImage` is derived from those fields, avoiding competing copies. Signed metadata includes the artifact pins, sanitation source server, observed source shutdown time and a different verification server. Cryptographic validation checks these assertions for consistency; the future provider journal must prove current ownership and that the verifier actually booted the recorded snapshot. An Ed25519 release key is separate from fleet certificate authorities. Consumers verify signature, key validity and revocation, retention, provider ownership and image availability. A deleted verification-only snapshot produces audit evidence but cannot become a production release.
+
+## Operator path
+
+The intended commands are `image:release admit`, `advance`, `inspect` and `cleanup`. These commands are not implemented yet. Admission records one exact provider offer, immutable input digest, explicit management CIDR, build deadline, storage ceiling and retention. It creates no cloud resource.
+
+`advance` prepares access, creates one builder, copies verified inputs, installs, sanitizes, confirms shutdown, snapshots, verifies one fresh boot, signs a retained release and cleans temporary resources. The runner executes one planned step at a time. Re-entry reads persisted evidence instead of assuming that a previous process reached its next line.
+
+The per-build SSH management key and initial host key are generated locally. Only public keys and secret references enter SQL. The executor materializes cloud-init with the disposable host private key for the exact prepared server attempt. The first SSH connection pins the known public key before upload. It uses isolated credentials, `-F /dev/null`, `IdentitiesOnly=yes` and `IdentityAgent=none`. Sanitation erases this temporary access. Provider tokens and fleet private keys never enter a builder.
+
+Verification is platform-owned. Reuse guest proof and certificate-validation functions; do not fabricate a customer allocation just to satisfy the existing enrollment tables. The verifier needs a distinct build-owned bootstrap/enrollment record and an explicitly configured reachable HTTPS endpoint. That integration remains a prerequisite to publication.
+
+## Types and module ownership
+
+- `packages/contracts/src/image-inputs.ts` owns validated inventories and artifact pins. `guest.ts` owns the format 2 manifest.
+- `packages/images` owns public input inspection, canonical digest construction and release signing/verification. Filesystem and crypto code stay out of contracts.
+- `packages/db` will add sibling `image_builds`, `image_build_effects` and `image_build_resources` tables. No customer/account/allocation foreign keys. Unique provider/kind/resource identity prevents cross-build adoption; unique build/effect key prevents a second create intent for an unresolved step.
+- `apps/control/src/image-release-plan.ts` will choose a discriminated next step from persisted state and current observations. Phase-specific evidence belongs inside the phase variant, not nullable fields beside an enum. Cleanup is a separate intent that can only reconcile or delete.
+- `apps/control/src/image-release-runner.ts` will persist intent, invoke narrow provider/SSH/signing operations, and append immutable outcome and resolution. Commands carry secret references, never raw user-data.
+- `packages/hetzner/src/image-release.ts` will implement image/access HTTP transport using the existing request layer. It does not decide ownership or retry policy.
+
+Resource kinds are server, primary IP, SSH key, firewall and snapshot. Roles distinguish builder/verifier and their addresses. Each intent has exact labels including a label-safe build UUID and role. Full 64-hex digests remain in metadata because Hetzner label values allow only 63 characters. Reconciliation records every duplicate ID and blocks fresh creation. Cleanup deletes only identities proven owned by both recorded intent and current provider evidence.
+
+## Spending and recovery
+
+The read-only account check at 2026-09-07T02:15:47Z found no servers, IPs, snapshots, firewalls or SSH keys. CPX12 was available at USD 27,798 gross micro-units per hour including IPv4. Snapshot storage was USD 24,477 gross micro-units per GB-month. A conservative 40 GB full-month reservation is USD 979,080 micro-units. Two total VM-hours add 55,596, giving a USD 1.034676 conservative admission envelope before a small explicit cap margin. These are observed prices, not current admission authority; refresh before any paid effect. [Saved account evidence](../research/hetzner-image-catalog-check-2026-09-07.json).
+
+Persist separate gross VM/IP and snapshot storage caps, their currency, maximum simultaneous machines, absolute build deadline and snapshot deletion time. Count powered-off machines. No type or region fallback. Cleanup continues after expiry and cannot rent replacement capacity. A provider outage can prevent deletion and extend billing; preserve unresolved ownership and report it rather than claiming the deadline stopped charges.
+
+Installation interruption before a receipt requires disposal or explicit recovery of the same builder. Never reinstall across partially mutated state by pretending it is fresh. Lost sanitation response with access removed cannot authorize snapshotting. A receipt plus confirmed stopped source is required. Snapshot creation with an unknown response searches exact labels; zero or multiple candidates remains unresolved. Bind snapshot architecture, source, size, protection and labels before deleting the builder. Retained release promotion is transactional and occurs only after verification and successful signature checks.
+
+## Design comparison
+
+All three candidates converged on a sibling operator journal. Parent scores by rubric criteria 1–6 were A: 3/5/5/2/3/4 = 22, B: 5/4/3/2/3/4 = 21, C: 2/5/4/1/3/5 = 20. The independent judge scored A 24, B 22 and C 22 and selected A. The parent initially favored B's authenticated first connection, then accepted A's clearer spending and ownership model after comparing the complete designs. [Judge rationale](../research/image-release-review.md).
+
+Use A as the base. Graft B's acyclic input chain and injected disposable host key, correcting its plaintext journal contradiction. Graft C's pure planner, interruption matrix and transactional promotion. Reject A/C first-seen host-key trust, B's same-price fallback, C's manifest hash cycle and fake verifier allocation, and optional-field state bags in all three sketches. There were no dropouts. Runtime verification remains open.
+
+## Implementation order
+
+1. Full input provenance, content-addressed staging and tamper checks.
+2. Authenticated release contracts and validation, then operator journal/constraints and interruption tests.
+3. Narrow Hetzner transport, isolated builder access and resumable cleanup.
+4. Platform verifier enrollment, real snapshot boot and signed release consumption.
+5. Bounded inexpensive provider drill, cleanup and production activation only after remaining renewal/recovery prerequisites.
+
+Primary API evidence: [Hetzner server/image actions](https://raw.githubusercontent.com/hetznercloud/hcloud-go/main/hcloud/server.go), [image metadata](https://raw.githubusercontent.com/hetznercloud/hcloud-go/main/hcloud/schema/image.go), [snapshot behavior](https://docs.hetzner.com/cloud/servers/backups-snapshots/faq/), [cloud-init host-key injection](https://docs.cloud-init.io/en/latest/reference/modules.html#ssh).

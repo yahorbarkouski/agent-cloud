@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { architectureSchema } from './catalog.js';
 import { accountIdSchema, allocationIdSchema, machineIdSchema, operationIdSchema } from './ids.js';
+import { imageDigestSchema } from './image-inputs.js';
 
 const publicKey = z
   .string()
@@ -82,7 +83,8 @@ export const guestProofSchema = z.strictObject({
 export type GuestProof = z.infer<typeof guestProofSchema>;
 
 export const guestManifestSchema = z.strictObject({
-  format: z.literal(1),
+  format: z.literal(2),
+  publicInputsDigest: imageDigestSchema,
   version: guestImageSchema.shape.version,
   architecture: architectureSchema,
   components: z.strictObject({

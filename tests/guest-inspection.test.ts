@@ -17,7 +17,8 @@ afterEach(async () => {
 async function fixture() {
   const binary = 'public guest executable fixture';
   const manifest = guestManifestSchema.parse({
-    format: 1,
+    format: 2,
+    publicInputsDigest: 'd'.repeat(64),
     version: 'inspection-v1',
     architecture: 'x86',
     components: {

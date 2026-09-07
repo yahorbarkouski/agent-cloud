@@ -34,7 +34,7 @@ Full check42939 passed121tests/18files, typecheck/lint and formatting; composed 
 
 ## Next publication work
 
-The current manifest pins the guest bundle, component versions and public trust. `scripts/build-guest.ts` also writes input checksums, but the manifest does not yet bind the installer and service configuration. Close that provenance gap before publishing a provider image. Keep the OS package inventory distinct from reproducible public inputs; installing current Ubuntu packages is not a reproducible OS build.
+Manifest format 2 now binds the guest bundle, installer, service/policy files, artifact pins and public trust through a complete input inventory. The [publication implementation](image-release.md) also authenticates transfer checksums before uploaded code runs and verifies signed release metadata. Provider ownership, snapshot/boot observations and release promotion remain unfinished. Keep the OS package inventory distinct from reproducible public inputs; installing current Ubuntu packages is not a reproducible OS build.
 
 Provider publication needs its own recorded snapshot identity and cleanup. The existing VM/IP effect journal has no image effect yet, and the production worker still does not construct `GuestProvisioning`. A stopped builder, durable submission intent, reconciled snapshot result and explicit image deletion must precede the bounded Hetzner drill. A lost create-image response must not cause an unexamined second snapshot request.
 

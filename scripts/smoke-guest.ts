@@ -1,3 +1,5 @@
+import { imageInstallCommand } from '../packages/images/dist/index.js';
+import { readGuestBuild } from './support/guest-build.js';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID, X509Certificate } from 'node:crypto';
@@ -60,6 +62,7 @@ async function command(binary: string, args: string[], timeout = 30_000) {
     throw new Error(`Local VM tooling failed: ${binary}. Inspect the owned VM status files.`);
   }
 }
+const guestBuild = await readGuestBuild();
 await mkdir('.local', { recursive: true, mode: 0o700 });
 const clone = process.env.AGENT_CLOUD_SANITIZED_IMAGE === '1';
 let owner;
@@ -126,15 +129,14 @@ try {
   } else {
     progress('installing owned local Ubuntu VM');
     await vm(['rm', '-rf', '/tmp/agent-cloud-input']);
-    await vm(['cp', '-R', '/mnt/mac' + resolve('.local/guest-build'), '/tmp/agent-cloud-input']);
+    await vm(['cp', '-R', '/mnt/mac' + guestBuild.directory, '/tmp/agent-cloud-input']);
     await vm(
-      [
-        '/bin/sh',
-        '-c',
-        '/bin/sh /tmp/agent-cloud-input/install.sh /tmp/agent-cloud-input "$1" > /tmp/agent-cloud-install.log 2>&1',
-        'image-install',
-        owner.builderId,
-      ],
+      imageInstallCommand({
+        directory: '/tmp/agent-cloud-input',
+        builderId: owner.builderId,
+        manifestDigest: guestBuild.manifestDigest,
+        checksumDigest: guestBuild.checksumDigest,
+      }),
       600_000,
     );
     imageReceiptSchema.parse(
@@ -194,7 +196,7 @@ try {
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Expected local HTTPS port.');
   const manifest = guestManifestSchema.parse(
-    JSON.parse(await readFile('.local/guest-build/image.json', 'utf8')),
+    JSON.parse(await readFile(guestBuild.directory + '/image.json', 'utf8')),
   );
   const image = guestImageSchema.parse({
     providerImage: 'orbstack-local-ubuntu',

@@ -1,0 +1,163 @@
+{
+  "observedAt": "2026-09-07T02:15:47.157Z",
+  "pricing": {
+    "currency": "USD",
+    "vat_rate": "23.000000",
+    "image": {
+      "price_per_gb_month": {
+        "gross": "0.0244770000000000"
+      }
+    }
+  },
+  "resources": {
+    "snapshots": 0,
+    "servers": 0,
+    "primaryIps": 0,
+    "firewalls": 0,
+    "sshKeys": 0
+  },
+  "catalog": {
+    "provider": "hetzner",
+    "currency": "USD",
+    "pricing": "account_gross",
+    "observedAt": "2026-09-07T02:15:46.938Z",
+    "expiresAt": "2026-09-07T02:20:46.938Z",
+    "items": [
+      {
+        "size": "small",
+        "serverType": "cpx12",
+        "region": "nbg1",
+        "architecture": "x86",
+        "vcpus": 1,
+        "memoryGb": 2,
+        "diskGb": 40,
+        "available": true,
+        "currency": "USD",
+        "priceBasis": "account_gross",
+        "serverHourlyMicros": 26568,
+        "ipv4HourlyMicros": 1230,
+        "hourlyMicros": 27798
+      },
+      {
+        "size": "small",
+        "serverType": "cpx12",
+        "region": "fsn1",
+        "architecture": "x86",
+        "vcpus": 1,
+        "memoryGb": 2,
+        "diskGb": 40,
+        "available": true,
+        "currency": "USD",
+        "priceBasis": "account_gross",
+        "serverHourlyMicros": 26568,
+        "ipv4HourlyMicros": 1230,
+        "hourlyMicros": 27798
+      },
+      {
+        "size": "small",
+        "serverType": "cpx12",
+        "region": "hel1",
+        "architecture": "x86",
+        "vcpus": 1,
+        "memoryGb": 2,
+        "diskGb": 40,
+        "available": true,
+        "currency": "USD",
+        "priceBasis": "account_gross",
+        "serverHourlyMicros": 26568,
+        "ipv4HourlyMicros": 1230,
+        "hourlyMicros": 27798
+      },
+      {
+        "size": "medium",
+        "serverType": "cx33",
+        "region": "nbg1",
+        "architecture": "x86",
+        "vcpus": 4,
+        "memoryGb": 8,
+        "diskGb": 80,
+        "available": false,
+        "currency": "USD",
+        "priceBasis": "account_gross",
+        "serverHourlyMicros": 19680,
+        "ipv4HourlyMicros": 1230,
+        "hourlyMicros": 20910
+      },
+      {
+        "size": "medium",
+        "serverType": "cx33",
+        "region": "fsn1",
+        "architecture": "x86",
+        "vcpus": 4,
+        "memoryGb": 8,
+        "diskGb": 80,
+        "available": false,
+        "currency": "USD",
+        "priceBasis": "account_gross",
+        "serverHourlyMicros": 19680,
+        "ipv4HourlyMicros": 1230,
+        "hourlyMicros": 20910
+      },
+      {
+        "size": "medium",
+        "serverType": "cx33",
+        "region": "hel1",
+        "architecture": "x86",
+        "vcpus": 4,
+        "memoryGb": 8,
+        "diskGb": 80,
+        "available": false,
+        "currency": "USD",
+        "priceBasis": "account_gross",
+        "serverHourlyMicros": 19680,
+        "ipv4HourlyMicros": 1230,
+        "hourlyMicros": 20910
+      },
+      {
+        "size": "large",
+        "serverType": "cx43",
+        "region": "nbg1",
+        "architecture": "x86",
+        "vcpus": 8,
+        "memoryGb": 16,
+        "diskGb": 160,
+        "available": false,
+        "currency": "USD",
+        "priceBasis": "account_gross",
+        "serverHourlyMicros": 36408,
+        "ipv4HourlyMicros": 1230,
+        "hourlyMicros": 37638
+      },
+      {
+        "size": "large",
+        "serverType": "cx43",
+        "region": "fsn1",
+        "architecture": "x86",
+        "vcpus": 8,
+        "memoryGb": 16,
+        "diskGb": 160,
+        "available": false,
+        "currency": "USD",
+        "priceBasis": "account_gross",
+        "serverHourlyMicros": 36408,
+        "ipv4HourlyMicros": 1230,
+        "hourlyMicros": 37638
+      },
+      {
+        "size": "large",
+        "serverType": "cx43",
+        "region": "hel1",
+        "architecture": "x86",
+        "vcpus": 8,
+        "memoryGb": 16,
+        "diskGb": 160,
+        "available": false,
+        "currency": "USD",
+        "priceBasis": "account_gross",
+        "serverHourlyMicros": 36408,
+        "ipv4HourlyMicros": 1230,
+        "hourlyMicros": 37638
+      }
+    ]
+  }
+}

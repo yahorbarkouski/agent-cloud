@@ -25,7 +25,31 @@
 - [ ] M6: self-hosting, maintained skills/docs, realistic end-to-end validation.
 - [ ] M7: availability and failure drills appropriate to the user's low infrastructure budget.
 
+## Image publication implementation workflow
+
+- [x] Ground: trace full public input binding and the operator/customer ownership boundary in `research/image-release-grounding.md`.
+- [x] Sketch: compare bounded operator release designs, then select types and modules.
+  - [x] Frame: full input provenance, explicit ownership, unknown outcomes, gross budget/deadline, cleanup, and short call chains.
+  - [x] Fan out
+  - [x] Cross-judge
+  - [x] Pick
+  - [x] Graft
+  - [x] Verify: provenance/transfer/crypto contracts passed focused and native checks; provider publication remains open.
+- [x] Agree: autonomous implementation remains authorized.
+- [ ] Implement: public input provenance, snapshot publication/reconciliation/cleanup, release consumption and bounded provider proof.
+- [ ] Scrap audit: revisit the chosen shape only if implementation shows repeated friction.
+
 ## Verification ledger
+
+M1 full image input provenance and authenticated release, 2026-09-07:
+
+- Added format 2 manifests and the `packages/images` package. Image identity now includes the installer, service and SSH/sudo configuration, guest bundle, pinned artifacts, canonical artifact metadata and public trust. Sorted inventories exclude their derived metadata to avoid self-referential hashes. Complete-tree validation rejects omissions, extras, unsafe paths, symlinks and changed bytes.
+- Builds publish read-only directories named by manifest digest and update a separate current-build pointer atomically. Consumers capture one selection; clone checks inherit the parent digest. Rebuilding identical inputs returned the same digest. A macOS EACCES result when renaming over a read-only existing directory now resolves only by verifying that exact existing tree.
+- Review identified an upload trust-order flaw. The corrected entry point uses controller-owned shell and base OS checksums against an independently captured transfer digest before any uploaded code executes. Actual shell tests reject a fully substituted installer/runtime/manifest/checksum tree and unlisted package files. The staged guestctl verifier remains a second consistency check.
+- Ed25519 release validation binds complete input metadata, sanitation source server, distinct verifier and event ordering. It checks key validity, additive rotation, revocation, retention and tampering, then derives GuestImage. These are authenticated recorded assertions; the operator journal must still prove current snapshot ownership, availability and actual boot source before promotion.
+- Final full check session 44164 passed 167 tests in 20 files, typecheck and strict lint. The composed native enrollment smoke also passed with actual guest library, Smallstep and OpenSSH/TLS; its provider observations and activation hooks remain fixtures. Formatting, shell syntax and customer-skill validation passed.
+- Native image drill 59921 passed trusted preflight, actual installation, sanitation/refusal/recovery and two complete clone enrollment/runtime/reboot checks. Each 125-file token scan had zero matches. Final VM inventory was empty and all ownership records were absent. Exact public evidence is in `research/m1-image-provenance-verification.json`. The same manifest and transfer digest survived repeated builds, including the final reuse-permission correction.
+- Review is in `research/m1-image-provenance-review.md`. Cryptographic release verification is complete for this boundary; operator journal, provider proof, budgets, cleanup and promotion remain unfinished. No paid resource has been created. Commit and Linux CI are pending.
 
 M1 image sanitation and cloned identity, 2026-09-07:
 

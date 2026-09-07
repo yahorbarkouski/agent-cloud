@@ -1,8 +1,11 @@
 #!/bin/sh
 set -eu
 [ "$(id -u)" = 0 ]
-[ "$#" = 2 ]
+[ "$#" = 3 ]
 builder_id=$2
+manifest_digest=$3
+[ "${#manifest_digest}" = 64 ]
+case "$manifest_digest" in *[!0-9a-f]*) exit 1 ;; esac
 case "$builder_id" in
   00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff|????????-????-[1-8]???-[89ab]???-????????????) ;;
   *) exit 1 ;;
@@ -44,6 +47,7 @@ apt-get update -qq
 apt-get install -y -qq openssh-server cloud-init sudo ca-certificates curl git jq xz-utils iptables
 apt-get install -y -qq "$image_input"/artifacts/*.deb
 tar -xJf "$image_input/artifacts/node.tar.xz" -C /usr/local --strip-components=1
+/usr/local/bin/node "$image_input/guestctl.mjs" verify-inputs "$image_input" "$manifest_digest" --json
 image_unpack=$(mktemp -d)
 trap 'rm -rf "$image_unpack"' EXIT
 tar -xzf "$image_input/artifacts/step.tar.gz" -C "$image_unpack" step_0.30.6/bin/step
@@ -53,6 +57,7 @@ install -m 0755 "$image_unpack/caddy" /usr/local/bin/caddy
 install -d -m 0755 /usr/lib/agent-cloud /var/lib/agent-cloud
 install -m 0755 "$image_input/guestctl.mjs" /usr/lib/agent-cloud/guestctl.mjs
 install -m 0644 "$image_input/image.json" /usr/lib/agent-cloud/image.json
+install -m 0644 "$image_input/image-inputs.json" /usr/lib/agent-cloud/image-inputs.json
 install -m 0644 "$image_input/sshd_config" /usr/lib/agent-cloud/sshd_config
 jq -r .trust.sshUserCa "$image_input/image.json" > /usr/lib/agent-cloud/ssh_user_ca.pub
 jq -r .trust.tlsRoot "$image_input/image.json" > /usr/lib/agent-cloud/root_ca.crt

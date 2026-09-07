@@ -5,6 +5,7 @@ import { readOwnedFile } from './files.js';
 import { guestSystem } from './system.js';
 import { inspectRuntime } from './inspect.js';
 import { prepareImage } from './image.js';
+import { verifyImageInputs } from '@agent-cloud/images';
 
 const configuration = {
   state: '/var/lib/agent-cloud',
@@ -14,6 +15,14 @@ const configuration = {
   keygen: '/usr/bin/ssh-keygen',
 };
 try {
+  if (process.argv[2] === 'verify-inputs') {
+    const [, directory, digest, format, ...extra] = process.argv.slice(2);
+    if (!directory || !digest || format !== '--json' || extra.length)
+      throw new Error('Input verification requires a directory and admitted digest.');
+    const { manifestDigest } = await verifyImageInputs(directory, digest);
+    process.stdout.write(JSON.stringify({ kind: 'verified', manifestDigest }) + '\n');
+    process.exit(0);
+  }
   const [command, format, ...extra] = process.argv.slice(2);
   if (
     format !== '--json' ||
