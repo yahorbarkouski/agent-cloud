@@ -105,7 +105,7 @@ pnpm image:build cancel <build-id>
 
 `pnpm image:build admit <prepared-config.json>` checks the matching local key store, reads Hetzner pricing and reserves an operator allowance without creating resources. Reusing the same configuration returns its recorded admission; changed intent needs a new build ID. `cancel` records a full abort request; it does not claim cloud deletion or local key erasure has run.
 
-The SQL journal, cleanup planner, key preparation, boot renderer and builder transport are implemented. Provider advancement, durable installation phases, platform verifier enrollment, release promotion and terminal key cleanup are still being connected. There is no live image build command yet. See [image publication](docs/architecture/image-release.md).
+The internal controller persists builder phases, stops and snapshots only after saved sanitation evidence, and removes temporary keys after full abort cleanup. Platform verifier enrollment and retained release promotion remain open, so there is no live image advancement command yet. See [image publication](docs/architecture/image-release.md).
 
 ## What is enforced
 

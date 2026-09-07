@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { imageBuildIdSchema } from './image-build.js';
+import {
+  imageBuildIdSchema,
+  imageProviderIdSchema,
+  imageSanitationReceiptSchema,
+} from './image-build.js';
 import { imageDigestSchema } from './image-inputs.js';
 
 export const imageBuilderBootSchema = z.strictObject({
@@ -22,3 +26,25 @@ export const imageInstallationSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('installed'), receipt: imageInstallReceiptSchema }),
 ]);
 export type ImageInstallation = z.infer<typeof imageInstallationSchema>;
+
+export const imageBuilderProgressSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('installing') }),
+  z.strictObject({ kind: z.literal('installed'), installation: imageInstallReceiptSchema }),
+  z.strictObject({ kind: z.literal('sanitizing'), installation: imageInstallReceiptSchema }),
+  z.strictObject({
+    kind: z.literal('sanitized'),
+    installation: imageInstallReceiptSchema,
+    sanitation: imageSanitationReceiptSchema,
+  }),
+]);
+export type ImageBuilderProgress = z.infer<typeof imageBuilderProgressSchema>;
+export const imageBuilderWorkSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('waiting') }),
+  z.strictObject({
+    kind: z.literal('recorded'),
+    serverId: imageProviderIdSchema,
+    effectId: z.uuid(),
+    progress: imageBuilderProgressSchema,
+    createdAt: z.iso.datetime(),
+  }),
+]);

@@ -41,6 +41,13 @@
 
 ## Verification ledger
 
+M1 durable builder controller, 2026-09-07:
+
+- Connected a pure next-step planner to separately locked provider, SSH and cleanup executors. The controller reaches `verification_required` after a sanitized, stopped snapshot. It does not enable live CLI advancement or retained publication.
+- Migration 0013 persists immutable builder/effect identity and forward-only phases, validates exact receipt shapes and requires saved sanitation before stop/snapshot. Unknown installation responses recover through inspection; unknown sanitation requests full cleanup. Local key deletion is admission-bound, restartable and follows authoritative provider cleanup.
+- Tests cover cancellation at each implemented stage, unknown creates retaining keys/reservations, controller restart after a lost installation response, lost sanitation, provider ownership drift, concurrent key removal and unreadable SQL evidence refusal. Full check 85297 passed 288 tests across 26 files, typecheck and lint. Targeted 38406 passed 94 tests. Review fixed extra SQL JSON acceptance; no remaining controller blocker was found.
+- Applied 0013 with owned services stopped. All 14 migration hashes match disk. Restarted CLI/API/worker smoke 68795 passed for `vm_2078205a-a653-4de6-8b22-7e28daf856ff`. Native controller smoke 6670 passed lost-response recovery through a fresh database connection, sanitation persistence, real source shutdown, two distinct clone boots and full abort/key cleanup. Builder and both clone scans found no key/token matches. Final inventory and ownership records are empty. Formatting 14512 passed. Evidence: `research/m1-image-builder-work-verification.json`. Final trail review and Linux CI are pending. No paid resource was created.
+
 M1 authenticated builder installation, 2026-09-07:
 
 - Added independent Ed25519 key preparation, owner-only atomic local storage and admission-bound recovery. Prepared builder boot rendering checks exact effect identity, dependencies, cancellation and expiry. `image:build prepare` returns public admission configuration without DB/provider credentials.

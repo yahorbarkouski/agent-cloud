@@ -1,0 +1,107 @@
+{
+  "verifiedAt": "2026-09-07T06:07:53.653Z",
+  "baselineCommit": "8eb2a46",
+  "command": "pnpm smoke:builder",
+  "session": "6670",
+  "provider": "Protocol fixture with an owned local OrbStack Ubuntu 24.04 amd64 builder and two real clone boots",
+  "cloudResourcesCreated": 0,
+  "manifestDigest": "03ef1c1b04ce408d298922c4d299d076a7ec8dd9b6e54a0d7dcf303656568474",
+  "imageVersion": "dev-42712ace9ccfcbdc546de157",
+  "publicInputsDigest": "42712ace9ccfcbdc546de15745da6feabaeb6a06131e421070320ac7ccdd91a0",
+  "checksumDigest": "be4a1d280b645a7c31c3620cb87a4effd77997be3a74480da93b1ab1297eb72d",
+  "verified": [
+    "Controller commits real SQL provider effects before rendering exact builder cloud-init",
+    "Native cloud-init and pinned SSH reject wrong host key, boot identity and expired upload",
+    "SFTP input tampering is rejected before executable upload code runs",
+    "SQL installing intent precedes SSH upload and concurrent native installation",
+    "A deliberately lost completed install response recovers through a fresh database connection without another upload or install",
+    "SQL sanitizing intent precedes access erasure and sanitation receipt persistence",
+    "Real builder is stopped before protocol snapshot creation and local cloning",
+    "Two fresh native clones pass enrollment, restricted runtime health and disk checks, reboot and bounded bootstrap scans",
+    "Distinct machine, SSH, TLS and allocation identities in both clones",
+    "Full abort deletes the owned local VM and protocol resources before terminal key removal",
+    "Final native inventory, ownership records and private fixture directory are empty"
+  ],
+  "builderKeyScan": {
+    "files": 64,
+    "bytes": 94289,
+    "matches": []
+  },
+  "clones": [
+    {
+      "machineId": "c046487b5263485ca912ad4c135d9e76",
+      "sshIdentity": "364425a891c528f3fa0a3accef7b38a53635e7702b0afa78ff2f3e0c3b0ad206",
+      "tlsIdentity": "250fc3226faf5ff2ac92d6320b6347104a90083142e6567619939d03c3fcf432",
+      "allocationId": "alloc_7e4aae44-c1bc-4429-9736-7a2b09a791d6",
+      "bootstrapScan": {
+        "files": 125,
+        "bytes": 598428,
+        "matches": []
+      }
+    },
+    {
+      "machineId": "ce1013859e2440a0a96c6fa74deb73a5",
+      "sshIdentity": "226991b8743f3f01bfd3f19b35acf6d4d54caac21eb97eee508373d75c447a38",
+      "tlsIdentity": "4a60f41fecef7c2b4b3730a65a8a5055b03b5ad400cc29f6155a59d1499ea2a9",
+      "allocationId": "alloc_9ed0c034-bfb8-4b49-af06-616ff8afe3f6",
+      "bootstrapScan": {
+        "files": 125,
+        "bytes": 599426,
+        "matches": []
+      }
+    }
+  ],
+  "regressionChecks": {
+    "full": {
+      "session": "85297",
+      "tests": 288,
+      "testFiles": 26,
+      "typecheck": true,
+      "lint": true
+    },
+    "targeted": {
+      "session": "38406",
+      "tests": 94,
+      "testFiles": 4
+    },
+    "format": {
+      "session": "14512",
+      "passed": true
+    },
+    "migration": {
+      "session": "f60973",
+      "applied": 14,
+      "hashesMatch": true
+    },
+    "localCli": {
+      "session": "68795",
+      "machineId": "vm_2078205a-a653-4de6-8b22-7e28daf856ff",
+      "passed": true
+    },
+    "localSqlCleanup": {
+      "session": "45f8f1",
+      "activeAllocations": 0,
+      "simulatedServers": 0,
+      "simulatedIps": 0
+    }
+  },
+  "cleanup": {
+    "checkedAt": "2026-09-07T06:07:53.653Z",
+    "inventorySession": "d10d87",
+    "filesystemSession": "bf26c2",
+    "localVmInventory": [],
+    "absentOwnershipRecords": [
+      ".local/guest-image-builder.json",
+      ".local/guest-image-refusal.json",
+      ".local/guest-image-machine.json"
+    ],
+    "builderAccessDirectories": []
+  },
+  "limitations": [
+    "No paid Hetzner resource, actual provider snapshot or provider snapshot boot was tested",
+    "Controller ends at verification_required; platform-owned verifier enrollment, retained cleanup, promotion and live activation remain unfinished",
+    "The real clones still use the customer enrollment smoke with protocol observations; this is not the future platform verifier lifecycle",
+    "Filesystem scans are bounded residual-secret checks, not forensic disk erasure",
+    "Native VM cloning requires macOS OrbStack and is not in Linux CI"
+  ]
+}

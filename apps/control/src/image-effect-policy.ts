@@ -144,6 +144,11 @@ export async function checkImageCommand(
     }
     case 'power_off':
       if (
+        build.builderWork.kind !== 'recorded' ||
+        build.builderWork.serverId !== command.serverId ||
+        build.builderWork.progress.kind !== 'sanitized' ||
+        JSON.stringify(build.builderWork.progress.sanitation) !==
+          JSON.stringify(command.sanitation) ||
         command.sanitation.builderId !== admission.id ||
         command.sanitation.manifestDigest !== admission.source.manifestDigest
       )
@@ -155,6 +160,15 @@ export async function checkImageCommand(
       return;
     case 'create_snapshot': {
       const source = await owned('builder', command.serverId);
+      if (
+        build.builderWork.kind !== 'recorded' ||
+        build.builderWork.serverId !== command.serverId ||
+        build.builderWork.progress.kind !== 'sanitized'
+      )
+        throw new CloudError(
+          'permission_denied',
+          'Snapshot requires a persisted sanitized builder.',
+        );
       const stopped = build.effects.find(
         (effect) =>
           effect.command.kind === 'power_off' &&

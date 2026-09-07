@@ -20,6 +20,7 @@ import {
   imageBuildEffects,
   imageBuilds,
   imageBuildResources,
+  imageBuilderWork,
 } from '../packages/db/dist/index.js';
 import {
   admitImageBuild,
@@ -685,6 +686,28 @@ it('requires recorded sanitation and observed shutdown before a snapshot, then d
       manifestDigest: fixture.admission.source.manifestDigest,
     },
   };
+  await expect(run(stop)).rejects.toThrow('Sanitation receipt');
+  const build = await inspect();
+  const source = build.resources.find((resource) => resource.role === 'builder');
+  if (!source) throw new Error('Expected the builder resource.');
+  await database.connection.db
+    .insert(imageBuilderWork)
+    .values({ buildId: fixture.admission.id, effectId: source.effectId, serverId: source.ref.id });
+  const installation = {
+    kind: 'builder',
+    builderId: fixture.admission.id,
+    manifestDigest: fixture.admission.source.manifestDigest,
+    machineId: 'a'.repeat(32),
+  };
+  for (const progress of [
+    { kind: 'installed', installation },
+    { kind: 'sanitizing', installation },
+    { kind: 'sanitized', installation, sanitation: stop.sanitation },
+  ])
+    await database.connection.db
+      .update(imageBuilderWork)
+      .set({ progress })
+      .where(eq(imageBuilderWork.buildId, fixture.admission.id));
   await database.connection.db.insert(imageBuildEffects).values({
     id: randomUUID(),
     buildId: fixture.admission.id,

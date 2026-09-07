@@ -9,6 +9,7 @@ import {
   readFile,
   rename,
   rm,
+  rmdir,
   writeFile,
 } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -200,6 +201,91 @@ export function createImageAccessStore(configuration: {
       );
     }
   }
-  return { prepare, recover };
+  /** Call only after authoritative cleanup of resources that could need this access. */
+  async function remove(input: AccessBinding) {
+    const id = imageBuildIdSchema.parse(input.id);
+    const access = imageBuildAdmissionSchema.shape.access.parse(input.access);
+    const manifestDigest = identitySchema.shape.manifestDigest.parse(input.source.manifestDigest);
+    const destination = join(root, id);
+    const retiring = join(root, `.removing-${id}-${access.secretId}`);
+    try {
+      try {
+        await privateDirectory(root);
+      } catch (error) {
+        if (missing(error)) return;
+        throw error;
+      }
+      const exists = await lstat(destination).then(
+        () => true,
+        (error: unknown) => {
+          if (missing(error)) return false;
+          throw error;
+        },
+      );
+      if (exists) {
+        try {
+          await privateDirectory(destination);
+          const metadata = metadataSchema.parse(
+            JSON.parse(await readPrivateFile(join(destination, 'metadata.json'))),
+          );
+          if (
+            metadata.buildId !== id ||
+            metadata.manifestDigest !== manifestDigest ||
+            JSON.stringify(metadata.access) !== JSON.stringify(access)
+          )
+            throw new Error('Image access differs from the terminal build.');
+          // Rename before unlinking so a restart can finish even after metadata has been removed.
+          await rename(destination, retiring);
+        } catch (error) {
+          if (!missing(error)) throw error;
+          // Another cleanup may have moved this directory. Missing metadata in an existing
+          // directory is corruption, not evidence that its keys were already removed.
+          const remains = await lstat(destination).then(
+            () => true,
+            (cause: unknown) => {
+              if (missing(cause)) return false;
+              throw cause;
+            },
+          );
+          if (remains) throw error;
+        }
+        await syncFile(root);
+      }
+      try {
+        await privateDirectory(retiring);
+      } catch (error) {
+        if (missing(error)) return;
+        throw error;
+      }
+      try {
+        const metadata = metadataSchema.parse(
+          JSON.parse(await readPrivateFile(join(retiring, 'metadata.json'))),
+        );
+        if (
+          metadata.buildId !== id ||
+          metadata.manifestDigest !== manifestDigest ||
+          JSON.stringify(metadata.access) !== JSON.stringify(access)
+        )
+          throw new Error('Retiring image access belongs to another intent.');
+      } catch (error) {
+        if (!missing(error)) throw error;
+      }
+      for (const name of ['management', 'host', 'management.pub', 'host.pub', 'metadata.json'])
+        await rm(join(retiring, name), { force: true });
+      // Refuse unexpected files instead of recursively deleting arbitrary contents.
+      try {
+        await rmdir(retiring);
+      } catch (error) {
+        if (!missing(error)) throw error;
+      }
+      await syncFile(root);
+    } catch {
+      throw new CloudError(
+        'permission_denied',
+        'Terminal image access cleanup needs its owned local key directory.',
+      );
+    }
+  }
+  return { prepare, recover, remove };
 }
 export type ImageAccessStore = ReturnType<typeof createImageAccessStore>;

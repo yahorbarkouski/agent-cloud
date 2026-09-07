@@ -3,6 +3,7 @@ import {
   CloudError,
   imageBuildAdmissionSchema,
   imageBuildStateSchema,
+  imageBuilderWorkSchema,
   imageEffectOutcomeSchema,
   imageEffectResolutionSchema,
   imageProviderCommandSchema,
@@ -18,6 +19,7 @@ import {
   imageBuilds,
   imageBuildEffects,
   imageBuildResources,
+  imageBuilderWork,
   type Database,
 } from '@agent-cloud/db';
 import { verifyImageInputs } from '@agent-cloud/images';
@@ -100,9 +102,24 @@ export async function inspectImageBuild(db: Database, buildId: ImageBuildId) {
       .from(imageBuildResources)
       .where(eq(imageBuildResources.buildId, buildId))
       .orderBy(imageBuildResources.kind, imageBuildResources.providerId);
+    const [builder] = await tx
+      .select()
+      .from(imageBuilderWork)
+      .where(eq(imageBuilderWork.buildId, buildId));
     return {
       admission: imageBuildAdmissionSchema.parse(row.admission),
       state: imageBuildStateSchema.parse(row.state),
+      builderWork: imageBuilderWorkSchema.parse(
+        builder
+          ? {
+              kind: 'recorded',
+              serverId: builder.serverId,
+              effectId: builder.effectId,
+              progress: builder.progress,
+              createdAt: builder.createdAt.toISOString(),
+            }
+          : { kind: 'waiting' },
+      ),
       effects: effects.map((effect) => ({
         id: effect.id,
         key: effect.effectKey,

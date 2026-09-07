@@ -58,6 +58,23 @@ export const imageBuildResources = pgTable(
   ],
 );
 
+export const imageBuilderWork = pgTable(
+  'image_builder_work',
+  {
+    buildId: text('build_id').primaryKey(),
+    effectId: text('effect_id').notNull(),
+    serverId: text('server_id').notNull(),
+    progress: jsonb('progress').notNull().default({ kind: 'installing' }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.buildId, t.effectId],
+      foreignColumns: [imageBuildEffects.buildId, imageBuildEffects.id],
+    }),
+  ],
+);
+
 export const accounts = pgTable(
   'accounts',
   {

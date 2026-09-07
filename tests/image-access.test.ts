@@ -7,8 +7,10 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  rename,
   rm,
   symlink,
+  writeFile,
 } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -19,6 +21,87 @@ import { createImageAccessStore } from '../apps/control/dist/image-access.js';
 let directory: string;
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'agent-cloud-image-access-test-'));
+});
+
+it('removes only matching access and tolerates concurrent cleanup and a restarted caller', async () => {
+  const { root, identity, store } = fixture();
+  const access = await store.prepare(identity);
+  const binding = {
+    id: identity.buildId,
+    source: { manifestDigest: identity.manifestDigest },
+    access,
+  };
+  const foreign = await store.prepare({
+    ...identity,
+    buildId: imageBuildIdSchema.parse(randomUUID()),
+  });
+  await Promise.all(Array.from({ length: 4 }, () => store.remove(binding)));
+  await createImageAccessStore({ directory: root }).remove(binding);
+  const remaining = await readdir(root);
+  expect(remaining).toHaveLength(1);
+  expect(remaining).not.toContain(identity.buildId);
+  expect(foreign.secretId).not.toBe(access.secretId);
+  await expect(store.recover(binding)).rejects.toThrow();
+});
+
+it.each(['manifest', 'secret', 'missing_metadata'])(
+  'preserves keys when terminal cleanup finds %s disagreement',
+  async (change) => {
+    const { root, identity, store } = fixture();
+    const access = await store.prepare(identity);
+    const binding = {
+      id: identity.buildId,
+      source: { manifestDigest: identity.manifestDigest },
+      access: { ...access },
+    };
+    if (change === 'manifest') binding.source.manifestDigest = 'b'.repeat(64);
+    if (change === 'secret') binding.access.secretId = randomUUID();
+    if (change === 'missing_metadata') await rm(join(root, identity.buildId, 'metadata.json'));
+    const before = await readFile(join(root, identity.buildId, 'management'));
+    await expect(store.remove(binding)).rejects.toThrow('Terminal image access cleanup');
+    expect(await readFile(join(root, identity.buildId, 'management'))).toEqual(before);
+  },
+);
+
+it('resumes cleanup after the directory was renamed and only part of its contents were removed', async () => {
+  const { root, identity, store } = fixture();
+  const access = await store.prepare(identity);
+  const retiring = join(root, `.removing-${identity.buildId}-${access.secretId}`);
+  await rename(join(root, identity.buildId), retiring);
+  await rm(join(retiring, 'metadata.json'));
+  await rm(join(retiring, 'management'));
+  await createImageAccessStore({ directory: root }).remove({
+    id: identity.buildId,
+    source: { manifestDigest: identity.manifestDigest },
+    access,
+  });
+  expect(await readdir(root)).toEqual([]);
+});
+
+it('refuses a foreign directory symlink and leaves unexpected files for explicit recovery', async () => {
+  const { root, identity, store } = fixture();
+  const access = await store.prepare(identity);
+  const binding = {
+    id: identity.buildId,
+    source: { manifestDigest: identity.manifestDigest },
+    access,
+  };
+  const destination = join(root, identity.buildId);
+  const foreign = join(directory, 'foreign');
+  await rename(destination, foreign);
+  await symlink(foreign, destination);
+  await expect(store.remove(binding)).rejects.toThrow('Terminal image access cleanup');
+  expect(await readdir(foreign)).toContain('management');
+  await rm(destination);
+  await rename(foreign, destination);
+  await writeFile(join(destination, 'unexpected'), 'leave me', { mode: 0o600 });
+  await expect(store.remove(binding)).rejects.toThrow('Terminal image access cleanup');
+  expect(
+    await readFile(
+      join(root, `.removing-${identity.buildId}-${access.secretId}`, 'unexpected'),
+      'utf8',
+    ),
+  ).toBe('leave me');
 });
 afterEach(async () => {
   await rm(directory, { recursive: true, force: true });

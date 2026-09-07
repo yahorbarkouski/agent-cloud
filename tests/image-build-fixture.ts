@@ -154,6 +154,20 @@ export class ImageProviderFixture implements ImageProvider {
       return Promise.resolve({ kind: 'unknown', reason: 'Fixture lost response.' });
     if (command.kind === 'delete') {
       this.resources.delete(`${command.resource.kind}:${command.resource.id}`);
+      if (command.resource.kind === 'server') {
+        for (const resource of this.resources.values()) {
+          if (resource.kind === 'primary_ip' && resource.serverId === command.resource.id)
+            this.add({ ...resource, serverId: null });
+          if (resource.kind === 'firewall')
+            this.add({
+              ...resource,
+              attachments: resource.attachments.filter(
+                (attachment) =>
+                  attachment.kind !== 'server' || attachment.id !== command.resource.id,
+              ),
+            });
+        }
+      }
       return Promise.resolve({ kind: 'completed', resource: command.resource });
     }
     if (command.kind === 'power_off') {
@@ -224,6 +238,16 @@ export class ImageProviderFixture implements ImageProvider {
           deleteProtected: false,
           firewalls: [{ id: command.firewallId, status: 'applied' }],
         };
+        {
+          const ip = this.resources.get(`primary_ip:${command.primaryIpId}`);
+          if (ip?.kind === 'primary_ip') this.add({ ...ip, serverId: resource.id });
+          const firewall = this.resources.get(`firewall:${command.firewallId}`);
+          if (firewall?.kind === 'firewall')
+            this.add({
+              ...firewall,
+              attachments: [...firewall.attachments, { kind: 'server', id: resource.id }],
+            });
+        }
         break;
       case 'create_snapshot':
         resource = {

@@ -8,16 +8,20 @@ import { z } from 'zod';
 import {
   imageBuildAdmissionSchema,
   imageBuildIdSchema,
-  imageBuildLabels,
+  CloudError,
   imageBuilderBootSchema,
-  type ImageProviderCommand,
+  type ImageProvider,
 } from '../packages/contracts/dist/index.js';
-import { imageBuildEffects } from '../packages/db/dist/index.js';
+import { connect } from '../packages/db/dist/index.js';
 import { createImageBuilder } from '../packages/remote/dist/index.js';
 import { createImageAccessStore } from '../apps/control/dist/image-access.js';
 import { createImageRenderer } from '../apps/control/dist/image-renderer.js';
-import { admitImageBuild } from '../apps/control/dist/image-builds.js';
-import { runImageEffect } from '../apps/control/dist/image-effect-journal.js';
+import {
+  admitImageBuild,
+  inspectImageBuild,
+  requestImageCleanup,
+} from '../apps/control/dist/image-builds.js';
+import { advanceImageBuild } from '../apps/control/dist/advance-image-build.js';
 import { testDatabase } from '../tests/database.js';
 import { ImageProviderFixture, imagePricing } from '../tests/image-build-fixture.js';
 import { readGuestBuild } from './support/guest-build.js';
@@ -96,52 +100,87 @@ try {
     catalog: pricing.catalog,
     limits,
   });
-  const provider = new ImageProviderFixture();
-  for (const command of [
-    {
-      kind: 'create_ssh_key',
-      name: 'access',
-      labels: imageBuildLabels(id, 'access_key'),
-      publicKey: access.publicKey,
+  const protocol = new ImageProviderFixture();
+  const renderer = createImageRenderer(database.connection.db, store);
+  let rendered: { effectId: string; userData: string } | null = null;
+  // SQL uses the protocol fixture; only this wrapper owns the actual local VM actions.
+  // This proves native execution and controller ordering, not Hetzner boot or billing.
+  const provider: ImageProvider = {
+    kind: protocol.kind,
+    get: protocol.get.bind(protocol),
+    find: protocol.find.bind(protocol),
+    getAction: protocol.getAction.bind(protocol),
+    getBaseImage: protocol.getBaseImage.bind(protocol),
+    submit: async (input) => {
+      if (input.command.kind === 'create_server')
+        rendered = {
+          effectId: input.effectId,
+          userData: await renderer({ effectId: input.effectId, command: input.command }),
+        };
+      if (input.command.kind === 'power_off') {
+        assert.equal(input.command.serverId, '1004');
+        assert.equal(
+          (await inspectImageBuild(database.connection.db, id)).builderWork.kind,
+          'recorded',
+        );
+        await run('orb', ['stop', builder.name], 120_000);
+      }
+      if (input.command.kind === 'delete' && input.command.resource.kind === 'server') {
+        assert.equal(input.command.resource.id, '1004');
+        assert.equal(
+          builderSchema.parse(JSON.parse(await readFile(builderPath, 'utf8'))).name,
+          builder.name,
+        );
+        await run('orb', ['delete', '--force', builder.name], 60_000);
+      }
+      return protocol.submit(input);
     },
-    {
-      kind: 'create_firewall',
-      name: 'access',
-      labels: imageBuildLabels(id, 'access_firewall'),
-      managementAddress: access.managementAddress,
+  };
+  const remote = createImageBuilder();
+  let uploads = 0;
+  let installations = 0;
+  const controlledRemote: ReturnType<typeof createImageBuilder> = {
+    inspect: remote.inspect,
+    upload: async (input) => {
+      uploads++;
+      assert.deepEqual(
+        (await inspectImageBuild(database.connection.db, id)).builderWork.kind,
+        'recorded',
+      );
+      return remote.upload(input);
     },
-    {
-      kind: 'create_primary_ip',
-      name: 'builder-ip',
-      labels: imageBuildLabels(id, 'builder_ip'),
-      region: 'nbg1',
+    install: async (input) => {
+      installations++;
+      const results = await Promise.all([remote.install(input), remote.install(input)]);
+      assert(results.some((result) => result.kind === 'installed'));
+      assert.equal((await remote.inspect(input)).kind, 'installed');
+      throw new CloudError(
+        'guest_unreachable',
+        'Fixture drops the completed installation response.',
+        true,
+      );
     },
-  ] satisfies ImageProviderCommand[])
-    await runImageEffect({
-      connection: database.connection,
-      buildId: id,
-      command,
-      provider,
-      limits,
-      pricing: () => Promise.resolve(imagePricing()),
-    });
-  const effectId = randomUUID();
-  const command = {
-    kind: 'create_server',
-    name: 'builder',
-    labels: imageBuildLabels(id, 'builder'),
-    serverType: 'cpx12',
-    region: 'nbg1',
-    imageId: admission.baseImageId,
-    primaryIpId: '1003',
-    sshKeyId: '1001',
-    firewallId: '1002',
-    bootData: { kind: 'image_build_secret', id: access.secretId, digest: source.manifestDigest },
-  } satisfies Extract<ImageProviderCommand, { kind: 'create_server' }>;
-  await database.connection.db
-    .insert(imageBuildEffects)
-    .values({ id: effectId, buildId: id, effectKey: 'create:builder', command });
-  const userData = await createImageRenderer(database.connection.db, store)({ effectId, command });
+    sanitize: async (input) => {
+      const work = (await inspectImageBuild(database.connection.db, id)).builderWork;
+      assert(work.kind === 'recorded' && work.progress.kind === 'sanitizing');
+      return remote.sanitize(input);
+    },
+  };
+  const controller = {
+    connection: database.connection,
+    buildId: id,
+    provider,
+    limits,
+    pricing: () => Promise.resolve(imagePricing()),
+    access: store,
+    remote: controlledRemote,
+    sourceDirectory,
+  };
+  for (let pass = 0; pass < 4; pass++)
+    assert.equal((await advanceImageBuild(controller)).kind, 'provider');
+  const { effectId, userData } = z
+    .object({ effectId: z.uuid(), userData: z.string().min(1) })
+    .parse(rendered);
   await writeFile(join(scratch, 'user-data'), userData, { flag: 'wx', mode: 0o600 });
   await writeFile(
     join(scratch, 'meta-data'),
@@ -204,6 +243,11 @@ try {
       ip4: z.ipv4(),
     })
     .parse(JSON.parse(await run('orb', ['info', builder.name, '--format', 'json'])));
+  const server = await protocol.get({ kind: 'server', id: '1004' });
+  const ip = await protocol.get({ kind: 'primary_ip', id: '1003' });
+  assert(server?.kind === 'server' && ip?.kind === 'primary_ip');
+  protocol.add({ ...server, ipv4: info.ip4 });
+  protocol.add({ ...ip, ipv4: info.ip4, serverId: server.id });
   const material = await store.recover(admission);
   const target = {
     boot: imageBuilderBootSchema.parse({
@@ -218,7 +262,6 @@ try {
     checksumDigest: source.checksumDigest,
     deadlineAt: admission.deadlineAt,
   };
-  const remote = createImageBuilder();
   progress('checking pinned host, exact boot identity and upload refusal after expiry');
   await assert.rejects(remote.inspect({ ...target, hostPublicKey: access.publicKey }));
   await assert.rejects(
@@ -242,19 +285,39 @@ try {
   await assert.rejects(remote.install(target));
   await vm(['test', '!', '-e', '/tmp/agent-cloud-unverified-code']);
   assert.equal((await remote.inspect(target)).kind, 'not_started');
-  await remote.upload({ ...target, sourceDirectory });
-  progress('installing once across concurrent SSH requests');
-  const installations = await Promise.all([remote.install(target), remote.install(target)]);
-  assert(installations.some((result) => result.kind === 'installed'));
+  progress('persisting installation intent, installing once and losing the completed response');
+  const firstPass = await advanceImageBuild(controller);
+  assert(
+    firstPass.kind === 'builder' &&
+      'result' in firstPass &&
+      firstPass.result.kind === 'acquired' &&
+      firstPass.result.value.kind === 'waiting',
+  );
   const installed = await remote.inspect(target);
   assert.equal(installed.kind, 'installed');
-  // Remove the executable input: a repeated request must recover the durable receipt without reinstalling.
   await vm(['rm', '/tmp/agent-cloud-input/install.sh']);
   assert.deepEqual(await remote.install(target), installed);
   await assert.rejects(remote.upload({ ...target, sourceDirectory }));
-  progress('sanitizing through SSH and checking that builder keys and privileges are removed');
-  const receipt = await remote.sanitize(target);
-  assert.equal(receipt.builderId, id);
+  progress('recovering the durable receipt through a restarted controller without reinstalling');
+  const restarted = connect(database.databaseUrl);
+  try {
+    await advanceImageBuild({
+      ...controller,
+      connection: restarted,
+      access: createImageAccessStore({ directory: join(scratch, 'keys') }),
+    });
+  } finally {
+    await restarted.pool.end();
+  }
+  const recovered = (await inspectImageBuild(database.connection.db, id)).builderWork;
+  assert(recovered.kind === 'recorded' && recovered.progress.kind === 'installed');
+  assert.equal(uploads, 1);
+  assert.equal(installations, 1);
+  progress('persisting sanitation intent and removing builder keys and privileges through SSH');
+  await advanceImageBuild(controller);
+  const sanitized = (await inspectImageBuild(database.connection.db, id)).builderWork;
+  assert(sanitized.kind === 'recorded' && sanitized.progress.kind === 'sanitized');
+  assert.equal(sanitized.progress.sanitation.builderId, id);
   await vm([
     '/bin/sh',
     '-ec',
@@ -305,7 +368,9 @@ try {
     ]);
   }
   process.stdout.write(JSON.stringify({ builderKeyScan: scan }) + '\n');
-  await run('orb', ['stop', builder.name], 120_000);
+  assert.equal((await advanceImageBuild(controller)).kind, 'provider');
+  assert.equal((await advanceImageBuild(controller)).kind, 'provider');
+  assert.equal((await advanceImageBuild(controller)).kind, 'verification_required');
   await writeFile(builderPath, JSON.stringify({ ...builder, phase: 'sanitized' }) + '\n', {
     mode: 0o600,
   });
@@ -342,15 +407,25 @@ try {
     keyof z.infer<typeof resultSchema>
   >)
     assert.equal(new Set(identities.map((identity) => identity[field])).size, 2);
-  assert.equal(
-    builderSchema.parse(JSON.parse(await readFile(builderPath, 'utf8'))).name,
-    builder.name,
+  progress(
+    'aborting the verification-only build and observing all resources absent before key removal',
   );
-  await run('orb', ['delete', '--force', builder.name], 60_000);
+  await requestImageCleanup(database.connection.db, id);
+  let cleaned = false;
+  for (let pass = 0; pass < 12; pass++) {
+    if ((await advanceImageBuild(controller)).kind === 'cleaned') {
+      cleaned = true;
+      break;
+    }
+  }
+  assert(cleaned);
+  assert.equal(protocol.resources.size, 0);
+  assert.equal((await inspectImageBuild(database.connection.db, id)).state.kind, 'cleaned');
+  await assert.rejects(store.recover(admission));
   await rm(builderPath);
   succeeded = true;
   progress(
-    'passed authenticated builder installation, sanitation, distinct clone boots and cleanup',
+    'passed durable builder recovery, sanitation, stopped snapshot ordering, distinct clone boots and terminal cleanup',
   );
 } finally {
   await database.close();
