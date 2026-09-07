@@ -1,0 +1,140 @@
+{
+  "date": "2026-09-07",
+  "status": "verified_locally",
+  "scope": "Machine destroy during active provisioning, terminal allocation cleanup, durable authority, bounded deletion retries and local CLI/API/worker recovery.",
+  "baseCommit": "dd73cdd",
+  "implementationCommit": "pending",
+  "checks": {
+    "full": {
+      "session": 33158,
+      "tests": 407,
+      "files": 36,
+      "durationSeconds": 97.15,
+      "typecheck": "passed",
+      "lint": "passed",
+      "log": ".local/cleanup-check-final.log"
+    },
+    "nativeCleanup": {
+      "session": 79940,
+      "result": {
+        "result": "passed",
+        "provider": "simulated",
+        "operationId": "op_a6a043f4-15d2-46bd-b3d5-b3c930f6a5e9",
+        "machineId": "vm_24d3e733-0826-4ed9-a146-335a09956ab2",
+        "progress": {
+          "kind": "cancelled",
+          "completedAt": "2026-09-07T12:50:35.903Z"
+        },
+        "verified": [
+          "real CLI",
+          "HTTP API",
+          "PostgreSQL",
+          "Graphile worker",
+          "blocked lost response",
+          "destroy admission",
+          "single source create",
+          "complete VM/IP cleanup"
+        ],
+        "fixture": "Delayed provider visibility released after cancellation; no live cloud claim."
+      },
+      "log": ".local/cleanup-native-final.log"
+    },
+    "developmentCli": {
+      "session": 16654,
+      "result": {
+        "result": "passed",
+        "provider": "simulated",
+        "machineId": "vm_18fe9b76-2553-4022-ae80-3c168e00834b",
+        "verified": [
+          "CLI",
+          "HTTP API",
+          "PostgreSQL",
+          "Graphile worker",
+          "create",
+          "inspect",
+          "destroy",
+          "cleanup"
+        ]
+      },
+      "log": ".local/cleanup-local-final.log"
+    },
+    "skillValidation": "passed",
+    "migration": {
+      "applied": 19,
+      "expected": 19,
+      "allHashesMatch": true,
+      "new": "0018_operation_cleanups",
+      "sha256": "28603225656aa7d881cfea9b86e638bcf885982b8dbbcb2c81dd78d7aa85c719"
+    },
+    "format": "passed"
+  },
+  "resourceState": {
+    "development": {
+      "checked_at": "2026-09-07T12:51:33.216Z",
+      "active_allocations": 0,
+      "simulated_servers": 0,
+      "simulated_ips": 0,
+      "unfinished_image_builds": 0
+    },
+    "hetzner": {
+      "checkedAt": "2026-09-07T12:51:12.449Z",
+      "resources": {
+        "servers": 0,
+        "primaryIps": 0,
+        "snapshots": 0,
+        "firewalls": 0,
+        "sshKeys": 0
+      },
+      "mutationsThisSlice": 0
+    }
+  },
+  "earlierFailures": [
+    {
+      "log": ".local/cleanup-focused.log",
+      "result": "8/10",
+      "causes": [
+        "Wrong simulator action_failure fixture name.",
+        "Test exposed implicit IP auto-deletion when deleting a VM during source uncertainty."
+      ]
+    },
+    {
+      "log": ".local/cleanup-typecheck-2.log",
+      "cause": "SQL negative fixture omitted the required prepared outcome; fixed before final checks."
+    },
+    {
+      "log": ".local/cleanup-boundaries.log",
+      "result": "42/43",
+      "cause": "Test incorrectly expected issued same-key enrollment replay to reject after cancellation. Existing replay returns old certificates without signing or reopening progress; corrected assertion."
+    },
+    {
+      "log": ".local/cleanup-typecheck-5.log",
+      "cause": "Native cleanup callback needed a narrowed server reference."
+    },
+    {
+      "log": ".local/cleanup-check.log",
+      "cause": "Lint rejected throw inside finally and two const assertions."
+    },
+    {
+      "log": ".local/cleanup-check-2.log",
+      "cause": "Remaining optional directory reference in finally; corrected error aggregation and disposal."
+    }
+  ],
+  "review": {
+    "model": "gpt-5.6-sol",
+    "finding": "Attached IP must identify the exact server, not only match retained labels. Fixed with all four assignment/autoDelete combinations.",
+    "transcripts": "No transcript directory supplied; artifact and decision-trail review.",
+    "status": "approved_no_remaining_code_blocker",
+    "report": "docs/research/m1-machine-cleanup-review.md"
+  },
+  "limits": [
+    "All new provider mutation verification uses the simulator, not Hetzner.",
+    "The native cleanup smoke explicitly releases delayed provider visibility after admission; it does not prove real provider consistency timing.",
+    "Retry exhaustion uses fixture-aged prepared history; a separate case observes the real five-second retry backoff.",
+    "Unknown source create with empty inventory stays blocked. Duplicate history remains unresolved after known IDs disappear. Automatic IP deletion can prevent safe VM cleanup while source creation remains unsettled.",
+    "Operator resolution of unknown sources and explicit recovery after exhausted retries remain open.",
+    "No customer Hetzner boot, general customer SSH access, application deployment, backup/restore, or completed product is claimed."
+  ],
+  "ci": {
+    "status": "pending_private_push"
+  }
+}

@@ -359,3 +359,41 @@ it.each([false, true])(
     expect(f.provider.resources.size).toBe(0);
   },
 );
+
+it.each(['before_effects', 'unknown_create'])(
+  'preserves the original image pin through cancellation at %s',
+  async (phase) => {
+    const f = await scenario(
+      phase === 'unknown_create' ? { kind: 'timeout_before_submit' } : { kind: 'none' },
+    );
+    if (phase === 'unknown_create') for (let i = 0; i < 6; i++) await f.tick();
+    const app = createApp({
+      ...f.configuration,
+      catalog: () => {
+        throw new Error('Price reads are unavailable.');
+      },
+    });
+    const response = await app.request(`/v1/machines/${f.operation.machineId}/actions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${f.account.token}`,
+        'Content-Type': 'application/json',
+        'Idempotency-Key': randomUUID(),
+      },
+      body: JSON.stringify({ kind: 'destroy', expectedVersion: 1, allowDataLoss: true }),
+    });
+    expect(response.status).toBe(202);
+    expect(operationResponseSchema.parse(await response.json()).operation.id).toBe(f.operation.id);
+    for (let i = 0; i < 7; i++) await f.tick();
+    expect(await f.pinned()).toBe(phase === 'unknown_create');
+    const [pin] = await database.connection.db.select().from(allocationImages);
+    expect(pin?.snapshotId).toBe(f.release.payload.snapshot.id);
+    const [op] = await database.connection.db
+      .select()
+      .from(operations)
+      .where(eq(operations.id, f.operation.id));
+    expect(op?.progress).toMatchObject({
+      kind: phase === 'unknown_create' ? 'blocked' : 'cancelled',
+    });
+  },
+);

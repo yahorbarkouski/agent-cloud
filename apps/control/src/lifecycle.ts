@@ -33,6 +33,7 @@ import {
   type Transaction,
 } from '@agent-cloud/db';
 import { authorize, loadPrincipal } from './auth.js';
+import { admitCleanup } from './cleanup-admission.js';
 import { pinAllocationImage, type ImageReleaseSelection } from './allocation-image.js';
 import type { Config } from './config.js';
 
@@ -160,6 +161,14 @@ export async function admit(input: {
   limits: Config['limits'];
   imageRelease?: ImageReleaseSelection;
 }): Promise<Operation> {
+  if (input.request.kind === 'action' && input.request.command.kind === 'destroy')
+    return admitCleanup({
+      db: input.db,
+      principal: input.principal,
+      machineId: input.request.machineId,
+      command: input.request.command,
+      key: input.key,
+    });
   return input.db.transaction(async (tx) => {
     // Shared admission ceiling spans accounts, so its lock precedes the account lock.
     await tx.execute(sql`SELECT pg_advisory_xact_lock(78131025)`);
@@ -296,7 +305,7 @@ export async function admit(input: {
         .where(
           and(
             eq(operations.machineId, machine.id),
-            sql`${operations.progress}->>'kind' NOT IN ('succeeded','failed')`,
+            sql`${operations.progress}->>'kind' NOT IN ('succeeded','failed','cancelled')`,
           ),
         );
       if (active)

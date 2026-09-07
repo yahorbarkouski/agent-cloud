@@ -101,11 +101,6 @@ export const effectResolutionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('failed'), error: failureSchema }),
 ]);
 export type EffectResolution = z.infer<typeof effectResolutionSchema>;
-export const operationIntentSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('run') }),
-  z.object({ kind: z.literal('compensate'), error: failureSchema }),
-]);
-
 export const attemptOutcomeSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('prepared') }),
   ...submissionSchema.options,

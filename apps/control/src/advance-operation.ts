@@ -40,6 +40,7 @@ import {
   type Transaction,
 } from '@agent-cloud/db';
 import type { Config } from './config.js';
+import { advanceCleanup } from './machine-cleanup.js';
 import type { GuestReadiness } from './guest-readiness.js';
 import { journalEffect, resolveEffect, setProgress, type Attempt } from './effect-journal.js';
 import {
@@ -340,6 +341,10 @@ async function advanceLocked(
     .from(allocations)
     .where(and(eq(allocations.machineId, machine.id), isNull(allocations.retiredAt)));
   if (!allocation) throw new CloudError('internal_error', 'Operation allocation is missing.');
+  if (operation.intent.kind === 'cleanup') {
+    await advanceCleanup({ db, operation, allocation, provider, limits });
+    return;
+  }
   const history = await db
     .select()
     .from(attempts)

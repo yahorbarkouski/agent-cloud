@@ -7,6 +7,7 @@ import {
   lifecycleCommandSchema,
   providerCommandSchema,
   isServerCreateCommand,
+  operationIntentSchema,
   attemptOutcomeSchema,
   effectResolutionSchema,
   attemptIdSchema,
@@ -21,6 +22,8 @@ import {
 } from '@agent-cloud/contracts';
 import {
   operations,
+  operationCleanups,
+  providerResources,
   attempts,
   accounts,
   allocations,
@@ -71,7 +74,7 @@ export async function journalEffect(input: {
   command: ProviderCommand;
   provider: MachineProvider;
   limits: Config['limits'];
-  authorization: 'fresh' | 'cleanup';
+  authorization: 'fresh' | 'cleanup' | 'admitted_cleanup';
 }) {
   const { db, operation, allocation, command, provider, limits } = input;
   const monetary =
@@ -110,6 +113,14 @@ export async function journalEffect(input: {
     const [stored] = await tx.select().from(operations).where(eq(operations.id, operation.id));
     if (!stored) throw new CloudError('internal_error', 'Operation disappeared before submission.');
     if (input.authorization === 'fresh') {
+      if (operationIntentSchema.parse(stored.intent).kind === 'cleanup')
+        throw new CloudError('resource_busy', 'Cleanup has replaced fresh machine work.');
+      const [cleanup] = await tx
+        .select()
+        .from(operationCleanups)
+        .where(eq(operationCleanups.operationId, operation.id));
+      if (cleanup)
+        throw new CloudError('resource_busy', 'Cleanup has replaced fresh machine work.');
       if (
         provider.kind === 'hetzner' &&
         ['machine.create', 'machine.reboot', 'machine.power_on'].includes(operation.kind)
@@ -152,6 +163,37 @@ export async function journalEffect(input: {
             'The current deployment, account, or credential limits no longer cover this reservation.',
           );
       }
+    } else if (input.authorization === 'admitted_cleanup') {
+      const [cleanup] = await tx
+        .select()
+        .from(operationCleanups)
+        .where(
+          and(
+            eq(operationCleanups.operationId, operation.id),
+            eq(operationCleanups.accountId, allocation.accountId),
+            eq(operationCleanups.allocationId, allocation.id),
+          ),
+        );
+      if (!cleanup || (command.kind !== 'destroy' && command.kind !== 'delete_primary_ip'))
+        throw new CloudError('permission_denied', 'No admitted cleanup authorizes this effect.');
+      const [owned] = await tx
+        .select()
+        .from(providerResources)
+        .where(
+          and(
+            eq(providerResources.allocationId, allocation.id),
+            eq(providerResources.accountId, allocation.accountId),
+            eq(providerResources.provider, allocation.provider),
+            eq(providerResources.kind, resourceKind(command)),
+            eq(
+              providerResources.providerId,
+              command.kind === 'destroy' ? command.serverId : command.primaryIpId,
+            ),
+            isNull(providerResources.absentAt),
+          ),
+        );
+      if (!owned)
+        throw new CloudError('permission_denied', 'Cleanup requires an exact live owned resource.');
     } else if (command.kind !== 'delete_primary_ip') {
       throw new CloudError(
         'internal_error',
@@ -210,6 +252,9 @@ const verified = (observation: ResourceObservation): Evaluation => ({
 });
 
 async function evaluate(input: {
+  db: Database;
+  allocation: Allocation;
+  recovering: boolean;
   attempt: Attempt;
   provider: MachineProvider;
   expectedLabels: Record<string, string>;
@@ -217,6 +262,19 @@ async function evaluate(input: {
   const { attempt, provider, expectedLabels } = input;
   const command = providerCommandSchema.parse(attempt.command);
   const outcome = attemptOutcomeSchema.parse(attempt.outcome);
+  // Deletion cannot recreate a resource. Exact absence settles even a lost action response.
+  if (
+    input.recovering &&
+    command.kind === 'destroy' &&
+    !(await provider.getServer({ serverId: command.serverId }))
+  )
+    return verified({ kind: 'absent', resource: { kind: 'server', id: command.serverId } });
+  if (
+    input.recovering &&
+    command.kind === 'delete_primary_ip' &&
+    !(await provider.getPrimaryIp({ primaryIpId: command.primaryIpId }))
+  )
+    return verified({ kind: 'absent', resource: { kind: 'primary_ip', id: command.primaryIpId } });
   if (outcome.kind === 'rejected') return { kind: 'failed', error: outcome.error };
   const uncertain = outcome.kind === 'prepared' || outcome.kind === 'unknown';
   let resource: ResourceRef;
@@ -225,7 +283,37 @@ async function evaluate(input: {
       const matches = isServerCreateCommand(command)
         ? await provider.findServers({ labels: command.labels })
         : await provider.findPrimaryIps({ labels: command.labels });
-      if (matches.length > 1) return blocked('duplicate_provider_resources');
+      // Preserve every observed owned ID, even when duplicates prevent create completion.
+      let ownershipMismatch = false;
+      for (const match of matches) {
+        if (!matchesLabels(match.labels, command.labels)) {
+          ownershipMismatch = true;
+          continue;
+        }
+        try {
+          await claimResource(input.db, {
+            allocation: input.allocation,
+            resource: { kind: resourceKind(command), id: match.id },
+            labels: command.labels,
+          });
+        } catch (error) {
+          if (!(error instanceof CloudError)) throw error;
+          ownershipMismatch = true;
+        }
+      }
+      if (ownershipMismatch) return blocked('provider_resource_mismatch');
+      const discovered = await input.db
+        .select()
+        .from(providerResources)
+        .where(
+          and(
+            eq(providerResources.allocationId, input.allocation.id),
+            eq(providerResources.kind, resourceKind(command)),
+            sql`${providerResources.labels}->>'operation_id' = ${attempt.operationId}`,
+          ),
+        );
+      if (matches.length > 1 || discovered.length > 1)
+        return blocked('duplicate_provider_resources');
       const match = matches[0];
       if (!match) return blocked('provider_outcome_unknown');
       resource = { kind: resourceKind(command), id: match.id };
@@ -271,7 +359,8 @@ async function evaluate(input: {
       return pending();
     }
     if (command.kind !== 'create_primary_ip') return blocked('provider_resource_mismatch');
-    if (!ip) return pending();
+    if (!ip)
+      return input.recovering && !uncertain ? verified({ kind: 'absent', resource }) : pending();
     if (
       !matchesLabels(ip.labels, command.labels) ||
       ip.region !== command.region ||
@@ -284,7 +373,10 @@ async function evaluate(input: {
   const server = await provider.getServer({ serverId: resource.id });
   if (server && server.id !== resource.id) return blocked('provider_resource_mismatch');
   if (command.kind === 'destroy' && !server) return verified({ kind: 'absent', resource });
-  if (!server) return pending();
+  if (!server)
+    return input.recovering && !uncertain && isServerCreateCommand(command)
+      ? verified({ kind: 'absent', resource })
+      : pending();
   if (
     !matchesLabels(server.labels, isServerCreateCommand(command) ? command.labels : expectedLabels)
   )
@@ -331,7 +423,32 @@ export async function resolveEffect(input: {
 }) {
   const { db, operation, allocation, attempt } = input;
   if (effectResolutionSchema.parse(attempt.resolution).kind !== 'pending') return;
-  const result = await evaluate(input);
+  if (attempt.accountId !== operation.accountId)
+    throw new CloudError('permission_denied', 'Effect belongs to another account.');
+  if (attempt.operationId !== operation.id) {
+    const [cleanup] = await db
+      .select()
+      .from(operationCleanups)
+      .where(
+        and(
+          eq(operationCleanups.operationId, operation.id),
+          eq(operationCleanups.sourceOperationId, attempt.operationId),
+          eq(operationCleanups.allocationId, allocation.id),
+          eq(operationCleanups.accountId, operation.accountId),
+        ),
+      );
+    if (!cleanup)
+      throw new CloudError('permission_denied', 'Effect is outside this cleanup scope.');
+  }
+  let result: Evaluation;
+  try {
+    result = await evaluate({ ...input, recovering: operation.intent.kind === 'cleanup' });
+  } catch (error) {
+    if (!(error instanceof CloudError) || error.failure.code === 'provider_unavailable')
+      throw error;
+    await setProgress(db, operation, { kind: 'blocked', reason: 'provider_resource_mismatch' });
+    return;
+  }
   const command = providerCommandSchema.parse(attempt.command);
   if (result.kind === 'pending') {
     await setProgress(db, operation, result.progress);

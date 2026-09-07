@@ -54,7 +54,7 @@ export function createTasks(input: {
       const pending = await input.connection.db
         .select({ id: operations.id })
         .from(operations)
-        .where(sql`${operations.progress}->>'kind' NOT IN ('succeeded', 'failed')`);
+        .where(sql`${operations.progress}->>'kind' NOT IN ('succeeded', 'failed', 'cancelled')`);
       for (const row of pending) await enqueueOperation(input.connection.db, row.id);
     },
   };

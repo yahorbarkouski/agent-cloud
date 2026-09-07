@@ -1,5 +1,26 @@
 # Implementation progress
 
+## Customer provisioning recovery workflow
+
+- [x] Ground: trace admission, provider journal, cleanup, guest authorization and lock ordering in `research/m1-provisioning-recovery-grounding.md`.
+- [x] Sketch: compare complete cancellation/recovery designs against that trace.
+  - [x] Frame: agent usage, durable authority, uncertain effects, terminal recovery, simple modules and verification.
+  - [x] Fan out: three isolated design candidates.
+  - [x] Cross-judge: independent model review against the rubric.
+  - [x] Pick and graft: candidate B with corrections in `architecture/machine-cleanup.md`.
+  - [x] Verify: checked lock, journal, pin and terminal predicates against source; runtime verification remains below.
+- [x] Agree: autonomous implementation is authorized; no human checkpoint requested.
+- [x] Implement: existing destroy API/CLI, durable intent, cleanup and failure-case verification. Operator resolution remains separate unfinished M1 work.
+- [x] Scrap audit: kept the selected ownership model; provider autoDelete and exact IP assignment refined deletion eligibility.
+
+## Machine cleanup verified locally
+
+Destroy now accepts a nonterminal create and keeps its original operation as cleanup owner. It ends `cancelled` after full resource absence and retirement. Ready/failed terminal creates retain their results while a new destroy performs cleanup. Immutable allocation-scoped authority survives credential revocation, closes fresh creation and serializes with enrollment/worker admission. Exact resource labels, IP assignment and implicit autoDelete are checked before deletion. Unknown source creates retain reservations; three exact-ID delete attempts and persisted backoff bound automatic retries.
+
+Full33158 passed407tests/36files, typecheck/lint,97.15s. Native79940 passed built CLI/HTTP/PostgreSQL/Graphile cleanup of a blocked lost-response fixture without a second create; it disposed the database and credentials before reporting success. Updated development API50126/worker67513 passed CLI16654. All19 migration hashes match; applied0018 is immutable. SQL cleanup and current Hetzner inventory show zero resources at12:51Z. Skill validation passed. No provider mutation occurred. [Verification](research/m1-machine-cleanup-verification.json) preserves earlier failures and fixture limits. Final formatting and the independent [review](research/m1-machine-cleanup-review.md) passed. Private push and exact CI are being completed.
+
+Operator resolution of unresolved source requests, explicit retry recovery and the bounded customer Hetzner drill remain M1 work. M2–M7 remain open.
+
 ## Customer runtime wiring verified locally
 
 The explicit customer mode composes the real Hetzner transport, pinned renewal-capable image selection, bootstrap rendering, enrollment, renewal and runtime readiness. It uses the existing operation journal and a lazy bootstrap callback. Customer API startup remains available without bootstrap/PKI files, default-release availability or successful provider reads. Private release signing keys stay outside customer processes. Fresh allocation effects check owned firewall rules; power-off requests graceful shutdown.

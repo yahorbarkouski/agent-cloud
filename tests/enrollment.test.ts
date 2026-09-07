@@ -4,6 +4,7 @@ import { and, eq } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import {
   allocations,
+  machines,
   operations,
   guestBootstraps,
   guestIdentities,
@@ -31,6 +32,7 @@ import {
   prepareGuestBootstrap,
   recoverGuestBootstrap,
 } from '../apps/control/src/guest-bootstrap.js';
+import { admitCleanup } from '../apps/control/src/cleanup-admission.js';
 import { createEnrollmentService } from '../apps/control/src/guest-enrollment.js';
 import { seedAccount, testDatabase } from './database.js';
 
@@ -480,4 +482,52 @@ it('retirement during certificate signing prevents publication', async () => {
   expect(
     (await fixture.connection.db.select().from(guestBootstraps))[0]?.sealedToken,
   ).not.toBeNull();
+});
+
+async function cancelGuest(guest: Awaited<ReturnType<typeof admittedGuest>>) {
+  const [machine] = await fixture.connection.db
+    .select()
+    .from(machines)
+    .where(eq(machines.id, guest.operation.machineId));
+  if (!machine) throw new Error('Missing guest machine.');
+  return admitCleanup({
+    db: fixture.connection.db,
+    principal: guest.account.principal,
+    machineId: guest.operation.machineId,
+    command: { kind: 'destroy', expectedVersion: machine.version, allowDataLoss: true },
+    key: randomUUID(),
+  });
+}
+
+it('closes enrollment immediately when cancellation wins the machine lock', async () => {
+  const guest = await admittedGuest();
+  const cleanup = await cancelGuest(guest);
+  expect(cleanup.id).toBe(guest.operation.id);
+  expect((await guest.request()).status).toBe(503);
+  expect(guest.signer.signHost).not.toHaveBeenCalled();
+  expect(guest.signer.signTls).not.toHaveBeenCalled();
+  const [bootstrap] = await fixture.connection.db.select().from(guestBootstraps);
+  expect(bootstrap?.consumedAt).toBeNull();
+});
+
+it('lets enrollment finish before a contending cancellation, then preserves issued identity during cleanup', async () => {
+  const guest = await admittedGuest();
+  guest.signer.signHost.mockImplementationOnce(async () => {
+    await expect(cancelGuest(guest)).rejects.toMatchObject({
+      failure: { code: 'resource_busy', retryable: true },
+    });
+    return 'fixture-host-cert';
+  });
+  expect((await guest.request()).status).toBe(200);
+  const before = await fixture.connection.db.select().from(guestIdentities);
+  await cancelGuest(guest);
+  // Same-key replay may return existing certificates, but cannot publish or reopen enrollment.
+  expect((await guest.request()).status).toBe(200);
+  const [operation] = await fixture.connection.db
+    .select()
+    .from(operations)
+    .where(eq(operations.id, guest.operation.id));
+  expect(operation?.progress).toEqual({ kind: 'cleaning_up' });
+  expect(await fixture.connection.db.select().from(guestIdentities)).toEqual(before);
+  expect(guest.signer.signHost).toHaveBeenCalledTimes(1);
 });

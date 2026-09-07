@@ -46,6 +46,8 @@ pnpm acld operation wait <operation-id>
 pnpm acld usage
 ```
 
+The same destroy command accepts blocked provisioning and retained failed allocations. Cancelling an active create returns its original operation; `cancelled` means cleanup finished. A terminal failed create keeps its result while a new destroy operation handles cleanup. Unknown provider submissions and exhausted deletion retries remain blocked with reservations retained. See [machine cleanup](docs/architecture/machine-cleanup.md).
+
 `power-off`, `power-on`, `reboot`, and `resize` use the same version/key flags. Resize requires an off machine and does not shrink disks. `operation wait` exits 0 for success, 1 for failure, and 2 when blocked.
 
 ## Verify
@@ -68,6 +70,7 @@ For real local certificate and SSH checks, install the pinned Smallstep CLI and 
 pnpm setup:step
 pnpm setup:pki
 pnpm pki:up
+pnpm smoke:cleanup
 pnpm smoke:pki
 pnpm smoke:ssh
 pnpm smoke:enrollment
@@ -76,7 +79,9 @@ pnpm pki:down
 
 The CA listens only on `127.0.0.1:9449`. Its state lives in ignored, owner-only `.local/pki`; repeated setup preserves its identity and updates the managed certificate templates. When setup returns `restartRequired: true`, run `pnpm pki:down` followed by `pnpm pki:up` to load them. The encrypted root key stays outside the container mount. The control signer receives a provisioner credential and public trust, never the CA's private signing keys. These are development keys, not a production recovery setup.
 
-The PKI smoke makes an actual TLS connection and checks allocation/hostname rejection. The SSH smoke starts one disposable local OpenSSH container and checks pinned host keys, CA trust, allocation-scoped user certificates and guest evidence. It removes the container and generated keys afterward. It does not boot a guest VM or deploy an application. The enrollment smoke composes admission, the provider journal, encrypted bootstrap, HTTP enrollment, real Smallstep and OpenSSH. It verifies the issued host certificate over SSH and TLS certificate over HTTPS, replay and wrong-key rejection. Its provider observations are local fixtures, so it still does not prove a cloud VM boot. CI runs all three smokes without cloud credentials.
+The cleanup smoke runs the actual CLI against a local HTTP API, PostgreSQL and Graphile worker. It prepares a simulated lost create response, admits destroy while blocked, releases delayed inventory and verifies one source create plus complete VM/IP cleanup. Its database and credentials are disposable; it makes no cloud call.
+
+The PKI smoke makes an actual TLS connection and checks allocation/hostname rejection. The SSH smoke starts one disposable local OpenSSH container and checks pinned host keys, CA trust, allocation-scoped user certificates and guest evidence. It removes the container and generated keys afterward. It does not boot a guest VM or deploy an application. The enrollment smoke composes admission, the provider journal, encrypted bootstrap, HTTP enrollment, real Smallstep and OpenSSH. It verifies the issued host certificate over SSH and TLS certificate over HTTPS, replay and wrong-key rejection. Its provider observations are local fixtures, so it still does not prove a cloud VM boot. CI runs these local smokes without cloud credentials.
 
 For an actual local Ubuntu first-boot check on macOS with OrbStack installed, keep the development PostgreSQL and CA services running:
 

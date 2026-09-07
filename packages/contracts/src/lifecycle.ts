@@ -61,6 +61,12 @@ export const operationKindSchema = z.enum([
   'machine.destroy',
 ]);
 
+export const operationIntentSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('run') }),
+  z.object({ kind: z.literal('compensate'), error: failureSchema }),
+  z.object({ kind: z.literal('cleanup'), sourceOperationId: operationIdSchema }),
+]);
+
 export const operationProgressSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('queued') }),
   z.object({ kind: z.literal('submitting'), attemptId: attemptIdSchema }),
@@ -87,9 +93,11 @@ export const operationProgressSchema = z.discriminatedUnion('kind', [
       'guest_identity_mismatch',
       'guest_deadline_exceeded',
       'guest_signing_exhausted',
+      'cleanup_retry_exhausted',
     ]),
   }),
   z.object({ kind: z.literal('succeeded'), completedAt: z.iso.datetime() }),
+  z.object({ kind: z.literal('cancelled'), completedAt: z.iso.datetime() }),
   z.object({ kind: z.literal('failed'), completedAt: z.iso.datetime(), error: failureSchema }),
 ]);
 export type OperationProgress = z.infer<typeof operationProgressSchema>;
@@ -101,6 +109,7 @@ export const operationSchema = z.object({
   machineId: machineIdSchema,
   grantId: grantIdSchema,
   kind: operationKindSchema,
+  intent: operationIntentSchema.default({ kind: 'run' }),
   progress: operationProgressSchema,
   createdAt: z.iso.datetime(),
 });
@@ -152,5 +161,5 @@ export const machinesResponseSchema = z.object({ machines: z.array(machineSchema
 export const operationsResponseSchema = z.object({ operations: z.array(operationSchema) });
 
 export function isOperationTerminal(operation: Operation): boolean {
-  return operation.progress.kind === 'succeeded' || operation.progress.kind === 'failed';
+  return ['succeeded', 'failed', 'cancelled'].includes(operation.progress.kind);
 }

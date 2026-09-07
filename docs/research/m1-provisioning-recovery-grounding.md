@@ -25,3 +25,13 @@ The verification cases that decide readiness are:
 - Actual CLI/API/worker cancellation of a deliberately blocked fixture, followed by complete cleanup.
 
 Complete this path before renting a customer VM for the bounded live drill. The image factory's independent recovery command already handles its own builds and should remain separate.
+
+A second source trace at `dd73cdd` confirmed these implementation details:
+
+- Admission and controller locks are separate paths. Admission takes the global transaction advisory lock, account row, then machine row. Controllers and enrollment first take the machine session advisory lock, then enter short transactions. Cancellation must take the machine lock before admission/account/row locks; it must never acquire those locks and then wait for a controller. The machine lock uses `pg_try_advisory_lock` and reports busy immediately.
+- Accepted/completed create receipts claim a server before the action is confirmed. `allocations.serverId` is therefore a convenience pointer, not proof of completed creation. Duplicate inventory currently blocks before claiming every returned ID; recovery must close that gap explicitly.
+- Provider attempt outcome and resolution are each recorded once. Failed delete retries must preserve the old attempt and append a new exact-ID effect, with a bounded policy; the current IP cleanup simply blocks if it finds a prior delete.
+- Image pins are immutable. Active snapshot use ends after matching original server confirmation, or after allocation retirement with no pending original attempt and no live resource. Full cleanup is not the only release condition.
+- Operation terminality and machine state are distinct. A terminal failed create with a known server can already be destroyed. Recovery must cover unresolved allocation ownership without silently reopening that terminal result.
+
+The corrected private trace is `.local/recovery-design/grounding-how.md`; design candidates compare both lifecycle shapes against `.local/recovery-design/rubric.md`. Neither artifact is runtime authority.

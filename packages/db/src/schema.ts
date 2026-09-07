@@ -279,7 +279,39 @@ export const operations = pgTable(
     }),
     uniqueIndex('one_active_operation')
       .on(t.machineId)
-      .where(sql`${t.progress}->>'kind' NOT IN ('succeeded', 'failed')`),
+      .where(sql`${t.progress}->>'kind' NOT IN ('succeeded', 'failed', 'cancelled')`),
+  ],
+);
+
+export const operationCleanups = pgTable(
+  'operation_cleanups',
+  {
+    operationId: text('operation_id').primaryKey(),
+    accountId: text('account_id').notNull(),
+    allocationId: text('allocation_id').notNull(),
+    sourceOperationId: text('source_operation_id').notNull(),
+    grantId: text('grant_id').notNull(),
+    expectedVersion: integer('expected_version').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.accountId, t.operationId],
+      foreignColumns: [operations.accountId, operations.id],
+    }),
+    foreignKey({
+      columns: [t.accountId, t.sourceOperationId],
+      foreignColumns: [operations.accountId, operations.id],
+    }),
+    foreignKey({
+      columns: [t.accountId, t.allocationId],
+      foreignColumns: [allocations.accountId, allocations.id],
+    }),
+    foreignKey({
+      columns: [t.accountId, t.grantId],
+      foreignColumns: [grants.accountId, grants.id],
+    }),
+    check('cleanup_version', sql`${t.expectedVersion} > 0`),
   ],
 );
 

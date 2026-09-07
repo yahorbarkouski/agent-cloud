@@ -169,7 +169,8 @@ export class SimulatedProvider implements MachineProvider {
           const duplicateId = randomUUID();
           await tx.insert(simulatedServers).values({
             id: duplicateId,
-            value: { ...server, id: duplicateId, power: 'running' },
+            // A Primary IP cannot be assigned to both the original and the duplicate.
+            value: { ...server, id: duplicateId, power: 'running', primaryIpId: null, ipv4: null },
             visibleAt,
           });
         }
