@@ -6,7 +6,6 @@ import {
   imageBuildStateSchema,
   type ImageBuildId,
   type ImageProvider,
-  type ImageReleaseKey,
   type Operation,
 } from '@agent-cloud/contracts';
 import {
@@ -20,9 +19,13 @@ import {
   type Transaction,
 } from '@agent-cloud/db';
 import type { Allocation } from './resource-journal.js';
-import { readPublishedImage, requireTrustedImageRelease } from './image-publication.js';
+import {
+  readPublishedImage,
+  requireTrustedImageRelease,
+  type ImageReleaseKeySource,
+} from './image-publication.js';
 
-export type ImageReleaseSelection = { buildId: ImageBuildId; keys: ImageReleaseKey[] };
+export type ImageReleaseSelection = { buildId: ImageBuildId; readKeys: ImageReleaseKeySource };
 
 /** Admission verifies signed metadata locally; the worker observes the provider before any create. */
 export async function pinAllocationImage(
@@ -67,7 +70,7 @@ export async function pinAllocationImage(
     );
   const { image, release } = requireTrustedImageRelease(
     publication.release,
-    input.selection.keys,
+    await input.selection.readKeys(),
     await databaseTime(tx),
   );
   const offer = catalogItemSchema.parse(allocation.offer);
@@ -102,7 +105,7 @@ export async function imageSnapshotInUse(db: Executor, buildId: ImageBuildId) {
 export function createAllocationImageResolver(input: {
   connection: Connection;
   provider: ImageProvider;
-  keys: ImageReleaseKey[];
+  readKeys: ImageReleaseKeySource;
 }) {
   return async (allocation: Allocation) => {
     const [pin] = await input.connection.db

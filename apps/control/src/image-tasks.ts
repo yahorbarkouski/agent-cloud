@@ -2,18 +2,16 @@ import { eq, sql } from 'drizzle-orm';
 import type { TaskList } from 'graphile-worker';
 import { z } from 'zod';
 import { CloudError, imageBuildIdSchema } from '@agent-cloud/contracts';
-import { imageBuilds, type Connection } from '@agent-cloud/db';
-import { advanceImageBuild } from './advance-image-build.js';
+import { databaseTime, imageBuilds, type Connection } from '@agent-cloud/db';
 import { inspectImageBuild, type ImageBuild } from './image-builds.js';
 import { scheduleImageBuild } from './image-scheduling.js';
 
 const payloadSchema = z.strictObject({ buildId: imageBuildIdSchema });
-type Controller = Omit<Parameters<typeof advanceImageBuild>[0], 'connection' | 'buildId'>;
 
 /** Uses the real controller and journal. Infrastructure ports are supplied by the operator worker. */
 export function createImageTasks(input: {
   connection: Connection;
-  controller: (build: ImageBuild) => Controller;
+  advance: (build: ImageBuild) => Promise<unknown>;
 }): TaskList {
   return {
     advance_image_build: async (payload) => {
@@ -28,18 +26,14 @@ export function createImageTasks(input: {
       if (
         build.state.kind === 'running' &&
         !build.runRequestedAt &&
-        Date.parse(build.admission.deadlineAt) > Date.now()
+        Date.parse(build.admission.deadlineAt) > (await databaseTime(input.connection.db)).getTime()
       ) {
         await scheduleImageBuild(input.connection.db, buildId);
         return;
       }
       let delay = 1000;
       try {
-        await advanceImageBuild({
-          ...input.controller(build),
-          connection: input.connection,
-          buildId,
-        });
+        await input.advance(build);
       } catch (error) {
         if (!(error instanceof CloudError)) throw error;
         // The original state/effects remain authoritative; expected provider failures retry slowly.

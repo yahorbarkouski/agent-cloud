@@ -21,6 +21,7 @@ import {
 import {
   imageBuilds,
   imageBuildEffects,
+  databaseTime,
   withImageBuildLock,
   type Connection,
   type Database,
@@ -180,14 +181,23 @@ export async function reconcileImageEffect(
 }
 
 /** Only a newly committed effect can reach submit. Existing intents always reconcile. */
-export async function runImageEffect(input: {
-  connection: Connection;
-  buildId: ImageBuildId;
-  command: ImageProviderCommand;
-  provider: ImageProvider;
-  limits: ImageBuildLimits;
-  pricing: () => Promise<{ catalog: Catalog; storagePrice: ImageBuildAdmission['storagePrice'] }>;
-}) {
+export async function runImageEffect(
+  input: {
+    connection: Connection;
+    buildId: ImageBuildId;
+    provider: ImageProvider;
+  } & (
+    | {
+        command: ImageProviderCommand;
+        limits: ImageBuildLimits;
+        pricing: () => Promise<{
+          catalog: Catalog;
+          storagePrice: ImageBuildAdmission['storagePrice'];
+        }>;
+      }
+    | { command: Extract<ImageProviderCommand, { kind: 'delete' }> }
+  ),
+) {
   return withImageBuildLock({
     pool: input.connection.pool,
     buildId: input.buildId,
@@ -217,7 +227,8 @@ export async function runImageEffect(input: {
       if (build.state.kind === 'cleaned') return { kind: 'confirmed' } satisfies Resolution;
       if (
         command.kind !== 'delete' &&
-        (build.state.kind !== 'running' || Date.parse(build.admission.deadlineAt) <= Date.now())
+        (build.state.kind !== 'running' ||
+          Date.parse(build.admission.deadlineAt) <= (await databaseTime(db)).getTime())
       )
         throw new CloudError('provider_rejected', 'The image build is expired or cleaning.');
       if (
@@ -248,8 +259,10 @@ export async function runImageEffect(input: {
           'provider_outcome_unknown',
           'Snapshot is pinned by an unsettled customer create.',
         );
-      await checkImageCommand(build, command, input.provider);
-      const prices = isImageCreate(command) ? await input.pricing() : null;
+      await checkImageCommand(build, command, input.provider, (await databaseTime(db)).getTime());
+      if (isImageCreate(command) && !('pricing' in input))
+        throw new CloudError('permission_denied', 'Cleanup cannot create provider resources.');
+      const prices = isImageCreate(command) && 'pricing' in input ? await input.pricing() : null;
       const id = randomUUID();
       await db.transaction(async (tx) => {
         await tx.execute(sql`SELECT pg_advisory_xact_lock(78131026)`);
@@ -260,14 +273,15 @@ export async function runImageEffect(input: {
           .for('update');
         if (!row) throw new CloudError('not_found', 'Image build not found.');
         const state = imageBuildStateSchema.parse(row.state);
+        const now = (await databaseTime(tx)).getTime();
         if (
           state.kind === 'cleaned' ||
           (command.kind !== 'delete' &&
-            (state.kind !== 'running' || Date.parse(build.admission.deadlineAt) <= Date.now()))
+            (state.kind !== 'running' || Date.parse(build.admission.deadlineAt) <= now))
         )
           throw new CloudError('provider_rejected', 'Image build no longer permits this effect.');
-        if (prices) {
-          checkImagePrices({ admission: build.admission, ...prices, now: Date.now() });
+        if (prices && 'limits' in input) {
+          checkImagePrices({ admission: build.admission, ...prices, now });
           const open = await tx
             .select()
             .from(imageBuilds)

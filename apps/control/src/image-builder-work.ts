@@ -9,6 +9,7 @@ import {
 } from '@agent-cloud/contracts';
 import {
   imageBuilderWork,
+  databaseTime,
   withImageBuildLock,
   type Connection,
   type Database,
@@ -27,7 +28,7 @@ type Result =
 async function active(db: Database, buildId: ImageBuildId) {
   const build = await inspectImageBuild(db, buildId);
   if (build.state.kind !== 'running') return false;
-  if (Date.parse(build.admission.deadlineAt) <= Date.now()) {
+  if (Date.parse(build.admission.deadlineAt) <= (await databaseTime(db)).getTime()) {
     await requestImageCleanup(db, buildId, 'expired');
     return false;
   }

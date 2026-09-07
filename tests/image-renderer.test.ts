@@ -18,7 +18,7 @@ import { createImageRenderer } from '../apps/control/dist/image-renderer.js';
 import { admitImageBuild, requestImageCleanup } from '../apps/control/dist/image-builds.js';
 import { runImageEffect } from '../apps/control/dist/image-effect-journal.js';
 import { ImageProviderFixture, imageBuildFixture, imagePricing } from './image-build-fixture.js';
-import { testDatabase } from './database.js';
+import { testDatabase, waitUntilDatabaseTime } from './database.js';
 
 let database: Awaited<ReturnType<typeof testDatabase>>;
 let directory: string;
@@ -37,9 +37,12 @@ afterEach(async () => {
   await rm(directory, { recursive: true, force: true });
 });
 
-async function scenario() {
+async function scenario(durationMs = 90 * 60_000) {
   const sourceDirectory = join(directory, 'inputs');
   const fixture = await imageBuildFixture(sourceDirectory);
+  fixture.admission.deadlineAt = new Date(
+    Date.parse(fixture.admission.admittedAt) + durationMs,
+  ).toISOString();
   const store = createImageAccessStore({ directory: join(directory, 'keys') });
   fixture.admission.access = await store.prepare({
     buildId: fixture.admission.id,
@@ -152,7 +155,7 @@ it('renders only the disposable host private key and exact prepared identity aft
 it.each(['missing', 'different_command', 'unknown', 'resolved', 'cleaning', 'expired'])(
   'refuses boot rendering for a %s effect',
   async (change) => {
-    const fixture = await scenario();
+    const fixture = await scenario(change === 'expired' ? 5000 : undefined);
     if (change !== 'missing') await fixture.prepareEffect();
     if (change === 'different_command') fixture.command.name = 'another';
     if (change === 'unknown')
@@ -168,7 +171,7 @@ it.each(['missing', 'different_command', 'unknown', 'resolved', 'cleaning', 'exp
     if (change === 'cleaning')
       await requestImageCleanup(database.connection.db, fixture.admission.id);
     if (change === 'expired')
-      vi.spyOn(Date, 'now').mockReturnValue(Date.parse(fixture.admission.deadlineAt) + 1);
+      await waitUntilDatabaseTime(database.connection, fixture.admission.deadlineAt);
     await expect(fixture.render(fixture)).rejects.toThrow('effect');
   },
 );

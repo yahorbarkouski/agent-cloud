@@ -4,26 +4,44 @@ import { connect } from '@agent-cloud/db';
 import { readConfig } from './config.js';
 import { SimulatedProvider } from './simulated-provider.js';
 import { createTasks } from './tasks.js';
+import { createImageTasks } from './image-tasks.js';
+import { createImageRuntime } from './image-runtime.js';
+import { readRuntimeConfig } from './runtime-config.js';
 
 const config = readConfig();
-if (config.provider !== 'simulated') {
-  throw new Error(
-    'Live worker activation requires the verified guest template and provider credentials. Use PROVIDER=simulated during local development.',
-  );
-}
 const connection = connect(config.databaseUrl);
-const provider = new SimulatedProvider({
-  db: connection.db,
-  catalog: () => simulatedCatalog(config.limits.currency),
-});
+const images =
+  config.provider === 'hetzner'
+    ? await createImageRuntime({
+        connection,
+        config,
+        runtime: await readRuntimeConfig(config.runtimeConfigFile),
+      })
+    : undefined;
+const taskList = images
+  ? createImageTasks({ connection, advance: (build) => images.advance(build.admission.id) })
+  : createTasks({
+      connection,
+      limits: config.limits,
+      provider: new SimulatedProvider({
+        db: connection.db,
+        catalog: () => simulatedCatalog(config.limits.currency),
+      }),
+    });
 const runner = await run({
   pgPool: connection.pool,
   concurrency: 4,
   pollInterval: 1_000,
-  taskList: createTasks({ connection, provider, limits: config.limits }),
-  crontab: '* * * * * reconcile_operations',
+  taskList,
+  crontab: images ? '* * * * * reconcile_image_builds' : '* * * * * reconcile_operations',
 });
-process.stdout.write(JSON.stringify({ event: 'worker.started', provider: provider.kind }) + '\n');
+process.stdout.write(
+  JSON.stringify({
+    event: 'worker.started',
+    provider: config.provider,
+    mode: images ? 'image_factory' : 'simulated',
+  }) + '\n',
+);
 try {
   await runner.promise;
 } finally {

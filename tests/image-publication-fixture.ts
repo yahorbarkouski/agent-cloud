@@ -17,7 +17,8 @@ export async function verifiedImageScenario(connection: Connection, directory: s
     signedUntil: new Date(Date.now() + 86_400_000).toISOString(),
     verifyUntil: new Date(Date.now() + 2 * 86_400_000).toISOString(),
   };
-  const publication = { privateKey: pair.privateKey, keys: [key] };
+  const keys = [key];
+  const publication = { privateKey: pair.privateKey, keys, readKeys: () => Promise.resolve(keys) };
   const advance = () => advanceImageBuild({ ...f, publication });
   async function publish() {
     for (let pass = 0; pass < 16; pass++) {

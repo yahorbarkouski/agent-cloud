@@ -19,6 +19,14 @@ import {
 } from '../packages/db/src/index.js';
 import { generateToken, hashToken } from '../apps/control/src/auth.js';
 
+/** Expiry tests wait on the same clock as SQL guards instead of changing only the Node clock. */
+export async function waitUntilDatabaseTime(connection: Connection, at: string) {
+  await connection.pool.query(
+    'SELECT pg_sleep(LEAST(10, GREATEST(0, extract(epoch FROM ($1::timestamptz - clock_timestamp())))) + 0.01)',
+    [at],
+  );
+}
+
 export async function testDatabase(initialize?: (connection: Connection) => Promise<void>) {
   const sourceUrl =
     process.env.TEST_DATABASE_URL ??

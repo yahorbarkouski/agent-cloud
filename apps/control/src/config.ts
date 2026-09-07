@@ -43,6 +43,7 @@ export function readConfig(environment: NodeJS.ProcessEnv = process.env) {
       ...common,
       provider: env.PROVIDER,
       providerTokenFile: resolve(environment.HCLOUD_TOKEN_FILE ?? '.local/hcloud-token'),
+      runtimeConfigFile: resolve(environment.AGENT_CLOUD_RUNTIME ?? '.local/runtime.json'),
       offers: offerConfigurationSchema.parse({
         currency: env.PROVIDER_CURRENCY,
         architecture: environment.HCLOUD_ARCHITECTURE ?? 'x86',

@@ -1,0 +1,92 @@
+{
+  "checkpoint": "M1 operator image runtime",
+  "implemented": [
+    "strict image_factory startup with customer routes and jobs disabled",
+    "persistent bootstrap and Ed25519 release identity",
+    "reloadable public trust policy and immediate revocation",
+    "cleanup without signing credentials, PKI, source or pricing",
+    "database clock for destructive expiry and image authorization",
+    "actual API and Graphile worker composition"
+  ],
+  "validation": {
+    "check": {
+      "command": "pnpm check",
+      "result": "passed",
+      "tests": 351,
+      "files": 33,
+      "durationSeconds": 88.18,
+      "processExit": 0,
+      "tool": "6bfd3e"
+    },
+    "formatting": {
+      "command": "pnpm format:check",
+      "result": "passed",
+      "log": ".local/runtime-format-check.log"
+    },
+    "nativeEnrollment": {
+      "command": "pnpm smoke:enrollment",
+      "processExit": 0,
+      "tool": "159ac1",
+      "result": {
+        "ok": true,
+        "enrollment": "guest library with real Smallstep and pinned OpenSSH",
+        "guestRetry": "keys survive lost response and bootstrap removal",
+        "guestActivation": "local fixture hooks, not systemd",
+        "replay": "same certificates without extra enrollment signing",
+        "wrongHostKey": "rejected before key claim",
+        "issuedHostCertificate": "verified native SSH connection",
+        "issuedTlsCertificate": "verified native TLS connection",
+        "operation": "waiting for runtime verification",
+        "provider": "local simulated observations",
+        "cloudResourcesCreated": 0
+      }
+    },
+    "publicReadiness": {
+      "command": "PUBLIC_URL=<test-origin> pnpm runtime:check",
+      "result": {
+        "observedAt": "2026-09-07T09:29:11.245Z",
+        "origin": "https://main-improvements-perform-signal.trycloudflare.com",
+        "checks": [
+          {
+            "path": "/healthz",
+            "method": "GET",
+            "expected": 200,
+            "status": 200
+          },
+          {
+            "path": "/v1/projects",
+            "method": "GET",
+            "expected": 403,
+            "status": 403
+          },
+          {
+            "path": "/image/enroll",
+            "method": "POST",
+            "expected": 400,
+            "status": 400
+          },
+          {
+            "path": "/guest/enroll",
+            "method": "POST",
+            "expected": 404,
+            "status": 404
+          }
+        ]
+      }
+    }
+  },
+  "limitations": [
+    "No paid Hetzner resource created or booted",
+    "Public readiness proves HTTPS routing and API restrictions, not successful verifier enrollment",
+    "Customer admission, renewal, deployment, routes and backups remain open"
+  ],
+  "preparedDrill": {
+    "buildId": "bbb28cd4-aca1-4a94-87cf-364728bf6771",
+    "state": "local input and keys prepared; not admitted or started",
+    "currency": "USD",
+    "vmGrossCapMicros": 120000,
+    "snapshotMonthlyGrossCapMicros": 1000000,
+    "deadlineMinutes": 90,
+    "intendedCleanup": "cancel retained publication after verification and confirm all provider resources absent"
+  }
+}

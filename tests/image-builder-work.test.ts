@@ -22,7 +22,7 @@ import {
 import { runImageEffect } from '../apps/control/dist/image-effect-journal.js';
 import { runImageBuilderWork } from '../apps/control/dist/image-builder-work.js';
 import { imageBuildFixture, imagePricing, ImageProviderFixture } from './image-build-fixture.js';
-import { testDatabase } from './database.js';
+import { testDatabase, waitUntilDatabaseTime } from './database.js';
 
 type Remote = ReturnType<typeof createImageBuilder>;
 let database: Awaited<ReturnType<typeof testDatabase>>;
@@ -42,9 +42,12 @@ afterEach(async () => {
   await rm(directory, { recursive: true, force: true });
 });
 
-async function scenario() {
+async function scenario(durationMs = 90 * 60_000) {
   const sourceDirectory = join(directory, 'inputs');
   const fixture = await imageBuildFixture(sourceDirectory);
+  fixture.admission.deadlineAt = new Date(
+    Date.parse(fixture.admission.admittedAt) + durationMs,
+  ).toISOString();
   const access = createImageAccessStore({ directory: join(directory, 'keys') });
   fixture.admission.access = await access.prepare({
     buildId: fixture.admission.id,
@@ -213,7 +216,7 @@ it('recovers a lost installation response from a new controller connection witho
 });
 
 it('waits for a started installation instead of invoking it again, then cleans after deadline', async () => {
-  const fixture = await scenario();
+  const fixture = await scenario(5000);
   fixture.remote.install.mockImplementationOnce(() => {
     fixture.guest({ kind: 'started' });
     return Promise.resolve({ kind: 'started' });
@@ -221,7 +224,7 @@ it('waits for a started installation instead of invoking it again, then cleans a
   expect(await fixture.run()).toMatchObject({ value: { kind: 'waiting' } });
   expect(await fixture.run()).toMatchObject({ value: { kind: 'waiting' } });
   expect(fixture.remote.install).toHaveBeenCalledOnce();
-  vi.spyOn(Date, 'now').mockReturnValue(Date.parse(fixture.admission.deadlineAt) + 1);
+  await waitUntilDatabaseTime(database.connection, fixture.admission.deadlineAt);
   expect(await fixture.run()).toMatchObject({ value: { kind: 'cleanup' } });
   expect((await fixture.inspection()).state).toEqual({ kind: 'cleaning', reason: 'expired' });
 });

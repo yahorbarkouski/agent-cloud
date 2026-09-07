@@ -61,13 +61,13 @@ async function scenario(fault: SimulationFault = { kind: 'none' }) {
   const f = await verifiedImageScenario(database.connection, directory);
   const release = await f.publish();
   const account = await seedAccount(database.connection.db, { currency: 'USD' });
-  const imageRelease = { buildId: f.buildId, keys: f.publication.keys };
+  const imageRelease = { buildId: f.buildId, readKeys: f.publication.readKeys };
   const simulation = new SimulatedProvider({
     db: database.connection.db,
     fault,
     catalog: () => f.catalog,
   });
-  const resolveImage = createAllocationImageResolver({ ...f, keys: f.publication.keys });
+  const resolveImage = createAllocationImageResolver({ ...f, readKeys: f.publication.readKeys });
   const render = vi.fn(createGuestRenderer(database.connection.db, f.seal, resolveImage));
   const submit = vi.fn<MachineProvider['submit']>(async (input) => {
     if (input.command.kind === 'create_guest') {
@@ -169,7 +169,10 @@ it('pins the original signed release across idempotent admission and uses it for
   expect(await f.pinned()).toBe(true);
   const changedDefault = createApp({
     ...f.configuration,
-    imageRelease: { buildId: imageBuildIdSchema.parse(randomUUID()), keys: [] },
+    imageRelease: {
+      buildId: imageBuildIdSchema.parse(randomUUID()),
+      readKeys: () => Promise.resolve([]),
+    },
   });
   const replay = await f.request(changedDefault);
   expect(operationResponseSchema.parse(await replay.json()).operation.id).toBe(f.operation.id);
@@ -194,7 +197,7 @@ it('rolls back new admissions with incompatible or untrusted releases', async ()
   const f = await scenario();
   const untrusted = createApp({
     ...f.configuration,
-    imageRelease: { buildId: f.buildId, keys: [] },
+    imageRelease: { buildId: f.buildId, readKeys: () => Promise.resolve([]) },
   });
   expect((await f.request(untrusted, randomUUID())).status).toBeGreaterThanOrEqual(400);
   const incompatible = createApp({

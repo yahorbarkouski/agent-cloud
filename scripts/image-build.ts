@@ -16,6 +16,7 @@ import {
   createHetznerRequest,
   readHetznerCatalog,
   offerConfigurationSchema,
+  HetznerImageProvider,
 } from '../packages/hetzner/dist/index.js';
 import { readHetznerImagePrice } from '../packages/hetzner/dist/image-pricing.js';
 import {
@@ -26,6 +27,7 @@ import {
 import { readPrivateFile } from '../apps/control/dist/private-file.js';
 import { createImageAccessStore } from '../apps/control/dist/image-access.js';
 import { requestImageRun } from '../apps/control/dist/image-scheduling.js';
+import { cleanupImageBuild } from '../apps/control/dist/advance-image-build.js';
 
 const configSchema = z.strictObject({
   id: imageBuildIdSchema,
@@ -52,12 +54,12 @@ async function readConfiguration(argument: string): Promise<unknown> {
 async function main() {
   const [command, argument, ...extra] = process.argv.slice(2);
   if (
-    !['prepare', 'admit', 'start', 'inspect', 'cancel'].includes(command ?? '') ||
+    !['prepare', 'admit', 'start', 'inspect', 'cancel', 'cleanup'].includes(command ?? '') ||
     !argument ||
     extra.length
   )
     throw new Error(
-      'Usage: pnpm image:build prepare <config.json> | admit <config.json> | start <build-id> | inspect <build-id> | cancel <build-id>',
+      'Usage: pnpm image:build prepare <config.json> | admit <config.json> | start <build-id> | inspect <build-id> | cancel <build-id> | cleanup <build-id>',
     );
   const store = createImageAccessStore({
     directory: resolve(process.env.IMAGE_ACCESS_DIRECTORY ?? '.local/image-access'),
@@ -149,6 +151,17 @@ async function main() {
     const id = imageBuildIdSchema.parse(argument);
     if (command === 'start') await requestImageRun(connection.db, id);
     if (command === 'cancel') await requestImageCleanup(connection.db, id);
+    if (command === 'cleanup') {
+      const provider = new HetznerImageProvider({
+        token: await readPrivateFile(
+          resolve(process.env.HCLOUD_TOKEN_FILE ?? '.local/hcloud-token'),
+        ),
+        renderBoot: () =>
+          Promise.reject(new CloudError('permission_denied', 'Recovery cannot create servers.')),
+      });
+      await requestImageCleanup(connection.db, id);
+      await cleanupImageBuild({ connection, buildId: id, provider, access: store });
+    }
     return await inspectImageBuild(connection.db, id);
   } finally {
     await connection.pool.end();

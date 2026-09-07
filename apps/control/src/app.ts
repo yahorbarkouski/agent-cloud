@@ -48,6 +48,7 @@ export function createApp(input: {
   enrollment?: EnrollmentService;
   imageEnrollment?: ImageVerifierEnrollment;
   imageRelease?: ImageReleaseSelection;
+  customerAccess?: 'enabled' | 'disabled';
 }) {
   const app = new Hono<{ Variables: { principal: Principal; requestId: string } }>();
   app.use('*', async (c, next) => {
@@ -114,6 +115,8 @@ export function createApp(input: {
       ),
     );
   app.use('/v1/*', async (c, next) => {
+    if (input.customerAccess === 'disabled')
+      throw new CloudError('permission_denied', 'Customer API is disabled in image factory mode.');
     c.set('principal', await authenticate(input.db, c.req.header('Authorization')));
     await next();
   });

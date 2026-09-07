@@ -12,6 +12,7 @@ import {
 } from '../apps/control/dist/advance-image-build.js';
 import { admitImageBuild, requestImageCleanup } from '../apps/control/dist/image-builds.js';
 import { planImageCleanup } from '../apps/control/dist/image-cleanup.js';
+import { planImageRelease } from '../apps/control/dist/image-release-plan.js';
 import { runImageEffect } from '../apps/control/dist/image-effect-journal.js';
 import { parseImageReservations } from '../apps/control/dist/image-budget.js';
 import {
@@ -50,7 +51,8 @@ function signing() {
     signedUntil: new Date(now + 86_400_000).toISOString(),
     verifyUntil: new Date(now + 2 * 86_400_000).toISOString(),
   };
-  return { privateKey: pair.privateKey, keys: [key] };
+  const keys = [key];
+  return { privateKey: pair.privateKey, keys, readKeys: () => Promise.resolve(keys) };
 }
 async function scenario(retain = true) {
   const f = await imageVerifierScenario(database.connection, directory, retain);
@@ -93,7 +95,7 @@ it.each([-5000, 5000])(
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(Date.now() + offset);
     const release = await retained(f);
-    const selected = await readPublishedImage({ ...f, keys: f.publication.keys });
+    const selected = await readPublishedImage({ ...f, readKeys: f.publication.readKeys });
     expect(selected).toMatchObject({ value: { release } });
   },
 );
@@ -123,7 +125,7 @@ it('publishes only after temporary cleanup, preserves the exact release across c
   }
   expect([...f.provider.resources.values()].map((resource) => resource.kind)).toEqual(['snapshot']);
   expect(await readdir(join(directory, 'keys'))).toEqual([]);
-  const selected = await readPublishedImage({ ...f, keys: f.publication.keys });
+  const selected = await readPublishedImage({ ...f, readKeys: f.publication.readKeys });
   expect(selected).toMatchObject({ value: { release, image: { providerImage: image.id } } });
   expect(release.payload.sanitation.serverId).toBe(image.sourceServerId);
   expect(JSON.stringify(await f.inspection())).not.toContain(f.bootstrap.token);
@@ -195,7 +197,7 @@ it.each(['preparing', 'publishing', 'selecting'])(
     if (phase === 'publishing')
       await expect(publishImageRelease({ ...f, ...f.publication })).rejects.toThrow();
     if (phase === 'selecting')
-      await expect(readPublishedImage({ ...f, keys: f.publication.keys })).rejects.toThrow(
+      await expect(readPublishedImage({ ...f, readKeys: f.publication.readKeys })).rejects.toThrow(
         'cancelled',
       );
     expect((await f.inspection()).state.kind).toBe('cleaning');
@@ -218,7 +220,7 @@ it.each(['labels', 'source', 'size', 'created', 'unavailable', 'missing'])(
       f.provider.add({ ...image, createdAt: new Date(Date.now() + 1).toISOString() });
     if (change === 'unavailable') f.provider.add({ ...image, status: 'unavailable' });
     if (change === 'missing') f.provider.resources.clear();
-    await expect(readPublishedImage({ ...f, keys: f.publication.keys })).rejects.toThrow(
+    await expect(readPublishedImage({ ...f, readKeys: f.publication.readKeys })).rejects.toThrow(
       'snapshot is missing',
     );
     await expect(f.advance()).rejects.toThrow('snapshot is missing');
@@ -232,23 +234,28 @@ it('refuses an untrusted signature, retries after trust repair, and enforces rev
   const f = await scenario();
   await prepareImagePublication(f);
   await finishTemporary(f);
-  await expect(publishImageRelease({ ...f, ...f.publication, keys: [] })).rejects.toThrow(
-    'not trusted',
-  );
+  await expect(
+    publishImageRelease({ ...f, ...f.publication, readKeys: () => Promise.resolve([]) }),
+  ).rejects.toThrow('not trusted');
   expect((await f.inspection()).publication.kind).toBe('prepared');
   await publishImageRelease({ ...f, ...f.publication });
   await expect(
     readPublishedImage({
       ...f,
-      keys: [...f.publication.keys, { kind: 'revoked', keyId: imageReleaseKeyId(pair.publicKey) }],
+      readKeys: () =>
+        Promise.resolve([
+          ...f.publication.keys,
+          { kind: 'revoked', keyId: imageReleaseKeyId(pair.publicKey) },
+        ]),
     }),
   ).rejects.toThrow('not trusted');
   const revoked = {
     ...f.publication,
-    keys: [
-      ...f.publication.keys,
-      { kind: 'revoked', keyId: imageReleaseKeyId(pair.publicKey) } satisfies ImageReleaseKey,
-    ],
+    readKeys: () =>
+      Promise.resolve([
+        ...f.publication.keys,
+        { kind: 'revoked', keyId: imageReleaseKeyId(pair.publicKey) } satisfies ImageReleaseKey,
+      ]),
   };
   await expect(publishImageRelease({ ...f, ...revoked })).rejects.toThrow('not trusted');
   await expect(advanceImageBuild({ ...f, publication: revoked })).rejects.toThrow('not trusted');
@@ -288,12 +295,16 @@ it('releases VM capacity while retaining storage allowance and eventually delete
     db: database.connection.db,
     limits: { ...next.limits, maxSnapshotMonthlyGrossMicros: 2_000_000 },
   });
-  vi.spyOn(Date, 'now').mockReturnValue(Date.parse(release.payload.retainUntil));
+  expect(
+    planImageRelease(await f.inspection(), Date.parse(release.payload.retainUntil), true, true),
+  ).toEqual({ kind: 'cleanup', reason: 'expired' });
+  // Exercise the durable intent selected at expiry; the real controller uses database time.
+  await requestImageCleanup(database.connection.db, f.buildId, 'expired');
   for (let pass = 0; pass < 5; pass++) if ((await f.advance()).kind === 'cleaned') break;
   expect((await f.inspection()).state.kind).toBe('cleaned');
   expect(f.provider.resources.size).toBe(0);
   expect(parseImageReservations([await f.inspection()])[0]?.snapshotMonthlyGrossMicros).toBe(0);
-  await expect(readPublishedImage({ ...f, keys: f.publication.keys })).rejects.toThrow(
+  await expect(readPublishedImage({ ...f, readKeys: f.publication.readKeys })).rejects.toThrow(
     'Only a retained',
   );
   expect((await f.inspection()).publication.kind).toBe('published');

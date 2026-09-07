@@ -37,6 +37,7 @@ export function checkImageBuilderIntent(
 export function checkImageServerIntent(
   build: ImageBuild,
   command: Extract<ImageProviderCommand, { kind: 'create_server' }>,
+  now: number,
 ) {
   if (command.labels.role === 'builder') {
     checkImageBuilderIntent(build.admission, command);
@@ -46,7 +47,7 @@ export function checkImageServerIntent(
   if (
     command.labels.role !== 'verifier' ||
     build.verification.kind !== 'prepared' ||
-    Date.parse(build.verification.spec.expiresAt) <= Date.now() ||
+    Date.parse(build.verification.spec.expiresAt) <= now ||
     command.bootData.kind !== 'image_verifier_secret' ||
     command.bootData.id !== build.admission.id ||
     command.bootData.digest !== build.admission.source.manifestDigest ||
@@ -72,6 +73,7 @@ export async function checkImageCommand(
   build: ImageBuild,
   command: ImageProviderCommand,
   provider: ImageProvider,
+  now = Date.now(),
 ) {
   const { admission } = build;
   if (isImageCreate(command) && command.kind !== 'create_snapshot') {
@@ -145,7 +147,7 @@ export async function checkImageCommand(
         throw new CloudError('invalid_input', 'Image address location differs from admission.');
       return;
     case 'create_server': {
-      checkImageServerIntent(build, command);
+      checkImageServerIntent(build, command, now);
       const verifier = command.labels.role === 'verifier';
       const ip = await owned(verifier ? 'verifier_ip' : 'builder_ip', command.primaryIpId);
       const key = await owned('access_key', command.sshKeyId);

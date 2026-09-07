@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { createHetznerRequest, HttpError } from './http.js';
 export { createHetznerRequest } from './http.js';
 export { HetznerImageProvider, type ImageBootRenderer } from './image-release.js';
+export { readHetznerImagePrice } from './image-pricing.js';
 import {
   readHetznerCatalog,
   offerConfigurationSchema,

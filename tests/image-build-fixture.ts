@@ -53,8 +53,11 @@ export function imagePricing() {
   };
 }
 
-export async function imageBuildFixture(directory: string) {
-  const fixture = imageFixture();
+export async function imageBuildFixture(
+  directory: string,
+  trust?: Parameters<typeof imageFixture>[0],
+) {
+  const fixture = imageFixture(trust);
   await mkdir(join(directory, 'artifacts'), { recursive: true });
   await mkdir(join(directory, 'systemd'), { recursive: true });
   const files = new Map(fixture.files);

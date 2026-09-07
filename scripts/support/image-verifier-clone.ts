@@ -338,7 +338,7 @@ export async function verifyImageClone(input: {
     };
     const publicationController = {
       ...verifierController,
-      publication: { privateKey: pair.privateKey, keys: [key] },
+      publication: { privateKey: pair.privateKey, readKeys: () => Promise.resolve([key]) },
     };
     let retained = false;
     for (let pass = 0; pass < 16; pass++) {
@@ -363,7 +363,10 @@ export async function verifyImageClone(input: {
       [...protocol.resources.values()].map((resource) => resource.kind),
       ['snapshot'],
     );
-    const selected = await readPublishedImage({ ...publicationController, keys: [key] });
+    const selected = await readPublishedImage({
+      ...publicationController,
+      readKeys: () => Promise.resolve([key]),
+    });
     assert(selected.kind === 'acquired');
     assert.equal(selected.value.image.providerImage, verified.value.result.snapshotId);
     await requestImageCleanup(controller.connection.db, build.admission.id);

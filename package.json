@@ -31,6 +31,8 @@
     "hetzner:check": "pnpm build && tsx scripts/check-hetzner.ts",
     "setup:step": "node scripts/install-step.ts",
     "setup:pki": "node scripts/setup-pki.ts",
+    "setup:runtime": "pnpm build && node scripts/setup-runtime.ts",
+    "runtime:check": "pnpm build && node --env-file-if-exists=.env scripts/check-runtime.ts",
     "pki:up": "docker compose --env-file .local/pki/compose.env -f infra/compose/pki-development.yaml up -d --wait",
     "pki:down": "docker compose --env-file .local/pki/compose.env -f infra/compose/pki-development.yaml down",
     "smoke:pki": "pnpm build && tsx scripts/smoke-pki.ts",

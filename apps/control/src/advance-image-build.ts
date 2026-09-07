@@ -3,8 +3,10 @@ import type {
   ImageBuildId,
   ImageBuildLimits,
   ImageProvider,
+  Catalog,
+  ImageBuildAdmission,
 } from '@agent-cloud/contracts';
-import { imageBuilds, type Connection } from '@agent-cloud/db';
+import { databaseTime, imageBuilds, type Connection } from '@agent-cloud/db';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { inspectImageBuild, requestImageCleanup, type ImageBuild } from './image-builds.js';
 import { runImageEffect } from './image-effect-journal.js';
@@ -50,13 +52,36 @@ export async function completeImageAccessCleanup(
     .where(and(eq(imageBuilds.id, build.admission.id), isNull(imageBuilds.accessRemovedAt)));
 }
 
+/** Recovery needs no builder inputs, signing keys, sealing key, CA or price service. */
+export async function cleanupImageBuild(input: {
+  connection: Connection;
+  buildId: ImageBuildId;
+  provider: ImageProvider;
+  access: Parameters<typeof runImageBuilderWork>[0]['access'];
+}) {
+  const cleanup = await planImageCleanup(input);
+  if (cleanup.kind === 'busy') return cleanup;
+  if (cleanup.value.kind === 'delete')
+    return {
+      kind: 'provider',
+      result: await runImageEffect({ ...input, command: cleanup.value.command }),
+    } satisfies Advance;
+  if (cleanup.value.kind === 'waiting') return cleanup.value;
+  if (cleanup.value.kind !== 'cleaned') throw new Error('Full abort must remove every resource.');
+  await completeImageAccessCleanup(
+    input,
+    await inspectImageBuild(input.connection.db, input.buildId),
+  );
+  return { kind: 'cleaned' } satisfies Advance;
+}
+
 /** One recoverable controller pass. Live CLI activation still requires production recovery and bounded provider proof. */
 export async function advanceImageBuild(input: {
   connection: Connection;
   buildId: ImageBuildId;
   provider: ImageProvider;
   limits: ImageBuildLimits;
-  pricing: Parameters<typeof runImageEffect>[0]['pricing'];
+  pricing: () => Promise<{ catalog: Catalog; storagePrice: ImageBuildAdmission['storagePrice'] }>;
   access: Parameters<typeof runImageBuilderWork>[0]['access'];
   remote: Parameters<typeof runImageBuilderWork>[0]['remote'];
   sourceDirectory: string;
@@ -70,7 +95,7 @@ export async function advanceImageBuild(input: {
   const build = await inspectImageBuild(input.connection.db, input.buildId);
   const plan = planImageRelease(
     build,
-    Date.now(),
+    (await databaseTime(input.connection.db)).getTime(),
     input.verification !== undefined,
     input.publication !== undefined,
   );
@@ -101,7 +126,7 @@ export async function advanceImageBuild(input: {
       await completeImageAccessCleanup(input, build);
       if (!input.publication)
         throw new Error('Returning a release requires its verification key policy.');
-      const selected = await readPublishedImage({ ...input, keys: input.publication.keys });
+      const selected = await readPublishedImage({ ...input, readKeys: input.publication.readKeys });
       if (selected.kind === 'busy') return selected;
       return { kind: 'retained', release: selected.value.release };
     }
@@ -122,19 +147,9 @@ export async function advanceImageBuild(input: {
       return { kind: 'retained', release: published.value };
     }
     case 'cleanup': {
-      await requestImageCleanup(input.connection.db, input.buildId, plan.reason);
-      const cleanup = await planImageCleanup(input);
-      if (cleanup.kind === 'busy') return cleanup;
-      if (cleanup.value.kind === 'delete')
-        return {
-          kind: 'provider',
-          result: await runImageEffect({ ...input, command: cleanup.value.command }),
-        };
-      if (cleanup.value.kind === 'waiting') return cleanup.value;
-      if (cleanup.value.kind !== 'cleaned')
-        throw new Error('Full abort must remove every resource.');
-      await completeImageAccessCleanup(input, build);
-      return { kind: 'cleaned' };
+      if (build.state.kind !== 'cleaning')
+        await requestImageCleanup(input.connection.db, input.buildId, plan.reason);
+      return cleanupImageBuild(input);
     }
     case 'cleaned':
       await completeImageAccessCleanup(input, build);

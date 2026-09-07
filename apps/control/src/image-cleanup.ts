@@ -23,8 +23,15 @@ export async function planImageCleanup(input: {
     pool: input.connection.pool,
     buildId: input.buildId,
     work: async (db) => {
-      if (input.intent !== 'release') await requestImageCleanup(db, input.buildId);
       let build = await inspectImageBuild(db, input.buildId);
+      if (
+        input.intent !== 'release' &&
+        build.state.kind !== 'cleaning' &&
+        build.state.kind !== 'cleaned'
+      ) {
+        await requestImageCleanup(db, input.buildId);
+        build = await inspectImageBuild(db, input.buildId);
+      }
       if (input.intent === 'release' && build.state.kind !== 'releasing')
         throw new CloudError(
           'permission_denied',

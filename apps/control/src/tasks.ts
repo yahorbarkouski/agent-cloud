@@ -18,11 +18,11 @@ export function createTasks(input: {
   provider: MachineProvider;
   limits: Config['limits'];
   guest?: GuestProvisioning;
-  images?: Parameters<typeof createImageTasks>[0]['controller'];
+  images?: Parameters<typeof createImageTasks>[0]['advance'];
 }): TaskList {
   return {
     ...(input.images
-      ? createImageTasks({ connection: input.connection, controller: input.images })
+      ? createImageTasks({ connection: input.connection, advance: input.images })
       : {}),
     advance_operation: async (payload, helpers) => {
       const { operationId } = payloadSchema.parse(payload);

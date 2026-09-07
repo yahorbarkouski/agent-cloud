@@ -19,7 +19,7 @@ import {
 } from '../apps/control/dist/image-verifier.js';
 import { createImageVerifierEnrollment } from '../apps/control/dist/image-verifier-enrollment.js';
 import { createImageRenderer } from '../apps/control/dist/image-renderer.js';
-import { testDatabase } from './database.js';
+import { testDatabase, waitUntilDatabaseTime } from './database.js';
 import { imageVerifierScenario } from './image-verifier-fixture.js';
 
 let database: Awaited<ReturnType<typeof testDatabase>>;
@@ -41,9 +41,35 @@ afterEach(async () => {
 
 const scenario = () => imageVerifierScenario(database.connection, directory);
 
+it('keeps a valid probe credential across a retry when the host clock jumps ahead', async () => {
+  const f = await scenario();
+  f.probe.readIdentity.mockRejectedValueOnce(
+    new CloudError('guest_unreachable', 'Fixture retry.', true),
+  );
+  await expect(f.service.enroll(f.proposal)).rejects.toThrow('Fixture retry');
+  const realNow = Date.now;
+  vi.spyOn(Date, 'now').mockImplementation(() => realNow() + 600_000);
+  await f.service.enroll(f.proposal);
+  expect(f.signer.issueProbeCredential).toHaveBeenCalledOnce();
+});
+
+it('keeps a valid runtime credential across a retry when the host clock jumps ahead', async () => {
+  const f = await scenario();
+  await f.service.enroll(f.proposal);
+  f.probe.readRuntime.mockRejectedValueOnce(
+    new CloudError('guest_unreachable', 'Fixture retry.', true),
+  );
+  await expect(f.runtimeService.check(f.buildId)).rejects.toThrow('Fixture retry');
+  const realNow = Date.now;
+  vi.spyOn(Date, 'now').mockImplementation(() => realNow() + 600_000);
+  await f.runtimeService.check(f.buildId);
+  expect(f.signer.issueRuntimeCredential).toHaveBeenCalledOnce();
+});
+
 it('bounds verifier lifetime with the database clock when the controller clock is ahead', async () => {
   const realNow = Date.now;
-  vi.spyOn(Date, 'now').mockImplementation(() => realNow() + 5000);
+  // Stay inside the independent five-second allowance for provider price observation skew.
+  vi.spyOn(Date, 'now').mockImplementation(() => realNow() + 4000);
   const f = await scenario();
   const result = await database.connection.pool.query<{ bounded: boolean }>(
     "SELECT expires_at <= clock_timestamp() + interval '30 minutes' AS bounded FROM image_verifier_bootstraps WHERE build_id=$1",
@@ -261,12 +287,12 @@ it('does not save runtime completion when cancellation arrives during the SSH re
 });
 
 it('refuses expiry during enrollment before consuming bootstrap or issuing a runtime identity', async () => {
-  const f = await scenario();
-  f.signer.signTls.mockImplementationOnce(() => {
-    vi.spyOn(Date, 'now').mockReturnValue(Date.parse(f.bootstrap.spec.expiresAt));
-    return Promise.resolve('fixture-certificate');
+  const f = await imageVerifierScenario(database.connection, directory, false, 5000);
+  f.signer.signTls.mockImplementationOnce(async () => {
+    await waitUntilDatabaseTime(database.connection, f.bootstrap.spec.expiresAt);
+    return 'fixture-certificate';
   });
-  expect((await f.request()).status).toBe(401);
+  expect((await f.request()).status).toBe(403);
   expect(
     (await database.connection.db.select().from(imageVerifierIdentities))[0]?.identity,
   ).toMatchObject({ kind: 'claimed' });

@@ -14,6 +14,7 @@ import {
   requestImageCleanup,
 } from '../apps/control/dist/image-builds.js';
 import { createImageTasks } from '../apps/control/dist/image-tasks.js';
+import { advanceImageBuild } from '../apps/control/dist/advance-image-build.js';
 import {
   enqueueImageBuild,
   requestImageRun,
@@ -49,7 +50,7 @@ it('admission queues only a deadline, and an early delivered job cannot construc
   const f = await imageBuildFixture(directory);
   await admitImageBuild({ ...f, db: database.connection.db, sourceDirectory: directory });
   expect((await queued(f.admission.id))?.run_at.toISOString()).toBe(f.admission.deadlineAt);
-  const controller = vi.fn<Parameters<typeof createImageTasks>[0]['controller']>(() => {
+  const advance = vi.fn<Parameters<typeof createImageTasks>[0]['advance']>(() => {
     throw new Error('Unexpected cloud work.');
   });
   // Even a duplicate or premature queue delivery must not start unrequested work.
@@ -58,9 +59,9 @@ it('admission queues only a deadline, and an early delivered job cannot construc
     pgPool: database.connection.pool,
     concurrency: 1,
     noHandleSignals: true,
-    taskList: createImageTasks({ connection: database.connection, controller }),
+    taskList: createImageTasks({ connection: database.connection, advance }),
   });
-  expect(controller).not.toHaveBeenCalled();
+  expect(advance).not.toHaveBeenCalled();
   expect((await queued(f.admission.id))?.run_at.toISOString()).toBe(f.admission.deadlineAt);
   expect(
     (await inspectImageBuild(database.connection.db, f.admission.id)).runRequestedAt,
@@ -89,7 +90,7 @@ it('starts explicitly, resumes publication on a real worker, and queues retained
     noHandleSignals: true,
     taskList: createImageTasks({
       connection: restart,
-      controller: () => ({ ...f, connection: restart }),
+      advance: () => advanceImageBuild({ ...f, connection: restart }),
     }),
     crontab: '* * * * * reconcile_image_builds',
   });
@@ -135,7 +136,7 @@ it('reconciles filesystem cleanup after a failed job and a new database connecti
   };
   const taskList = createImageTasks({
     connection: database.connection,
-    controller: () => ({ ...f, access: failingAccess }),
+    advance: () => advanceImageBuild({ ...f, access: failingAccess }),
   });
   // Run due jobs through Graphile, making each next pass due explicitly for this failure test.
   for (let pass = 0; pass < 15 && (await f.inspection()).state.kind !== 'cleaned'; pass++) {
@@ -153,7 +154,10 @@ it('reconciles filesystem cleanup after a failed job and a new database connecti
   expect((await queued(f.buildId))?.last_error).toContain('filesystem unavailable');
   const restart = connect(database.databaseUrl);
   try {
-    const restartedTasks = createImageTasks({ connection: restart, controller: () => f });
+    const restartedTasks = createImageTasks({
+      connection: restart,
+      advance: () => advanceImageBuild({ ...f, connection: restart }),
+    });
     await restart.db.execute(sql`SELECT graphile_worker.add_job('reconcile_image_builds')`);
     await runOnce({
       pgPool: restart.pool,

@@ -2,7 +2,7 @@
 
 An open-source cloud that customers operate through their existing coding agents. The product supplies machines, credentials, lifecycle operations, and eventually application deployment and recovery. It does not contain an AI agent.
 
-**Current status:** the local control plane works with a persistent simulated provider. The CLI, HTTP API, PostgreSQL, and background worker have been exercised together through creation and deletion. Live Hetzner activation, guest access, application deployment, routes, and backups are still in progress. Stripe is deferred.
+**Current status:** the local control plane works with a persistent simulated provider. The CLI, HTTP API, PostgreSQL, and background worker have been exercised together through creation and deletion. Hetzner startup supports an operator image factory with persistent credentials and recovery cleanup. Customer Hetzner activation, guest access, application deployment, routes, and backups are still in progress. Stripe is deferred.
 
 ## Run locally
 
@@ -108,7 +108,9 @@ pnpm image:build start <build-id>
 
 `pnpm image:build admit <prepared-config.json>` checks the matching local key store, reads Hetzner pricing and reserves an operator allowance without creating resources. Reusing the same configuration returns its recorded admission; changed intent needs a new build ID. `start` records an immutable run request. Admission alone queues only deadline cleanup and cannot start a machine. `cancel` queues a full abort request; it does not claim cloud deletion or local key erasure has run.
 
-The internal controller persists builder phases, stops and snapshots only after saved sanitation evidence, and removes temporary keys after full abort cleanup. Configured verifier ports now boot the confirmed snapshot, enroll with build-owned credentials and save restricted runtime evidence. Retained builds now remove temporary resources, sign the verified snapshot and retain its storage reservation. Selection checks current snapshot ownership and signing-key validity. Durable Graphile tasks now schedule advancement, cancellation and retained expiry. Configured customer admission pins a signed snapshot through uncertain creation; the worker and bootstrap renderer recheck current trust before a fresh VM. Production image configuration, the runnable image worker and recovery wiring remain open, so live advancement is still gated. See [image publication](docs/architecture/image-release.md).
+The controller persists builder phases, stops and snapshots only after saved sanitation evidence, boots a verifier, removes temporary resources and signs a retained release. The configured Hetzner image factory connects these ports to the API and Graphile worker. Initialize its persistent keys with `pnpm setup:runtime <absolute-identity-directory>` and supply the strict runtime JSON described in [operator runtime](docs/architecture/operator-runtime.md). Public key policy reloads on every authorization. Customer endpoints and operations remain disabled in this mode. `start` can incur charges once the worker is running; use a reachable HTTPS enrollment origin, current inventory and explicit cheap caps before starting a build.
+
+`pnpm image:build cleanup <build-id>` runs one exact-build cleanup pass without runtime signing keys, PKI, source inputs or pricing. Repeat until inspection confirms provider absence and local access removal, or leave the configured worker to reconcile. See [image publication](docs/architecture/image-release.md) for uncertain creates, retained storage and customer allocation pins. The actual Hetzner builder/snapshot/verifier drill remains unverified.
 
 ## What is enforced
 
@@ -121,7 +123,7 @@ The internal controller persists builder phases, stops and snapshots only after 
 
 Catalog entries specify the provider type, region, architecture, availability, and currency. Reservations include the VM and IPv4. `PROVIDER_CURRENCY` and `MAX_PROVIDER_HOURLY` define the deployment ceiling; use the currency returned by your provider account. There is no currency conversion. The simulator uses synthetic prices. An hourly reservation is not an invoice or a hard monthly cap; traffic and future ancillary services need separate limits before activation.
 
-Hetzner catalog reads have been verified against a real account. The API now refreshes catalog snapshots outside request transactions. Live mutation remains disabled until guest verification, operator recovery, and spending/cleanup checks are connected. No VM has been rented.
+Hetzner catalog reads have been verified against a real account. The API refreshes catalog snapshots outside request transactions. Operator image jobs require explicit configuration and start; live customer admission remains disabled. No VM has been rented.
 
 ## Prepare Hetzner credentials
 
@@ -143,7 +145,7 @@ Stop the API and worker while applying migrations from an earlier checkpoint, th
 | ------------------------ | --------------------------------------------------------------------- |
 | `packages/contracts`     | Public schemas, IDs, lifecycle states, provider contract              |
 | `packages/db`            | Drizzle schema, migrations, connections, job insertion                |
-| `packages/hetzner`       | Hetzner transport; live activation remains gated                      |
+| `packages/hetzner`       | Hetzner customer and image transport                                  |
 | `packages/pki`           | Smallstep signing and certificate identity checks                     |
 | `packages/guestctl`      | TypeScript guest first boot, certificate installation and identity    |
 | `images`                 | Public image inputs, pinned artifacts and Linux service configuration |

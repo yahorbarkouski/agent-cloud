@@ -7,7 +7,7 @@ import {
   imageProviderCommandSchema,
   imageBuilderBootSchema,
 } from '@agent-cloud/contracts';
-import { imageBuildEffects, type Database } from '@agent-cloud/db';
+import { databaseTime, imageBuildEffects, type Database } from '@agent-cloud/db';
 import type { ImageBootRenderer } from '@agent-cloud/hetzner';
 import { inspectImageBuild } from './image-builds.js';
 import { checkImageServerIntent } from './image-effect-policy.js';
@@ -30,6 +30,7 @@ export function createImageRenderer(
     if (!row)
       throw new CloudError('permission_denied', 'Image boot data requires its recorded effect.');
     const build = await inspectImageBuild(db, imageBuildIdSchema.parse(row.buildId));
+    const now = (await databaseTime(db)).getTime();
     const effect = build.effects.find((effect) => effect.id === id);
     if (
       !effect ||
@@ -37,13 +38,13 @@ export function createImageRenderer(
       effect.resolution.kind !== 'pending' ||
       !isDeepStrictEqual(effect.command, command) ||
       build.state.kind !== 'running' ||
-      Date.parse(build.admission.deadlineAt) <= Date.now()
+      Date.parse(build.admission.deadlineAt) <= now
     )
       throw new CloudError(
         'permission_denied',
         'Image boot data requires its exact active prepared effect.',
       );
-    checkImageServerIntent(build, command);
+    checkImageServerIntent(build, command, now);
     for (const dependency of [
       {
         role: command.labels.role === 'verifier' ? 'verifier_ip' : 'builder_ip',
@@ -163,7 +164,7 @@ export function createImageRenderer(
     const current = latest.effects.find((effect) => effect.id === id);
     if (
       latest.state.kind !== 'running' ||
-      Date.parse(latest.admission.deadlineAt) <= Date.now() ||
+      Date.parse(latest.admission.deadlineAt) <= (await databaseTime(db)).getTime() ||
       current?.outcome.kind !== 'prepared' ||
       current.resolution.kind !== 'pending'
     )

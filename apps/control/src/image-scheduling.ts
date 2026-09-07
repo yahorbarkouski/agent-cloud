@@ -5,12 +5,13 @@ import {
   imageBuildStateSchema,
   type ImageBuildId,
 } from '@agent-cloud/contracts';
-import { imageBuilds, type Executor, type Database } from '@agent-cloud/db';
+import { databaseTime, imageBuilds, type Executor, type Database } from '@agent-cloud/db';
 
-export async function enqueueImageBuild(db: Executor, buildId: string, runAt = new Date()) {
+export async function enqueueImageBuild(db: Executor, buildId: string, runAt?: Date) {
+  const timestamp = runAt ? sql`${runAt.toISOString()}::timestamptz` : sql`clock_timestamp()`;
   await db.execute(sql`SELECT graphile_worker.add_job(
     'advance_image_build', ${JSON.stringify({ buildId })}::json,
-    max_attempts := 25, job_key := ${'image:' + buildId}, run_at := ${runAt.toISOString()}::timestamptz
+    max_attempts := 25, job_key := ${'image:' + buildId}, run_at := ${timestamp}
   )`);
 }
 
@@ -27,7 +28,8 @@ export async function requestImageRun(db: Database, buildId: ImageBuildId) {
     if (
       !row.runRequestedAt &&
       (state.kind !== 'running' ||
-        Date.parse(imageBuildAdmissionSchema.parse(row.admission).deadlineAt) <= Date.now())
+        Date.parse(imageBuildAdmissionSchema.parse(row.admission).deadlineAt) <=
+          (await databaseTime(tx)).getTime())
     )
       throw new CloudError('permission_denied', 'Only an active admitted build can be started.');
     if (!row.runRequestedAt)
@@ -51,7 +53,7 @@ export async function scheduleImageBuild(db: Database, buildId: ImageBuildId, de
     const state = imageBuildStateSchema.parse(row.state);
     const admission = imageBuildAdmissionSchema.parse(row.admission);
     if (state.kind === 'cleaned' && row.accessRemovedAt) return;
-    let runAt = Date.now() + delayMs;
+    let runAt = (await databaseTime(tx)).getTime() + delayMs;
     if (state.kind === 'retained' && admission.retention.kind === 'retain')
       runAt = Math.max(runAt, Date.parse(admission.retention.deleteAfter));
     else if (state.kind === 'running')

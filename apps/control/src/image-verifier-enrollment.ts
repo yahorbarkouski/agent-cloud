@@ -12,6 +12,7 @@ import {
 } from '@agent-cloud/contracts';
 import {
   imageVerifierBootstraps,
+  databaseTime,
   imageVerifierIdentities,
   withImageBuildLock,
   type Connection,
@@ -29,7 +30,11 @@ async function bootstrap(db: Executor, seal: BootstrapSeal, input: ImageVerifier
     .select()
     .from(imageVerifierBootstraps)
     .where(eq(imageVerifierBootstraps.buildId, input.bootstrap.subject.id));
-  if (!row || !seal.matches(input.token, row.tokenHash) || row.expiresAt.getTime() <= Date.now())
+  if (
+    !row ||
+    !seal.matches(input.token, row.tokenHash) ||
+    row.expiresAt.getTime() <= (await databaseTime(db)).getTime()
+  )
     throw new CloudError('unauthenticated', 'Image verifier credentials are invalid or expired.');
   const spec = imageVerifierSpecSchema.parse(row.spec);
   if (
@@ -115,8 +120,9 @@ export function createImageVerifierEnrollment(ports: {
             subject: context.spec.subject,
             csr: input.tlsCsr,
           });
+          const credentialTime = (await databaseTime(db)).getTime();
           for (const [id, credential] of credentials)
-            if (Date.parse(credential.expiresAt) <= Date.now() + 35_000) credentials.delete(id);
+            if (Date.parse(credential.expiresAt) <= credentialTime + 35_000) credentials.delete(id);
           let credential = credentials.get(buildId);
           if (!credential) {
             if (credentials.size >= 1024)

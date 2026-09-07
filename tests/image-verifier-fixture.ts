@@ -26,10 +26,12 @@ export async function imageVerifierScenario(
   connection: Connection,
   directory: string,
   retain = false,
+  durationMs = 90 * 60_000,
 ) {
   const sourceDirectory = join(directory, 'inputs');
   const fixture = await imageBuildFixture(sourceDirectory);
   const { admission } = fixture;
+  admission.deadlineAt = new Date(Date.parse(admission.admittedAt) + durationMs).toISOString();
   if (retain)
     admission.retention = {
       kind: 'retain',

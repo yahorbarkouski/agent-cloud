@@ -1,0 +1,173 @@
+{
+  "observedAt": "2026-09-07T09:23:11.338Z",
+  "catalog": {
+    "provider": "hetzner",
+    "currency": "USD",
+    "pricing": "account_gross",
+    "observedAt": "2026-09-07T09:23:10.946Z",
+    "expiresAt": "2026-09-07T09:28:10.946Z",
+    "items": [
+      {
+        "size": "small",
+        "serverType": "cpx12",
+        "region": "nbg1",
+        "architecture": "x86",
+        "vcpus": 1,
+        "memoryGb": 2,
+        "diskGb": 40,
+        "available": true,
+        "currency": "USD",
+        "priceBasis": "account_gross",
+        "serverHourlyMicros": 26568,
+        "ipv4HourlyMicros": 1230,
+        "hourlyMicros": 27798
+      },
+      {
+        "size": "small",
+        "serverType": "cpx12",
+        "region": "fsn1",
+        "architecture": "x86",
+        "vcpus": 1,
+        "memoryGb": 2,
+        "diskGb": 40,
+        "available": true,
+        "currency": "USD",
+        "priceBasis": "account_gross",
+        "serverHourlyMicros": 26568,
+        "ipv4HourlyMicros": 1230,
+        "hourlyMicros": 27798
+      },
+      {
+        "size": "small",
+        "serverType": "cpx12",
+        "region": "hel1",
+        "architecture": "x86",
+        "vcpus": 1,
+        "memoryGb": 2,
+        "diskGb": 40,
+        "available": true,
+        "currency": "USD",
+        "priceBasis": "account_gross",
+        "serverHourlyMicros": 26568,
+        "ipv4HourlyMicros": 1230,
+        "hourlyMicros": 27798
+      },
+      {
+        "size": "medium",
+        "serverType": "cx33",
+        "region": "nbg1",
+        "architecture": "x86",
+        "vcpus": 4,
+        "memoryGb": 8,
+        "diskGb": 80,
+        "available": false,
+        "currency": "USD",
+        "priceBasis": "account_gross",
+        "serverHourlyMicros": 19680,
+        "ipv4HourlyMicros": 1230,
+        "hourlyMicros": 20910
+      },
+      {
+        "size": "medium",
+        "serverType": "cx33",
+        "region": "fsn1",
+        "architecture": "x86",
+        "vcpus": 4,
+        "memoryGb": 8,
+        "diskGb": 80,
+        "available": false,
+        "currency": "USD",
+        "priceBasis": "account_gross",
+        "serverHourlyMicros": 19680,
+        "ipv4HourlyMicros": 1230,
+        "hourlyMicros": 20910
+      },
+      {
+        "size": "medium",
+        "serverType": "cx33",
+        "region": "hel1",
+        "architecture": "x86",
+        "vcpus": 4,
+        "memoryGb": 8,
+        "diskGb": 80,
+        "available": false,
+        "currency": "USD",
+        "priceBasis": "account_gross",
+        "serverHourlyMicros": 19680,
+        "ipv4HourlyMicros": 1230,
+        "hourlyMicros": 20910
+      },
+      {
+        "size": "large",
+        "serverType": "cx43",
+        "region": "nbg1",
+        "architecture": "x86",
+        "vcpus": 8,
+        "memoryGb": 16,
+        "diskGb": 160,
+        "available": false,
+        "currency": "USD",
+        "priceBasis": "account_gross",
+        "serverHourlyMicros": 36408,
+        "ipv4HourlyMicros": 1230,
+        "hourlyMicros": 37638
+      },
+      {
+        "size": "large",
+        "serverType": "cx43",
+        "region": "fsn1",
+        "architecture": "x86",
+        "vcpus": 8,
+        "memoryGb": 16,
+        "diskGb": 160,
+        "available": false,
+        "currency": "USD",
+        "priceBasis": "account_gross",
+        "serverHourlyMicros": 36408,
+        "ipv4HourlyMicros": 1230,
+        "hourlyMicros": 37638
+      },
+      {
+        "size": "large",
+        "serverType": "cx43",
+        "region": "hel1",
+        "architecture": "x86",
+        "vcpus": 8,
+        "memoryGb": 16,
+        "diskGb": 160,
+        "available": false,
+        "currency": "USD",
+        "priceBasis": "account_gross",
+        "serverHourlyMicros": 36408,
+        "ipv4HourlyMicros": 1230,
+        "hourlyMicros": 37638
+      }
+    ]
+  },
+  "storagePrice": {
+    "currency": "USD",
+    "grossMicrosPerGbMonth": 24477,
+    "observedAt": "2026-09-07T09:23:11.196Z",
+    "expiresAt": "2026-09-07T09:28:11.196Z"
+  },
+  "baseImages": [
+    {
+      "id": "161547269",
+      "type": "system",
+      "status": "available",
+      "architecture": "x86",
+      "osFlavor": "ubuntu",
+      "osVersion": "24.04",
+      "diskGb": 5,
+      "deprecated": false,
+      "deleted": false
+    }
+  ],
+  "resources": {
+    "servers": 0,
+    "primaryIps": 0,
+    "snapshots": 0,
+    "firewalls": 0,
+    "sshKeys": 0
+  }
+}

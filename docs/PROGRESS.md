@@ -1,5 +1,19 @@
 # Implementation progress
 
+## Current runtime checkpoint
+
+- [x] Connect the actual Hetzner image transport, signer, SSH/SFTP, bootstrap renderer, verifier enrollment/readiness and publication to an explicit image-factory runtime.
+- [x] Keep customer API endpoints and customer jobs unavailable in image-factory mode; startup/admission cannot create capacity.
+- [x] Initialize persistent operator identity without replacing keys on retry; reload public release trust and revocation from disk for each authorization.
+- [x] Provide exact-build recovery cleanup without identity, PKI, source inputs or price reads.
+- [x] Use database time for destructive expiry, authorization, credential cache reuse and immediate image scheduling.
+- [x] Start the configured API and image-only Graphile worker locally and verify route restrictions through public HTTPS. This does not prove native enrollment or a Hetzner VM boot.
+- [x] Complete local typecheck/lint, 351 tests across 33 files, formatting and native enrollment with actual Smallstep/OpenSSH/TLS and process exit0. Evidence: [runtime verification](research/m1-image-runtime-verification.json).
+- [ ] Verify exact-commit CI for this checkpoint after pushing. Clock corrections and test outcomes are recorded in DECISIONS.tsv and CONTEXT.md.
+- [ ] Run the bounded inexpensive Hetzner builder/snapshot/verifier drill and confirm cleanup. Provider inventory still contains no resources; no paid build has started.
+
+The runtime design, commands, private-material restart policy and recovery instructions are in [operator runtime](architecture/operator-runtime.md). The product milestones below remain authoritative; this checkpoint does not complete M1 or customer deployment.
+
 ## Architecture workflow
 
 - [x] Ground: greenfield repository; researched plan available; parent projects are unrelated.

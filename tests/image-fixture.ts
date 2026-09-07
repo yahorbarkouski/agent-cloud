@@ -6,7 +6,7 @@ import {
 } from '../packages/contracts/dist/index.js';
 import { createImageManifest, imageArtifacts } from '../packages/images/dist/index.js';
 
-export function imageFixture() {
+export function imageFixture(publicTrust?: Parameters<typeof createImageManifest>[0]['trust']) {
   const hash = (value: string) => createHash('sha256').update(value).digest('hex');
   const artifact = (file: string) => ({
     file,
@@ -23,11 +23,13 @@ export function imageFixture() {
     composeVersion: '1.0.0',
     debs: [{ ...artifact('docker.deb'), name: 'docker' }],
   });
-  const trust = guestManifestSchema.shape.trust.parse({
-    sshUserCa: 'ssh-ed25519 AAAA',
-    sshHostCa: 'ssh-ed25519 BBBB',
-    tlsRoot: 'test-public-root',
-  });
+  const trust = guestManifestSchema.shape.trust.parse(
+    publicTrust ?? {
+      sshUserCa: 'ssh-ed25519 AAAA',
+      sshHostCa: 'ssh-ed25519 BBBB',
+      tlsRoot: 'test-public-root',
+    },
+  );
   const files = new Map([...imageSourcePaths, 'guestctl.mjs'].map((path) => [path, path]));
   for (const artifact of imageArtifacts(pins))
     files.set('artifacts/' + artifact.file, artifact.file);

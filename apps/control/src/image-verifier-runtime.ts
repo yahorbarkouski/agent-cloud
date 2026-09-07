@@ -10,6 +10,7 @@ import {
 } from '@agent-cloud/contracts';
 import {
   imageVerifierResults,
+  databaseTime,
   imageVerifierIdentities,
   withImageBuildLock,
   type Connection,
@@ -64,8 +65,9 @@ export function createImageVerifierRuntime(ports: {
               'permission_denied',
               'Image verifier runtime ownership differs from enrollment.',
             );
+          const credentialTime = (await databaseTime(db)).getTime();
           for (const [id, credential] of credentials)
-            if (Date.parse(credential.expiresAt) <= Date.now() + 35_000) credentials.delete(id);
+            if (Date.parse(credential.expiresAt) <= credentialTime + 35_000) credentials.delete(id);
           let credential = credentials.get(buildId);
           if (!credential) {
             if (credentials.size >= 1024) return { kind: 'waiting' };

@@ -132,7 +132,12 @@ export async function recoverImageVerifierBootstrap(
       .select()
       .from(imageVerifierBootstraps)
       .where(eq(imageVerifierBootstraps.buildId, input.buildId));
-    if (!row || row.consumedAt || row.expiresAt.getTime() <= Date.now() || !row.sealedToken)
+    if (
+      !row ||
+      row.consumedAt ||
+      row.expiresAt.getTime() <= (await databaseTime(tx)).getTime() ||
+      !row.sealedToken
+    )
       throw new CloudError(
         'permission_denied',
         'Image verifier bootstrap is absent, consumed or expired.',

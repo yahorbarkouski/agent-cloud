@@ -26,7 +26,8 @@ import { observeImageVerifier, verifierSnapshot } from './image-verifier.js';
 import { matchesLabels } from './resource-journal.js';
 
 type Ports = { connection: Connection; buildId: ImageBuildId; provider: ImageProvider };
-export type ImagePublicationSigner = { privateKey: KeyObject; keys: ImageReleaseKey[] };
+export type ImageReleaseKeySource = () => Promise<ImageReleaseKey[]>;
+export type ImagePublicationSigner = { privateKey: KeyObject; readKeys: ImageReleaseKeySource };
 
 /** Validation has no I/O. An invalid release must fail admission or compensate an unsubmitted boot. */
 export function requireTrustedImageRelease(value: unknown, keys: ImageReleaseKey[], now: Date) {
@@ -207,7 +208,7 @@ export async function publishImageRelease(input: Ports & ImagePublicationSigner)
         { ...evidence, issuedAt: issuedAt.toISOString() },
         input.privateKey,
       );
-      requireTrustedImageRelease(release, input.keys, issuedAt);
+      requireTrustedImageRelease(release, await input.readKeys(), issuedAt);
       await db.transaction(async (tx) => {
         // The database guard locks the build and rechecks cancellation, deadline and cleanup.
         await tx
@@ -227,14 +228,14 @@ export async function publishImageRelease(input: Ports & ImagePublicationSigner)
 async function resolvePublishedImage(
   db: Database,
   build: ImageBuild,
-  input: Ports & { keys: ImageReleaseKey[] },
+  input: Ports & { readKeys: ImageReleaseKeySource },
 ) {
   if (build.state.kind !== 'retained' || build.publication.kind !== 'published')
     throw new CloudError('permission_denied', 'Only a retained published image can be selected.');
   requireTemporaryCleanup(build);
   const result = requireTrustedImageRelease(
     build.publication.release,
-    input.keys,
+    await input.readKeys(),
     await databaseTime(db),
   );
   const evidence = imageReleaseEvidenceSchema.strip().parse(result.release.payload);
@@ -244,12 +245,12 @@ async function resolvePublishedImage(
   const refreshed = await inspectImageBuild(db, input.buildId);
   if (refreshed.state.kind !== 'retained')
     throw new CloudError('permission_denied', 'Image retention was cancelled during selection.');
-  requireTrustedImageRelease(result.release, input.keys, await databaseTime(db));
+  requireTrustedImageRelease(result.release, await input.readKeys(), await databaseTime(db));
   return result;
 }
 
 /** Resolves one exact published build; allocation admission must separately pin its lifetime. */
-export async function readPublishedImage(input: Ports & { keys: ImageReleaseKey[] }) {
+export async function readPublishedImage(input: Ports & { readKeys: ImageReleaseKeySource }) {
   return withImageBuildLock({
     pool: input.connection.pool,
     buildId: input.buildId,
