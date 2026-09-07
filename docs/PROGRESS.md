@@ -49,11 +49,11 @@
 
 ## Verification ledger
 
-M1 platform verifier, in progress2026-09-07:
+M1 platform verifier, 2026-09-07:
 
 - Shared subject-bound guest/PKI/SSH paths preserve customer wire1 and add explicit build-owned verifier wire2. Native PKI99134 and SSH81642 passed both namespaces with no cloud resources.
 - New verifier bootstrap, identity, signing and completion records bind one admitted build to its confirmed snapshot and fresh VM. Controller, renderer, `/image/enroll` and restricted runtime checks are implemented. Full abort includes verifier resources; retained promotion remains open. Migration0014 is applied; all15migration hashes match.
-- Full check8838 passed303tests in28files, typecheck and lint. Focused75949 passed13verifier tests after cancellation and expiry regressions. Independent gpt-5.6-sol review found no blocker and prompted the final-runtime cancellation case. Native builder78422 passed two customer clones and the new platform verifier with full cleanup. Full check96323 now passes306tests/28files after added boundary cases and the SSH startup fix. Native16223 exposed an unseeded SSH socket despite disabled units; sshd had no host key and could not authenticate. Added host-key conditions to both systemd SSH units, manually verified inactive units, cleaned the owned failed fixture and started fresh native45162. Final rebuilt isolation proof is pending.
+- Full check8838 passed303tests in28files, typecheck and lint. Focused75949 passed13verifier tests after cancellation and expiry regressions. Independent gpt-5.6-sol review found no blocker and prompted the final-runtime cancellation case. Native builder78422 passed two customer clones and the new platform verifier with full cleanup. Full check96323 now passes306tests/28files after added boundary cases and the SSH startup fix. Native16223 exposed an unseeded SSH socket despite disabled units; sshd had no host key and could not authenticate. Added host-key conditions to both systemd SSH units, manually verified inactive units, cleaned the owned failed fixture and started fresh native45162. Fresh native45162 passed the rebuilt image, unseeded identity/principal/listener checks, both customer clones, actual verifier enrollment/runtime and full abort. Cleanup517b33 confirmed no OrbStack VMs, ownership records or native private fixture directories. Evidence: `research/m1-image-verifier-verification.json`. Implementation5445f41 is pushed; [Linux CI 34094753361](https://github.com/yahorbarkouski/agent-cloud/actions/runs/34094753361) passed in 3m11s with frozen install, full checks, fresh PKI, native PKI/SSH/enrollment and cleanup. No paid cloud resource was created.
 
 M1 durable builder controller, 2026-09-07:
 

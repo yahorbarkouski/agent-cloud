@@ -1,6 +1,6 @@
 {
   "date": "2026-09-07",
-  "status": "verifying-ssh-unit-condition-fix",
+  "status": "verified-checkpoint",
   "paidCloudResourcesCreated": 0,
   "fullCheck": {
     "session": 96323,
@@ -11,8 +11,8 @@
     "scope": "includes SSH systemd identity conditions"
   },
   "format": {
-    "session": 99485,
-    "result": "passed after second Prettier pass"
+    "session": 60055,
+    "result": "passed; earlier second-pass formatting corrections retained in the decision trail"
   },
   "pki": {
     "session": 99134,
@@ -35,15 +35,15 @@
     "result": "passed"
   },
   "nativeBuilderAndVerifier": {
-    "session": 78422,
-    "result": "passed with complete cleanup",
+    "session": 45162,
+    "result": "passed with unseeded isolation, native enrollment, health checks and complete cleanup",
     "events": [
       {
-        "directory": "/Users/yahorbarkouski/Documents/ChatGPT/learning/agent-cloud/.local/guest-builds/967c638737f43e16821ddf9d696974637039dfe1f830378e47266cda81cdb5ac",
-        "imageVersion": "dev-44ca34982c3edc1d51620c00",
-        "manifestDigest": "967c638737f43e16821ddf9d696974637039dfe1f830378e47266cda81cdb5ac",
-        "publicInputsDigest": "44ca34982c3edc1d51620c006c04bd957cb8345319b10689f8f7b1f1b051ccc1",
-        "checksumDigest": "4409e6cbc08baeab50ab6d551ab99de411e82a4100d06ff8fd4cd9bf96b9d593",
+        "directory": "/Users/yahorbarkouski/Documents/ChatGPT/learning/agent-cloud/.local/guest-builds/dc801bea953d4414bd15755412893f1b837b75424a366596258bf46ee8d25b65",
+        "imageVersion": "dev-c83d20245cffabbe6e61f173",
+        "manifestDigest": "dc801bea953d4414bd15755412893f1b837b75424a366596258bf46ee8d25b65",
+        "publicInputsDigest": "c83d20245cffabbe6e61f1732426e33dfa760c5fcc05f84ecdd849d18476af8d",
+        "checksumDigest": "fdc19ce2ee497f7ed9058e47ed6bdc489a8355299ed5716ffe881121af301867",
         "artifacts": 8,
         "cloudResourcesCreated": 0
       },
@@ -74,7 +74,7 @@
       {
         "builderKeyScan": {
           "files": 64,
-          "bytes": 94289,
+          "bytes": 94967,
           "matches": []
         }
       },
@@ -105,7 +105,7 @@
       {
         "bootstrapScan": {
           "files": 125,
-          "bytes": 603147,
+          "bytes": 579827,
           "matches": []
         }
       },
@@ -115,10 +115,10 @@
       },
       {
         "result": "guest-verified",
-        "machineId": "2776e98a98bc400e9be96171347c5f80",
-        "sshIdentity": "8f3a3c0a2be2fd5c5ab7a92b945a6b558d814511ecf560aa5cf284b6c34f4699",
-        "tlsIdentity": "611a7abcf14430469648cab5c0b382c528713223e00b10123713e125571258e7",
-        "allocationId": "alloc_60bc442f-be2c-4663-b5f4-b02072bf0a02"
+        "machineId": "70fba7dff1c64a4cb87bcca5e9a1772e",
+        "sshIdentity": "1af0c615f6e263b2cdee0bacf9535304b2b82690199c06e202321d34b4bae4ab",
+        "tlsIdentity": "a7398b8d63754d34d53c61bfd02e4ee12d37d4ba1d12b49bc4598af3547dddbd",
+        "allocationId": "alloc_b478d1ad-0f9f-45a8-9732-48426ba8bab8"
       },
       {
         "phase": "verifying fresh clone 2 of the SSH-built image",
@@ -147,7 +147,7 @@
       {
         "bootstrapScan": {
           "files": 125,
-          "bytes": 597585,
+          "bytes": 581819,
           "matches": []
         }
       },
@@ -157,13 +157,17 @@
       },
       {
         "result": "guest-verified",
-        "machineId": "e94a5f9f307c4604a7b276874293b911",
-        "sshIdentity": "39fdfe66d2c2b7e1e22c94eed054d9fdb114180daa9c8baec64060629fe6f4b5",
-        "tlsIdentity": "0bc26da9a94f0bc4921dc3b09eddffd011c7cf6237346404542a593341c01860",
-        "allocationId": "alloc_e05b5465-2673-4771-85a1-92fb27466b02"
+        "machineId": "51b34ea13e164cf998e1b49c4f6ea225",
+        "sshIdentity": "9d9d1e513c9c3c4ee797f32a7275ab57dc44c07a3dabb707823b88ce08cfa145",
+        "tlsIdentity": "51744d689931accf6826455b0743f4fa58aed50f3326c8fda4a8969e4ce4946e",
+        "allocationId": "alloc_d0595d3c-cf45-4114-9977-09c35e3a7d7f"
       },
       {
         "phase": "booting build-owned image verifier from the recorded stopped source",
+        "cloudResourcesCreated": 0
+      },
+      {
+        "phase": "unseeded verifier has no identity, principals or SSH/application listeners",
         "cloudResourcesCreated": 0
       },
       {
@@ -176,11 +180,11 @@
       },
       {
         "result": "image-verifier-verified",
-        "buildId": "4ff56c93-fac4-46b7-96c6-c9a498f7eab9",
+        "buildId": "06b189a4-8369-4bc8-9123-1086faab557d",
         "snapshotId": "1006",
         "serverId": "1008",
-        "machineId": "b6cd7bd736144ba09f0dc50cbe24f3a4",
-        "bootId": "a3524257-070c-4abe-b29f-3b842403a5a0",
+        "machineId": "15694d7a8a5a46509f78e23d87f83d0b",
+        "bootId": "7d5065b5-03d7-4467-a439-97e286441641",
         "cloudResourcesCreated": 0
       },
       {
@@ -209,7 +213,7 @@
     ],
     "freshNativeRun": {
       "session": 45162,
-      "result": "running"
+      "result": "passed"
     }
   },
   "migration": {
@@ -239,10 +243,28 @@
   ],
   "review": {
     "model": "gpt-5.6-sol",
-    "status": "code and SQL reviewed; final artifact/trail audit pending",
+    "status": "completed; no implementation blocker; final evidence references corrected",
     "findings": [
       "Added cancellation-during-runtime regression.",
       "Documented OrbStack pre-seeding limitation and added unseeded identity/principal/listener assertions."
-    ]
+    ],
+    "report": "docs/research/m1-image-verifier-review.md"
+  },
+  "implementationCommit": "5445f410f34d73aa8810a9b77b230defec28ff84",
+  "nativeCleanup": {
+    "check": "517b33",
+    "orbstackMachines": [],
+    "ownershipRecords": [],
+    "privateBuilderFixtures": [],
+    "privateVerifierFixtures": []
+  },
+  "linuxCi": {
+    "runId": 34094753361,
+    "url": "https://github.com/yahorbarkouski/agent-cloud/actions/runs/34094753361",
+    "headSha": "5445f410f34d73aa8810a9b77b230defec28ff84",
+    "status": "completed",
+    "conclusion": "success",
+    "durationSeconds": 191,
+    "completedAt": "2026-09-07T07:20:45Z"
   }
 }
