@@ -103,7 +103,14 @@
     "bounded customer Hetzner lifecycle and cleanup",
     "M2-M7 product milestones"
   ],
-  "exactCommitCi": "pending",
+  "exactCommitCi": {
+    "commit": "157da958d54d87e5c15e0a6c7c8ceac01f5fe636",
+    "runId": 34119114439,
+    "url": "https://github.com/yahorbarkouski/agent-cloud/actions/runs/34119114439",
+    "conclusion": "success",
+    "freshPkiAndNativeSmokes": true,
+    "log": ".local/customer-runtime-ci-result.json"
+  },
   "formatting": {
     "passed": true,
     "log": ".local/customer-runtime-final-format.log"

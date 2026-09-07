@@ -15,3 +15,5 @@ Early focused failures came from a test root certificate that had not used the s
 Customer blocked-provisioning cancellation/recovery, owned firewall setup and the live customer lifecycle drill remain unverified work. No paid resource was created for this checkpoint.
 
 A fresh read-only provider inventory at 2026-09-07T11:52:55.769Z found zero servers, Primary IPs, snapshots, firewalls and SSH keys. SQL cleanup check at11:52:55Z found no active allocations, simulator resources or unfinished image builds; native VM ownership records were absent. `.local/customer-runtime-provider-inventory.json` and `.local/customer-runtime-cleanup-check.json`.
+
+Exact implementation commit157da958d54d87e5c15e0a6c7c8ceac01f5fe636 passed [Linux CI34119114439](https://github.com/yahorbarkouski/agent-cloud/actions/runs/34119114439), including the full check, formatting, fresh PKI, native smokes and cleanup. This CI follows all customer-runtime code changes. `.local/customer-runtime-ci-result.json`.
