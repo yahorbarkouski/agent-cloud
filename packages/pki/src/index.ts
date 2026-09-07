@@ -261,3 +261,4 @@ export type Signer = ReturnType<typeof createSigner>;
 
 export { inspectIssuedSsh } from './ssh-certificate.js';
 export { inspectIssuedTls } from './tls-certificate.js';
+export { signGuestRenewal, verifyGuestRenewal } from './guest-renewal.js';

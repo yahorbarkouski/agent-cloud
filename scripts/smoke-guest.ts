@@ -24,6 +24,7 @@ import { machines, operations, machineRecord } from '../packages/db/src/index.js
 import { createSigner, guestName } from '../packages/pki/dist/index.js';
 import { createGuestProbe } from '../packages/remote/dist/index.js';
 import { createApp } from '../apps/control/src/app.js';
+import { createGuestRenewalService } from '../apps/control/src/guest-renewal.js';
 import { createEnrollmentService } from '../apps/control/src/guest-enrollment.js';
 import { createGuestReadiness } from '../apps/control/src/guest-readiness.js';
 import { advanceOperation } from '../apps/control/src/advance-operation.js';
@@ -253,9 +254,15 @@ try {
     limits: fixture.limits,
     catalog: fixture.catalog,
     enrollment,
+    renewal: createGuestRenewalService({
+      connection: database.connection,
+      signer,
+      probe,
+      provider: fixture.provider,
+    }),
   });
   handle = (input) =>
-    new URL(input.url).pathname === '/guest/enroll'
+    ['/guest/enroll', '/guest/renew'].includes(new URL(input.url).pathname)
       ? app.fetch(input)
       : new Response(null, { status: 404 });
   await writeFile(join(scratch, 'user-data'), fixture.userData, { mode: 0o600 });
@@ -336,6 +343,19 @@ try {
     allocationId: z.literal(proof.allocationId),
     imageVersion: z.literal(image.version),
   });
+  health.parse(JSON.parse(await vm(['curl', '--fail', '--silent', 'http://127.0.0.1:8081/ready'])));
+  progress('verifying renewal timer and certificate reload preserve proxy configuration');
+  await vm(['systemctl', 'is-enabled', '--quiet', 'agent-cloud-renew.timer']);
+  await vm(['systemctl', 'is-active', '--quiet', 'agent-cloud-renew.timer']);
+  const proxyConfiguration = await vm(['cat', '/var/lib/agent-cloud/caddy.json']);
+  await vm(['systemctl', 'start', 'agent-cloud-renew.service']);
+  assert.equal(
+    (
+      await vm(['systemctl', 'show', '--property=Result', '--value', 'agent-cloud-renew.service'])
+    ).trim(),
+    'success',
+  );
+  assert.equal(await vm(['cat', '/var/lib/agent-cloud/caddy.json']), proxyConfiguration);
   health.parse(JSON.parse(await vm(['curl', '--fail', '--silent', 'http://127.0.0.1:8081/ready'])));
   progress('testing restricted runtime inspection and unhealthy services');
   await assert.rejects(
@@ -547,7 +567,7 @@ try {
   progress('passed real Ubuntu first boot and restart; provider remains simulated');
   await vm(['/bin/sh', '-c', 'test ! -e /usr/lib/agent-cloud/image-build.json']);
   const leaf = new X509Certificate(
-    await vm(['cat', '/var/lib/agent-cloud/certificates/guest.crt']),
+    await vm(['cat', '/var/lib/agent-cloud/certificates/current/guest.crt']),
   );
   process.stdout.write(
     JSON.stringify({

@@ -1,0 +1,33 @@
+# Guest certificate renewal
+
+Implemented and locally verified; customer runtime activation remains disabled. Existing guest SSH/TLS certificates last one hour. Renewal must preserve the original allocation keys, survive a lost response or expired certificate, and stop when ownership is retired. Image verifiers remain short-lived and do not renew.
+
+The customer guest sends `/guest/renew` a versioned allocation ID and timestamp signed with its original P-256 TLS key. The signed bytes are a fixed JSON array with a renewal-only domain. The server accepts at most five minutes of age and thirty seconds of future skew using database time. It verifies against the public key in the originally issued identity. An expired certificate is only a stored key here; it does not authenticate a TLS session. [Node crypto](https://nodejs.org/api/crypto.html#cryptosignalgorithm-data-key-callback) supplies SHA-256 ECDSA signatures with fixed IEEE-P1363 encoding.
+
+The machine lock serializes renewal with provider lifecycle effects. The server requires active allocation ownership, a consumed bootstrap with an issued identity, matching pinned CA trust and the recorded VM/IP at their current provider address. Before fresh signing, an SSH identity probe pins the original host key and verifies the original CSR/image. The guest cannot request a different key, CSR, hostname or allocation. Retiring ownership during external calls prevents certificate publication.
+
+Renewal attempts persist before any signing, including the probe credential. Each attempt may issue one probe, host certificate and TLS certificate. A failed or lost result consumes a slot; only four attempts per rolling hour are allowed, with thirty seconds between attempts. A new request reuses the latest identity until thirty minutes after issuance. A replay cannot extend identity or cause unbounded signing. Bootstrap signing limits remain separate. Completed renewal evidence is append-only.
+
+The guest installs a validated complete certificate generation and atomically switches its current pointer. A systemd timer retries independently of first boot. Failed reloads retry activation from the saved generation. Expired credentials can recover through the same signature and pinned-key proof, provided the VM, keys, SQL and original CA material survive. This does not recover lost/compromised keys or a replaced CA; those need explicit operator intervention and re-establishment of identity.
+
+## Publication, retries and installed units
+
+New images store complete certificate generations under `/var/lib/agent-cloud/certificates/<identity-sha256>`. Only the root-owned relative `current` symlink selects a generation. The guest validates both certificates and matching original keys before publishing the directory, then renames the pointer and syncs its parent. A crash exposes either complete generation. Replays compare existing bytes; older issuance or a different bundle with the same timestamp is refused. Pruning follows successful activation and retains current plus one predecessor. Owned interrupted staging directories are removed only after checking every file; links and unexpected entries fail explicitly.
+
+Renewal reloads OpenSSH and the existing Caddy configuration. It does not rewrite routes. Caddy's [`reload --force`](https://caddyserver.com/docs/command-line#caddy-reload) reloads manually supplied certificate files even when the JSON configuration is unchanged. The activation marker is written only after both reloads succeed. Failure leaves the selected generation available for a local activation retry without another signing request.
+
+`agent-cloud-renew.timer` checks one minute after boot and every five minutes with up to thirty seconds of jitter. The calendar schedule retries even if first boot has not finished at the first trigger. The service requires installed identity and absent bootstrap; it shares the guest wrapper lock with enrollment and sanitation. A successful first boot erases bootstrap data independently. Image verifier subjects return `not_required`. The [systemd timer reference](https://raw.githubusercontent.com/systemd/systemd/v255/man/systemd.timer.xml) documents calendar, boot and randomized timers.
+
+The public input verifier accepts the exact historical enrollment-only inventory and the complete new renewal inventory. It rejects partial renewal units. Historical images keep their original digest and signed audit identity; customer runtime activation must select a release containing renewal support. There is no deployed customer guest to migrate at this checkpoint.
+
+## Operator recovery
+
+For an intact guest whose certificates expired during a control-plane outage, restore the same control database, provider project and original CA trust/material. Restore clock synchronization and control HTTPS connectivity. The timer retries signed renewal using its preserved keys, independently of certificate expiry. Operators with already authorized guest root access can run `guestctl renew --json` or start `agent-cloud-renew.service`; success does not require a surviving bootstrap token. The service journal, `certificate-activation.json` and immutable SQL renewal attempts distinguish a signing failure from a reload failure. Four unknown attempts in an hour require waiting for the rolling allowance, not deleting journal rows.
+
+A missing private guest key, lost control database, compromised identity or substituted CA is outside automatic renewal recovery. Do not replace identity by editing the journal. Recovery tooling for those incidents, customer runtime activation and the remaining deployment milestones are still unfinished.
+
+## Verification
+
+Full check77578 passed368tests/34files, typecheck and lint. Focused36056 passed48cases/3files before the final staging case. Native3342 passed actual Smallstep issuance, signed renewal, pinned SSH, lost-response replay, atomic installation, activation retry and native SSH/TLS validation after the reload-only change. Its fixture advances original issuance metadata in an isolated database and guest generation; it does not wait for real expiry. The request verifier separately accepts the registered key after certificate expiry at its authorization clock.
+
+Local Ubuntu smoke68924 passed installed timer/real service reload, identity and runtime checks, bootstrap erasure, reboot and complete cleanup. Both native smokes use fixture provider observations. Migration0017 is applied and all18hashes match. The gpt-5.6-sol review found no remaining material code blocker after fixing stale staging cleanup. Evidence is in `../research/m1-guest-renewal-verification.json`.

@@ -18,6 +18,7 @@ import {
   projectInputSchema,
   grantInputSchema,
   guestEnrollmentInputSchema,
+  guestRenewalInputSchema,
   imageVerifierEnrollmentInputSchema,
   newId,
   type Principal,
@@ -37,6 +38,7 @@ import { authenticate, authorize, issueGrant, loadPrincipal, revokeGrant } from 
 import { admit, lockAccount } from './lifecycle.js';
 import type { ImageReleaseSelection } from './allocation-image.js';
 import type { Config } from './config.js';
+import type { GuestRenewalService } from './guest-renewal.js';
 import type { EnrollmentService } from './guest-enrollment.js';
 import type { ImageVerifierEnrollment } from './image-verifier-enrollment.js';
 
@@ -46,6 +48,7 @@ export function createApp(input: {
   catalog: CatalogSource;
   limits: Config['limits'];
   enrollment?: EnrollmentService;
+  renewal?: GuestRenewalService;
   imageEnrollment?: ImageVerifierEnrollment;
   imageRelease?: ImageReleaseSelection;
   customerAccess?: 'enabled' | 'disabled';
@@ -104,6 +107,11 @@ export function createApp(input: {
       c.json(
         await enrollment.enroll(guestEnrollmentInputSchema.parse(await c.req.json<unknown>())),
       ),
+    );
+  const renewal = input.renewal;
+  if (renewal)
+    app.post('/guest/renew', async (c) =>
+      c.json(await renewal.renew(guestRenewalInputSchema.parse(await c.req.json<unknown>()))),
     );
   const imageEnrollment = input.imageEnrollment;
   if (imageEnrollment)

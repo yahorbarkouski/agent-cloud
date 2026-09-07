@@ -16,11 +16,15 @@ import {
   guestIdentities,
   operations,
   guestSigningAttempts,
+  guestCertificateRenewals,
 } from '../packages/db/src/index.js';
 import { createSigner, guestName, probePrincipal } from '../packages/pki/dist/index.js';
-import { enrollGuest, ensureIdentity } from '../packages/guestctl/dist/index.js';
+import { enrollGuest, ensureIdentity, renewGuest } from '../packages/guestctl/dist/index.js';
 import { createGuestProbe } from '../packages/remote/dist/index.js';
 import { createApp } from '../apps/control/src/app.js';
+import { createGuestRenewalService } from '../apps/control/src/guest-renewal.js';
+import { ageRenewalFixture } from './support/renewal-fixture.js';
+import { currentCertificates } from '../packages/guestctl/src/certificates.js';
 import { createEnrollmentService } from '../apps/control/src/guest-enrollment.js';
 import { readPrivateFile } from '../apps/control/src/private-file.js';
 import { testDatabase } from '../tests/database.js';
@@ -105,6 +109,12 @@ try {
       limits,
       catalog,
       enrollment,
+      renewal: createGuestRenewalService({
+        connection: database.connection,
+        signer,
+        probe,
+        provider,
+      }),
     });
     const proposal = {
       bootstrap: { version: 1, allocationId },
@@ -144,7 +154,7 @@ try {
       },
       activate: async () => {
         await copyFile(
-          join(configuration.state, 'certificates', 'host-cert.pub'),
+          join(configuration.state, 'certificates', 'current', 'host-cert.pub'),
           join(fixture, 'host_key-cert.pub'),
         );
         await installHostCertificate();
@@ -172,9 +182,12 @@ try {
       system,
       transport: () => Promise.reject(new Error('Unexpected enrollment retry.')),
     });
-    const identity = issuedGuestIdentitySchema.parse(
+    let identity = issuedGuestIdentitySchema.parse(
       JSON.parse(
-        await readFile(join(configuration.state, 'certificates', 'identity.json'), 'utf8'),
+        await readFile(
+          join(configuration.state, 'certificates', 'current', 'identity.json'),
+          'utf8',
+        ),
       ),
     );
     assert.deepEqual(await (await post(proposal)).json(), identity);
@@ -187,6 +200,56 @@ try {
       (await db.select().from(operations).where(eq(operations.id, operation.id)))[0]?.progress,
       { kind: 'waiting_guest', stage: 'runtime', serverId: allocation.serverId },
     );
+    // Advance issuance metadata only in this isolated fixture; real CA validity stays unchanged.
+    await ageRenewalFixture({ connection: database.connection, configuration, allocationId });
+    let loseRenewalResponse = true;
+    const renewalTransport: typeof fetch = async (url, init) => {
+      const response = await app.request(new Request(url, init));
+      if (response.ok && loseRenewalResponse) {
+        loseRenewalResponse = false;
+        throw new Error('Lost renewal response.');
+      }
+      return response;
+    };
+    await assert.rejects(
+      renewGuest({
+        configuration,
+        system: { reloadIdentity: system.activate },
+        transport: renewalTransport,
+      }),
+      /Lost renewal response/,
+    );
+    let rejectActivation = true;
+    const renewalSystem = {
+      reloadIdentity: async () => {
+        if (rejectActivation) {
+          rejectActivation = false;
+          throw new Error('Interrupted certificate activation.');
+        }
+        await system.activate();
+      },
+    };
+    await assert.rejects(
+      renewGuest({ configuration, system: renewalSystem, transport: renewalTransport }),
+      /Interrupted certificate activation/,
+    );
+    const noNetwork: typeof fetch = () =>
+      Promise.reject(new Error('Unexpected renewal network request.'));
+    assert.equal(
+      (await renewGuest({ configuration, system: renewalSystem, transport: noNetwork })).kind,
+      'renewed',
+    );
+    assert.equal(
+      (await renewGuest({ configuration, system: renewalSystem, transport: noNetwork })).kind,
+      'current',
+    );
+    assert.equal((await db.select().from(guestCertificateRenewals)).length, 1);
+    const renewed = await currentCertificates(configuration);
+    assert.ok(renewed);
+    assert.notEqual(renewed.identity.sshHostCertificate, identity.sshHostCertificate);
+    assert.notEqual(renewed.identity.tlsCertificate, identity.tlsCertificate);
+    assert.deepEqual(await ensureIdentity(configuration, bootstrap.spec), proof);
+    identity = renewed.identity;
     assert.deepEqual(
       await nativeProbe.readIdentity({
         subject,
@@ -241,6 +304,9 @@ try {
         guestRetry: 'keys survive lost response and bootstrap removal',
         guestActivation: 'local fixture hooks, not systemd',
         replay: 'same certificates without extra enrollment signing',
+        renewal:
+          'signed request, pinned SSH, persisted lost-response replay, atomic generation and activation retry',
+        renewalClock: 'aged issuance metadata in isolated fixture; no wall-clock expiry claim',
         wrongHostKey: 'rejected before key claim',
         issuedHostCertificate: 'verified native SSH connection',
         issuedTlsCertificate: 'verified native TLS connection',

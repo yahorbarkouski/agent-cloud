@@ -65,7 +65,7 @@ chmod 0644 /usr/lib/agent-cloud/ssh_user_ca.pub /usr/lib/agent-cloud/root_ca.crt
 cat > /usr/local/bin/guestctl <<'COMMAND'
 #!/bin/sh
 case "${1:-}" in
-  enroll|prepare-image) exec /usr/bin/flock --nonblock /run/agent-cloud-guest.lock /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@" ;;
+  enroll|renew|prepare-image) exec /usr/bin/flock --nonblock /run/agent-cloud-guest.lock /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@" ;;
 esac
 exec /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@"
 COMMAND
@@ -74,13 +74,13 @@ if ! id agent-probe >/dev/null 2>&1; then useradd --system --create-home --home-
 if ! id agent-proxy >/dev/null 2>&1; then useradd --system --no-create-home --home-dir /var/lib/agent-cloud-proxy --shell /usr/sbin/nologin agent-proxy; fi
 install -m 0440 "$image_input/guest-inspect.sudoers" /etc/sudoers.d/agent-cloud-inspect
 visudo -cf /etc/sudoers.d/agent-cloud-inspect
-install -m 0644 "$image_input"/systemd/*.service /etc/systemd/system/
+install -m 0644 "$image_input"/systemd/*.service "$image_input"/systemd/*.timer /etc/systemd/system/
 install -d -m 0755 /etc/docker
 cat > /etc/docker/daemon.json <<'DOCKER'
 {"log-driver":"local","log-opts":{"max-size":"10m","max-file":"3"},"live-restore":true,"userland-proxy":false}
 DOCKER
 systemctl daemon-reload
-systemctl enable docker.service agent-cloud-enroll.service agent-cloud-proxy.service
+systemctl enable docker.service agent-cloud-enroll.service agent-cloud-proxy.service agent-cloud-renew.timer
 systemctl restart docker.service
 [ "$(/usr/local/bin/node --version)" = "v$(jq -r .components.node "$image_input/image.json")" ]
 [ "$(docker version --format '{{.Server.Version}}')" = "$(jq -r .components.docker "$image_input/image.json")" ]

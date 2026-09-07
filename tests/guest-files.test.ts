@@ -48,3 +48,65 @@ test('atomic state replacement never follows a destination symlink', async () =>
   expect(await readFile(target, 'utf8')).toBe('unchanged');
   expect(await readOwnedFile(destination, 'private')).toBe('new-state');
 });
+
+test('certificate selection is atomic and rejects a dangling or escaping generation pointer', async () => {
+  const { certificateDigest, currentCertificates, selectCertificates } =
+    await import('../packages/guestctl/src/certificates.js');
+  const { issuedGuestIdentitySchema } = await import('../packages/contracts/src/index.js');
+  const { mkdir } = await import('node:fs/promises');
+  const configuration = { state: directory, manifest: '', binary: '', step: '', keygen: '' };
+  const base = join(directory, 'certificates');
+  await mkdir(base, { mode: 0o750 });
+  expect(await currentCertificates(configuration)).toBeNull();
+  const identity = issuedGuestIdentitySchema.parse({
+    kind: 'issued',
+    sshHostPublicKey: 'ssh-ed25519 AAAA',
+    tlsCsr: 'csr',
+    imageVersion: 'test',
+    sshHostCertificate: 'host-cert',
+    tlsCertificate: 'tls-cert',
+    issuedAt: new Date().toISOString(),
+  });
+  const generation = certificateDigest(identity);
+  await mkdir(join(base, generation), { mode: 0o755 });
+  await atomicWrite(join(base, generation, 'identity.json'), JSON.stringify(identity), 0o600);
+  await selectCertificates(configuration, generation);
+  expect((await currentCertificates(configuration))?.identity).toEqual(identity);
+  await rm(join(base, generation, 'identity.json'));
+  await expect(currentCertificates(configuration)).rejects.toThrow('missing');
+  await rm(join(base, 'current'));
+  await symlink('../outside', join(base, 'current'));
+  await expect(currentCertificates(configuration)).rejects.toThrow('invalid');
+});
+
+test('pruning removes owned interrupted generation files and refuses symlinked staging', async () => {
+  const { mkdir } = await import('node:fs/promises');
+  const { certificateDigest, currentCertificates, selectCertificates, pruneCertificates } =
+    await import('../packages/guestctl/src/certificates.js');
+  const { issuedGuestIdentitySchema } = await import('../packages/contracts/src/index.js');
+  const configuration = { state: directory, manifest: '', binary: '', step: '', keygen: '' };
+  const base = join(directory, 'certificates');
+  await mkdir(base, { mode: 0o750 });
+  const identity = issuedGuestIdentitySchema.parse({
+    kind: 'issued',
+    sshHostPublicKey: 'ssh-ed25519 AAAA',
+    tlsCsr: 'csr',
+    imageVersion: 'test',
+    sshHostCertificate: 'host-cert',
+    tlsCertificate: 'tls-cert',
+    issuedAt: new Date().toISOString(),
+  });
+  const generation = certificateDigest(identity);
+  await mkdir(join(base, generation), { mode: 0o755 });
+  await atomicWrite(join(base, generation, 'identity.json'), JSON.stringify(identity), 0o600);
+  await selectCertificates(configuration, generation);
+  const staged = join(base, '.generation-ABC123');
+  await mkdir(staged, { mode: 0o700 });
+  await atomicWrite(join(staged, 'guest.crt'), 'partial', 0o644);
+  await pruneCertificates(configuration);
+  await expect(lstat(staged)).rejects.toMatchObject({ code: 'ENOENT' });
+  expect((await currentCertificates(configuration))?.generation).toBe(generation);
+  await symlink(directory, staged);
+  await expect(pruneCertificates(configuration)).rejects.toThrow('unsafe');
+  expect(await lstat(directory)).toBeDefined();
+});

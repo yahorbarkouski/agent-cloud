@@ -93,6 +93,12 @@ The image smoke sanitizes a separate disposable builder, checks refusal of alloc
 
 The builder smoke installs through the actual pinned SSH and SFTP transport. It checks rejection of changed uploaded code, concurrent installation requests, receipt recovery, removal of builder access and two fresh clone identities. It shares the builder/guest ownership records above and keeps private fixture access under `.local/image-builder-access/<builderId>`. On failure, remove that exact access directory only after deleting the recorded VMs. Both boot fixtures validate cloud-init's schema; local network and disk settings do not test Hetzner behavior. The builder smoke now continues through signed publication after deleting its actual temporary VMs, verifies the retained protocol snapshot, then cancels and cleans that snapshot too. It creates no paid resource.
 
+## Guest certificate renewal
+
+The guest library and configured `/guest/renew` endpoint renew SSH/TLS certificates while preserving the original VM keys. Signed requests, current provider ownership and pinned SSH proof authorize new issuance. Durable attempt limits survive restarts; a lost response reuses the saved result. A systemd timer retries certificate installation and reload without changing proxy routes. Operators with authorized root access can run `guestctl renew --json` after an outage. See [renewal and recovery](docs/architecture/guest-renewal.md).
+
+The native enrollment smoke covers renewal with actual Smallstep, SSH and TLS. It advances issuance metadata only inside an isolated fixture to avoid a thirty-minute wait. The local Ubuntu smoke separately exercises the installed timer and real service reload. These checks do not enable customer Hetzner mode or prove renewal on a deployed customer VM.
+
 ## Operator image builds
 
 After `pnpm db:migrate`, operators can inspect and cancel a recorded image build without provider credentials:

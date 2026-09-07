@@ -1,0 +1,110 @@
+{
+  "date": "2026-09-07",
+  "status": "verified_locally",
+  "previousCommit": "e0dc4b0",
+  "fullCheck": {
+    "session": 77578,
+    "exitCode": 0,
+    "tests": 368,
+    "files": 34,
+    "durationSeconds": 92.88,
+    "typecheck": "passed",
+    "lint": "passed",
+    "log": ".local/renewal-final-check.log"
+  },
+  "focused": {
+    "session": 36056,
+    "tests": 48,
+    "files": 3,
+    "log": ".local/renewal-focused.log",
+    "scope": "before final staging test; final full suite covers it"
+  },
+  "nativeEnrollment": {
+    "session": 3342,
+    "exitCode": 0,
+    "log": ".local/renewal-native-final.log",
+    "checks": [
+      "real Smallstep SSH/TLS issuance",
+      "original-key signed renewal",
+      "pinned SSH provider-address proof",
+      "persisted response after network loss",
+      "atomic certificate generation",
+      "activation retry without new signing",
+      "unchanged guest keys",
+      "actual SSH and TLS certificate verification",
+      "fixture cleanup"
+    ],
+    "clockLimit": "Original issuance metadata aged in an isolated DB and guest generation; actual CA validity and signing unchanged. Not elapsed wall-clock expiry."
+  },
+  "nativeGuest": {
+    "session": 68924,
+    "exitCode": 0,
+    "log": ".local/renewal-native-guest.log",
+    "image": {
+      "manifestDigest": "212a16f8a29089b2ed0a18c9f9bb91e188411c729f566efcea71d59dadb15424"
+    },
+    "checks": [
+      "installed renewal timer enabled and active",
+      "actual SSH/Caddy service reload success",
+      "proxy configuration and health preserved",
+      "first boot and bootstrap erasure",
+      "restricted inspection and unhealthy runtime refusal",
+      "reboot readiness",
+      "complete owned VM cleanup"
+    ],
+    "machineId": "9d3abbf1eb5d40bf8f353604cb830b7d",
+    "allocationId": "alloc_c4857c0e-4a80-4997-85ac-fed798c0633f",
+    "tokenScan": {
+      "files": 126,
+      "bytes": 577831,
+      "matches": []
+    }
+  },
+  "migration": {
+    "applied": 18,
+    "matches": true,
+    "latest": {
+      "name": "0017_guest_certificate_renewals",
+      "hash": "f2039f86b6843aef9a1141fa6d79a56ae2d26dae54403edfcfed254c0a102e56",
+      "matches": true
+    }
+  },
+  "review": "m1-guest-renewal-review.md",
+  "earlierRuns": [
+    {
+      "session": 82526,
+      "result": "passed before reload-only signature change",
+      "log": ".local/renewal-native-enrollment.log"
+    },
+    {
+      "session": 41735,
+      "result": "355 tests passed, 10 skipped because native OpenSSL rejected negative days in fixture setup. Replaced with explicit authorization-clock expiry test."
+    }
+  ],
+  "limits": [
+    "Provider observations in native smokes remain fixtures",
+    "No cloud resources created during renewal work",
+    "Customer Hetzner runtime remains disabled",
+    "Loss or compromise of keys, replaced CA and control-plane disaster recovery remain separate work"
+  ],
+  "localCli": {
+    "session": 29835,
+    "exitCode": 0,
+    "log": ".local/renewal-local-smoke.log",
+    "machineId": "vm_c4419afa-a8a9-48aa-83f3-ec5d5365ee4a",
+    "checks": [
+      "CLI",
+      "HTTP API",
+      "PostgreSQL",
+      "Graphile worker",
+      "create",
+      "inspect",
+      "destroy",
+      "cleanup"
+    ]
+  },
+  "formatting": {
+    "result": "passed",
+    "log": ".local/renewal-format-final.log"
+  }
+}

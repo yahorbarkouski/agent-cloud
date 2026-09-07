@@ -1,5 +1,5 @@
 import { createHash, createPrivateKey, createPublicKey, X509Certificate } from 'node:crypto';
-import { lstat, mkdtemp, open, rename, rm } from 'node:fs/promises';
+import { chmod, lstat, mkdtemp, open, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   guestBootFileSchema,
@@ -22,6 +22,7 @@ import {
   syncDirectory,
 } from './files.js';
 import { runTool } from './tools.js';
+import { certificateDigest, currentCertificates, selectCertificates } from './certificates.js';
 
 export type GuestConfiguration = {
   state: string;
@@ -184,43 +185,47 @@ export async function installIdentity(
     identity.imageVersion !== proof.imageVersion
   )
     throw new Error('Enrollment returned a different guest identity.');
-  const destination = join(configuration.state, 'certificates');
-  let installed = false;
-  try {
-    await lstat(destination);
-    installed = true;
-  } catch (error) {
-    if (!isMissing(error)) throw error;
-  }
-  if (installed) {
-    const stored = issuedGuestIdentitySchema.parse(
-      JSON.parse(await readOwnedFile(join(destination, 'identity.json'), 'private')),
-    );
-    if (
-      JSON.stringify(stored) !== JSON.stringify(identity) ||
-      (await readOwnedFile(join(destination, 'host-cert.pub'), 'public')).trim() !==
-        identity.sshHostCertificate.trim() ||
-      (await readOwnedFile(join(destination, 'guest.crt'), 'public')) !== identity.tlsCertificate ||
-      (await readOwnedFile(join(destination, 'root.crt'), 'public')) !== spec.image.tlsRoot
-    )
-      throw new Error('Installed guest certificate files disagree.');
-    await validateCertificates(configuration, proof, spec, identity, destination);
-    return identity;
-  }
-  const temporary = await mkdtemp(join(configuration.state, '.certificates-'));
+  const base = join(configuration.state, 'certificates');
+  const stored = await currentCertificates(configuration);
+  if (
+    stored &&
+    JSON.stringify(stored.identity) !== JSON.stringify(identity) &&
+    Date.parse(identity.issuedAt) <= Date.parse(stored.identity.issuedAt)
+  )
+    throw new Error('Certificate renewal must advance the installed identity.');
+  await ensureDirectory(base, 0o750);
+  const generation = certificateDigest(identity);
+  const destination = join(base, generation);
+  const temporary = await mkdtemp(join(base, '.generation-'));
   try {
     await atomicWrite(join(temporary, 'host-cert.pub'), identity.sshHostCertificate + '\n', 0o644);
     await atomicWrite(join(temporary, 'guest.crt'), identity.tlsCertificate, 0o644);
     await atomicWrite(join(temporary, 'root.crt'), spec.image.tlsRoot, 0o644);
     await validateCertificates(configuration, proof, spec, identity, temporary);
     await atomicWrite(join(temporary, 'identity.json'), JSON.stringify(identity) + '\n', 0o600);
+    await chmod(temporary, 0o755);
     try {
       await rename(temporary, destination);
     } catch (error) {
       if (!isExisting(error)) throw error;
-      return await installIdentity(configuration, spec, proof, identity);
+      const stat = await lstat(destination);
+      if (!stat.isDirectory() || stat.uid !== process.getuid?.() || stat.mode & 0o022)
+        throw new Error('Existing certificate generation is unsafe.', { cause: error });
+      for (const name of ['host-cert.pub', 'guest.crt', 'root.crt', 'identity.json'])
+        if (
+          (await readOwnedFile(
+            join(destination, name),
+            name === 'identity.json' ? 'private' : 'public',
+          )) !==
+          (await readOwnedFile(
+            join(temporary, name),
+            name === 'identity.json' ? 'private' : 'public',
+          ))
+        )
+          throw new Error('Existing certificate generation disagrees.', { cause: error });
     }
-    await syncDirectory(configuration.state);
+    await syncDirectory(base);
+    await selectCertificates(configuration, generation);
     return identity;
   } finally {
     await rm(temporary, { recursive: true, force: true });

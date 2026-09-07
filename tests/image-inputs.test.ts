@@ -225,3 +225,21 @@ it('rejects an unlisted extra file before executing the pinned installer', async
     ]),
   ).rejects.toThrow();
 });
+
+it('preserves historical enrollment-only image identity and rejects a partial renewal unit set', () => {
+  const fixture = imageFixture();
+  const inputs = {
+    ...fixture.inputs,
+    files: fixture.inputs.files.filter(
+      (file) => !file.path.startsWith('systemd/agent-cloud-renew.'),
+    ),
+  };
+  const old = createImageManifest({ ...fixture, inputs });
+  expect(old.publicInputsDigest).toBe(digestInputs(inputs));
+  expect(old.version).not.toBe(fixture.manifest.version);
+  const partial = {
+    ...fixture.inputs,
+    files: fixture.inputs.files.filter((file) => file.path !== 'systemd/agent-cloud-renew.timer'),
+  };
+  expect(() => createImageManifest({ ...fixture, inputs: partial })).toThrow('complete input set');
+});

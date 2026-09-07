@@ -12,7 +12,9 @@ import { z } from 'zod';
 import { consumeImageRecord, validateImageBoot } from './image.js';
 
 /** These paths are owned by the installed image, never supplied by a customer request. */
-export function guestSystem(configuration: GuestConfiguration): EnrollmentSystem {
+export function guestSystem(
+  configuration: GuestConfiguration,
+): EnrollmentSystem & { reloadIdentity: () => Promise<void> } {
   const run = (binary: string, args: string[]) => runTool(binary, args, configuration.state);
   return {
     prepareIdentity: (spec) => validateImageBoot(configuration, spec),
@@ -41,7 +43,7 @@ export function guestSystem(configuration: GuestConfiguration): EnrollmentSystem
       await ensureDirectory(join(configuration.state, 'ssh'), 0o755);
       await atomicWrite(
         join(configuration.state, 'ssh', 'certificate.conf'),
-        `HostCertificate ${join(configuration.state, 'certificates', 'host-cert.pub')}\n`,
+        `HostCertificate ${join(configuration.state, 'certificates', 'current', 'host-cert.pub')}\n`,
         0o644,
       );
       await run('/usr/sbin/sshd', ['-t']);
@@ -53,7 +55,7 @@ export function guestSystem(configuration: GuestConfiguration): EnrollmentSystem
             certificates: {
               load_files: [
                 {
-                  certificate: join(configuration.state, 'certificates', 'guest.crt'),
+                  certificate: join(configuration.state, 'certificates', 'current', 'guest.crt'),
                   key: join(configuration.state, 'certificates', 'guest.key'),
                 },
               ],
@@ -89,7 +91,9 @@ export function guestSystem(configuration: GuestConfiguration): EnrollmentSystem
                       mode: 'require_and_verify',
                       ca: {
                         provider: 'file',
-                        pem_files: [join(configuration.state, 'certificates', 'root.crt')],
+                        pem_files: [
+                          join(configuration.state, 'certificates', 'current', 'root.crt'),
+                        ],
                       },
                     },
                   },
@@ -127,6 +131,16 @@ export function guestSystem(configuration: GuestConfiguration): EnrollmentSystem
         join(configuration.state, 'caddy.json'),
       ]);
       await run('/usr/bin/systemctl', ['restart', 'agent-cloud-proxy.service']);
+    },
+    reloadIdentity: async () => {
+      await run('/usr/sbin/sshd', ['-t']);
+      await run('/usr/bin/systemctl', ['reload', 'ssh.service']);
+      await run('/usr/local/bin/caddy', [
+        'reload',
+        '--config',
+        join(configuration.state, 'caddy.json'),
+        '--force',
+      ]);
     },
     eraseBootstrap: async () => {
       // Runs after cloud-final.service: it must not rewrite user data after erasure.

@@ -8,6 +8,7 @@ import {
   jsonb,
   unique,
   uniqueIndex,
+  index,
   foreignKey,
   check,
 } from 'drizzle-orm/pg-core';
@@ -461,6 +462,24 @@ export const guestSigningAttempts = pgTable(
       'guest_signing_attempt_budget',
       sql`(${t.purpose} = 'probe' AND ${t.sequence} BETWEEN 1 AND 12) OR (${t.purpose} = 'identity' AND ${t.sequence} BETWEEN 1 AND 4)`,
     ),
+  ],
+);
+
+export const guestCertificateRenewals = pgTable(
+  'guest_certificate_renewals',
+  {
+    id: text('id').primaryKey(),
+    accountId: text('account_id').notNull(),
+    allocationId: text('allocation_id').notNull(),
+    identity: jsonb('identity'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('guest_renewal_allocation_time').on(t.allocationId, t.createdAt.desc()),
+    foreignKey({
+      columns: [t.accountId, t.allocationId],
+      foreignColumns: [guestBootstraps.accountId, guestBootstraps.allocationId],
+    }),
   ],
 );
 

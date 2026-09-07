@@ -1,6 +1,16 @@
 # Implementation progress
 
-## Current runtime checkpoint
+## Current renewal checkpoint
+
+- [x] Implement customer `/guest/renew` with original-key signed requests, database-time freshness, active ownership and pinned SSH proof. Persist signing attempts and enforce four per rolling hour with a thirty-second cooldown. Preserve initial enrollment evidence.
+- [x] Install complete certificate generations through an atomic pointer, reject rollback, retry service activation and prune validated interrupted staging. Reload existing SSH/Caddy configuration. Install a persistent five-minute renewal timer.
+- [x] Pass 368 tests in34files, typecheck/lint, focused crypto/SQL/input checks and actual Smallstep/OpenSSH/TLS renewal with lost-response and activation retry. Native Ubuntu smoke68924 passed timer/service reload, first boot, health, reboot and cleanup. Fixture-aged issuance accelerates the native schedule; it is not a wall-clock expiry or live-provider claim.
+- [x] Apply immutable migration0017 and verify all18 hashes. Restarted CLI/API/worker smoke29835 passed create/inspect/destroy/cleanup; SQL confirms zero active allocations, unfinished image builds and simulator resources. Formatting passed. [Verification](research/m1-guest-renewal-verification.json) and [review](research/m1-guest-renewal-review.md).
+- [ ] Wire mandatory renewal-capable release selection and renewal ports into customer runtime; complete remaining operator recovery, customer access and deployment milestones.
+
+See [renewal design](architecture/guest-renewal.md). The full goal remains active.
+
+## Previous image runtime checkpoint
 
 - [x] Connect the actual Hetzner image transport, signer, SSH/SFTP, bootstrap renderer, verifier enrollment/readiness and publication to an explicit image-factory runtime.
 - [x] Keep customer API endpoints and customer jobs unavailable in image-factory mode; startup/admission cannot create capacity.
@@ -14,7 +24,7 @@
 - [x] Verify the durability correction locally: flush the root filesystem before returning sanitation evidence, stop the random-seed writer before removal, request graceful shutdown, and require observed off before snapshot creation. Final352 tests/33files, typecheck/lint and two native clones passed, including injected flush failure/retry, seed lifecycle, independent identities, health/reboot checks and cleanup. The OrbStack virtualization fixture is explicit. See [durability verification](research/m1-snapshot-durability-verification.json) and [review](research/m1-snapshot-durability-review.md).
 - [x] Complete a fresh bounded Hetzner drill through verified retained publication and signed selection, then cancel and clean it. Build `de7d3f33-0f3e-4512-afc6-d163b1cd7359` used CPX12 in nbg1, with $0.12 VM/IP and $1 monthly snapshot admission caps. Graceful shutdown, fresh verifier enrollment and every runtime check passed. All seven resources and local access were removed; independent inventory was zero at 10:37:06Z. Cleanup replay passed and selection now rejects the deleted snapshot. These are caps, not invoiced costs. See [successful drill evidence](research/m1-hetzner-durability-drill.json) and [historical signed release](research/m1-hetzner-durability-release.json).
 - [x] Verify exact implementation commit `7bb3497677fb68867f7ba5cf5682a608a1d94814` in [Linux CI 34111421868](https://github.com/yahorbarkouski/agent-cloud/actions/runs/34111421868), including 352 tests, typecheck/lint, formatting, fresh PKI, native smokes and cleanup.
-- [ ] Finish customer certificate renewal/recovery and mandatory release selection in the customer runtime. No deployable snapshot is retained.
+- [ ] Finish customer runtime wiring with the implemented renewal service, mandatory release selection and remaining operator recovery. No deployable snapshot is retained.
 
 The runtime design, commands, private-material restart policy and recovery instructions are in [operator runtime](architecture/operator-runtime.md). The product milestones below remain authoritative; this checkpoint does not complete M1 or customer deployment.
 

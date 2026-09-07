@@ -4,6 +4,7 @@ import {
   imageArtifactsSchema,
   imageInputsSchema,
   imageSourcePaths,
+  enrollmentImageSourcePaths,
   type GuestManifest,
   type ImageArtifacts,
   type ImageInputs,
@@ -16,9 +17,9 @@ export function imageArtifacts(pins: ImageArtifacts) {
   return artifacts;
 }
 
-export function inputPaths(pins: ImageArtifacts) {
+export function inputPaths(pins: ImageArtifacts, sources: string[] = imageSourcePaths) {
   return [
-    ...imageSourcePaths,
+    ...sources,
     ...imageArtifacts(pins).map((item) => `artifacts/${item.file}`),
     'artifacts.json',
     'trust.json',
@@ -48,7 +49,11 @@ export function createImageManifest({
   pins: ImageArtifacts;
   trust: GuestManifest['trust'];
 }) {
-  if (JSON.stringify(inputs.files.map((file) => file.path)) !== JSON.stringify(inputPaths(pins)))
+  const paths = JSON.stringify(inputs.files.map((file) => file.path));
+  if (
+    paths !== JSON.stringify(inputPaths(pins)) &&
+    paths !== JSON.stringify(inputPaths(pins, enrollmentImageSourcePaths))
+  )
     throw new Error('Image inventory does not cover the complete input set.');
   for (const artifact of imageArtifacts(pins)) {
     if (

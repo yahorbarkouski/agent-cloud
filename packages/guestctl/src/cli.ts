@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { guestBootProofSchema } from '@agent-cloud/contracts';
+import { renewGuest } from './renewal.js';
 import { enrollGuest } from './enrollment.js';
 import { readOwnedFile } from './files.js';
 import { guestSystem } from './system.js';
@@ -27,7 +28,7 @@ try {
   if (
     format !== '--json' ||
     extra.length ||
-    !['identity', 'enroll', 'inspect', 'prepare-image'].includes(command ?? '')
+    !['identity', 'enroll', 'renew', 'inspect', 'prepare-image'].includes(command ?? '')
   )
     throw new Error('Unsupported guest command.');
   if (command === 'identity') {
@@ -40,9 +41,11 @@ try {
     const result =
       command === 'prepare-image'
         ? await prepareImage(configuration)
-        : command === 'inspect'
-          ? await inspectRuntime(configuration)
-          : await enrollGuest({ configuration, system: guestSystem(configuration) });
+        : command === 'renew'
+          ? await renewGuest({ configuration, system: guestSystem(configuration) })
+          : command === 'inspect'
+            ? await inspectRuntime(configuration)
+            : await enrollGuest({ configuration, system: guestSystem(configuration) });
     process.stdout.write(JSON.stringify(result) + '\n');
   }
 } catch {

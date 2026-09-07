@@ -120,6 +120,13 @@
       "when": 1788768128885,
       "tag": "0016_allocation_images_and_image_work",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1788778051991,
+      "tag": "0017_guest_certificate_renewals",
+      "breakpoints": true
     }
   ]
 }

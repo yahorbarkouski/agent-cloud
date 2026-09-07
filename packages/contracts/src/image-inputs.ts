@@ -58,10 +58,16 @@ export const imageArtifactsSchema = z.strictObject({
 });
 export type ImageArtifacts = z.infer<typeof imageArtifactsSchema>;
 
-export const imageSourcePaths = [
+export const enrollmentImageSourcePaths = [
   'install.sh',
   'sshd_config',
   'guest-inspect.sudoers',
   'systemd/agent-cloud-enroll.service',
   'systemd/agent-cloud-proxy.service',
+];
+
+export const imageSourcePaths = [
+  ...enrollmentImageSourcePaths,
+  'systemd/agent-cloud-renew.service',
+  'systemd/agent-cloud-renew.timer',
 ];

@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { currentCertificates, pruneCertificates } from './certificates.js';
 import {
   guestBootSpecSchema,
   issuedGuestIdentitySchema,
@@ -6,7 +7,7 @@ import {
   type GuestBootProof,
   type IssuedGuestIdentity,
 } from '@agent-cloud/contracts';
-import { atomicWrite, isMissing, readOwnedFile } from './files.js';
+import { atomicWrite, readOwnedFile } from './files.js';
 import {
   ensureIdentity,
   installIdentity,
@@ -26,7 +27,7 @@ export type EnrollmentSystem = {
   eraseBootstrap: () => Promise<void>;
 };
 
-async function responseIdentity(response: Response) {
+export async function responseIdentity(response: Response) {
   if (!response.ok) throw new Error('Control plane did not accept guest enrollment.');
   if (!response.body) throw new Error('Enrollment response has no body.');
   const reader = response.body.getReader();
@@ -58,16 +59,7 @@ export async function enrollGuest(input: {
       JSON.stringify({ phase: value, attemptedAt: new Date().toISOString() }) + '\n',
       0o644,
     );
-  let installed: IssuedGuestIdentity | null = null;
-  try {
-    installed = issuedGuestIdentitySchema.parse(
-      JSON.parse(
-        await readOwnedFile(join(configuration.state, 'certificates', 'identity.json'), 'private'),
-      ),
-    );
-  } catch (error) {
-    if (!isMissing(error)) throw error;
-  }
+  const installed = (await currentCertificates(configuration))?.identity;
   if (installed) {
     const spec = guestBootSpecSchema.parse(
       JSON.parse(await readOwnedFile(join(configuration.state, 'guest.json'), 'public')),
@@ -122,6 +114,7 @@ export async function enrollGuest(input: {
     await phase('activate');
     await system.activate({ proof, spec: bootstrap.spec, identity });
   }
+  await pruneCertificates(configuration);
   await phase('cleanup');
   await system.eraseBootstrap();
   await phase('enrolled');

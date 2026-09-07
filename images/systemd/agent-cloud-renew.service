@@ -1,0 +1,17 @@
+[Unit]
+Description=Renew this Agent Cloud guest identity
+After=agent-cloud-enroll.service network-online.target
+Wants=network-online.target
+ConditionPathExists=/var/lib/agent-cloud/certificates/current/identity.json
+ConditionPathExists=!/var/lib/agent-cloud/bootstrap.json
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+UMask=0077
+Environment=NODE_EXTRA_CA_CERTS=/usr/lib/agent-cloud/root_ca.crt
+ExecStart=/usr/local/bin/guestctl renew --json
+TimeoutStartSec=180
+StandardOutput=journal
+StandardError=journal
