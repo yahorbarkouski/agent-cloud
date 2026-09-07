@@ -1,0 +1,33 @@
+# M1 image/access transport review
+
+## Scope and result
+
+Read-only review against HEAD `68ee6d3802a3c52c70dc1eaad5d1dd08740ae557` of the new Hetzner image/access transport, provider contracts, image journal/policy/cleanup changes, migration 0011, transport and SQL tests, and the final two decision rows. I did not edit implementation, run paid/provider mutations, or inspect guest sources. No active-workspace transcript directory was supplied, so this is an artifact and decision-trail review rather than a transcript audit.
+
+**Result: no remaining code blocker in this checkpoint.** The effect-bound ownership defect found in the first review was corrected across provider discovery, observation, dependency/deletion policy, SQL and tests. The concrete HTTP shapes, authoritative-absence handling, exact-action association, no-create-retry rule, immutable receipts, exact-ID stop/delete retry, unavailable-snapshot decoding, and base-image admission checks are coherent with the saved official OpenAPI and the stated checkpoint scope.
+
+## Resolved finding
+
+### [Fixed] Create reconciliation is bound to its persisted effect UUID
+
+The first review found that `packages/hetzner/src/image-release.ts` attached `effect_id` to creates while recovery validated only build/role labels. The fix centralizes the full label set in `imageEffectLabels`, derived from build ID, role and persisted effect UUID. Transport submission and reconciliation use that exact set; `observeImageResource`, `imageCreateMatches`, fresh dependency checks and deletion policy independently require it. A sole resource with a missing or different effect label remains unverified and cannot be confirmed or deleted.
+
+Follow-up migration `0012_image_effect_labels.sql` adds the same invariant to every new `observed` resource-state transition without rewriting applied migration 0011 or historical immutable observations. Its trigger compares the observed provider ID, kind, build, role, effect UUID, scope and manager with the journal row. The new tests cover missing, different and matching labels after an unknown create; accepted receipts with wrong labels retained as unverified without deletion; live label drift rejected by observation, dependency, deletion and SQL boundaries. This closes the reported ownership issue.
+
+## Verified behavior
+
+- `HetznerImageProvider` uses the existing fixed-origin, redirect-refusing, timeout-bounded request layer. It renders boot data before the server POST, caps UTF-8 bytes at the documented 32 KiB, attaches the selected persistent IPv4, one SSH key and one firewall, disables IPv6 and automount, and preserves malformed/network mutation outcomes as unknown.
+- The saved `.local/hetzner-openapi.json` supports the request and response structures used for Primary IP, firewall, server, create-image, action lookup, and deletion. Create-image returns a separate image receipt and an action whose target is the source server. Server deletion returns an action; image and other auxiliary deletion endpoints return 204. The current Primary IP response description announces `unassigned` while its enum still contains `server`, matching the deliberately transitional decoder. An `unassigned` value with a non-null assignee is rejected.
+- Action lookup verifies both exact action ID and resource association. Only `404/not_found` becomes `missing`; other lookup failures propagate. Snapshot creation checks the source server action target. An accepted create whose action record disappears still searches ownership labels and never submits another create.
+- Prepared and unknown stop/delete effects, and accepted stop/delete effects with an authoritatively missing action, first observe the exact owned target. They confirm from desired state or create an identical exact-ID replacement. The old outcome stays immutable and its resolution points one way to the prepared replacement. Running actions and failed lookups do not authorize retry.
+- Migration `0011_image_action_recovery.sql` permits supersession only for `power_off`/`delete`, only from prepared/unknown/accepted outcomes, and only to a distinct prepared, pending, byte-identical replacement in the same build. The existing create prohibition remains. The corresponding protocol and SQL cases cover accepted action states and immutable original receipts.
+- Base-image policy reads the pinned ID before each fresh non-snapshot create and checks system type, availability, architecture, Ubuntu 24.04, disk fit, deprecation and deletion. Snapshot decoding retains `unavailable` resources for ownership and cleanup while successful create matching still requires `available`.
+- Cleanup continues to retain uncertain create reservations, waits only for an actually running accepted create action, observes known resources, and deletes only recorded identities. This checkpoint still exposes no live advancement or retained-release promotion, as the architecture and progress file state.
+
+## Trail audit
+
+The `image-transport` and `image-recovery` decision rows identify the correct implementation/test evidence and preserve the distinction between passing local checks and missing live paid-resource proof. The subsequent `image-ownership` row accurately records the review finding, migration 0012 and the 63-test pre-follow-up result; it truthfully leaves the final check running at that point. `docs/PROGRESS.md` records session `59954` as 225 tests in 22 files plus typecheck and strict lint, and explicitly says formatting was corrected afterward while review, development migration application, and final evidence remained pending. I did not rerun that full session and rely on the supplied result. The architecture accurately limits current claims to transport, journal recovery and read-only provider evidence; it does not claim a live builder, promotion, or paid cleanup drill.
+
+The intended-to-be-committed `docs/research/hetzner-image-transport-read-check-2026-09-07.json` records current catalog, storage price, exact Ubuntu base-image metadata and zero servers, Primary IPs, snapshots, firewalls and SSH keys. Only the full downloaded `.local/hetzner-openapi.json` is ignored. Read check `42001`, base-database migration/hash check `a94117`, and CLI/API/worker smoke `12358` are reported complete with cleanup and no paid resources; these remain read-only/integration evidence rather than a paid mutation drill.
+
+I independently ran `pnpm exec vitest run tests/image-builds.test.ts tests/hetzner-image-transport.test.ts` after the fix: 65 tests in two files passed. The parent reports full 232-test check `85939` running during this review, so this report does not claim its completion.

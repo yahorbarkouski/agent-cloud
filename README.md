@@ -119,7 +119,7 @@ Hetzner catalog reads have been verified against a real account. The API now ref
 
 Create a dedicated project and a read/write token through the Hetzner console. `pnpm setup:hetzner` starts a one-use loopback form for saving that token into ignored `.local/hcloud-token`, mode 0600. Open the returned URL and paste the token there. The listener expires after ten minutes and refuses to overwrite an existing credential. Never put the token in command arguments or a guest.
 
-The following command reads account pricing, capacity, and resource counts without creating resources:
+The following command reads account pricing, capacity, Ubuntu 24.04 base-image metadata and counts of servers, IPs, snapshots, firewalls and SSH keys without creating resources:
 
 ```sh
 PROVIDER_CURRENCY=USD pnpm hetzner:check

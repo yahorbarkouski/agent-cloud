@@ -1,0 +1,63 @@
+{
+  "capturedAt": "2026-09-07T04:23:44.488Z",
+  "scope": "Hetzner image/access HTTP transport and PostgreSQL operator recovery; no paid mutations",
+  "fullCheck": {
+    "command": "pnpm check",
+    "session": "85939",
+    "result": "passed",
+    "tests": 232,
+    "files": 22,
+    "includes": [
+      "typecheck",
+      "strict lint",
+      "all tests"
+    ],
+    "note": "Following format check failed on one method-chain layout; corrected in96280d. Final format verification recorded separately."
+  },
+  "migration": {
+    "checks": [
+      {
+        "file": "0011_image_action_recovery",
+        "hashMatchesApplied": true
+      },
+      {
+        "file": "0012_image_effect_labels",
+        "hashMatchesApplied": true
+      }
+    ],
+    "counts": {
+      "migrations": "13",
+      "open_image_builds": "0",
+      "active_allocations": "0",
+      "simulated_servers": "0",
+      "simulated_primary_ips": "0"
+    }
+  },
+  "localCliSmoke": {
+    "command": "pnpm smoke:local",
+    "session": "12358",
+    "result": "passed",
+    "provider": "simulated",
+    "machineId": "vm_c46d46b0-eaa1-477f-a22f-8f3a4aa07c3d",
+    "cleanup": "completed",
+    "note": "After0011; image-only observation guard0012 subsequently covered in full232-test suite."
+  },
+  "providerReadCheck": {
+    "session": "42001",
+    "file": "docs/research/hetzner-image-transport-read-check-2026-09-07.json",
+    "result": "passed"
+  },
+  "paidResourcesCreated": 0,
+  "proofLimits": [
+    "No Hetzner image/access mutation, initial builder SSH or snapshot boot was exercised.",
+    "Resource and action recovery tests use local HTTP/SQL fixtures.",
+    "Guest source did not change; native guest VM checks were not repeated locally.",
+    "Builder secret/rendering/SSH, platform verifier, promotion and retained-release cleanup remain unfinished.",
+    "Unknown creates can retain reservations after known resources are deleted; an operator deadline cannot force provider cleanup."
+  ],
+  "format": {
+    "command": "pnpm format:check",
+    "session": "73724",
+    "result": "passed"
+  }
+}

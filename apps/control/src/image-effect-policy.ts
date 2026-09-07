@@ -1,6 +1,7 @@
 import {
   CloudError,
   imageBuildLabels,
+  imageEffectLabels,
   imageRoleKind,
   isImageCreate,
   type ImageProvider,
@@ -22,6 +23,25 @@ export async function checkImageCommand(
   provider: ImageProvider,
 ) {
   const { admission } = build;
+  if (isImageCreate(command) && command.kind !== 'create_snapshot') {
+    const base = await provider.getBaseImage(admission.baseImageId);
+    if (
+      !base ||
+      base.id !== admission.baseImageId ||
+      base.type !== 'system' ||
+      base.status !== 'available' ||
+      base.architecture !== admission.offer.architecture ||
+      base.osFlavor !== 'ubuntu' ||
+      base.osVersion !== '24.04' ||
+      base.diskGb > admission.offer.diskGb ||
+      base.deprecated ||
+      base.deleted
+    )
+      throw new CloudError(
+        'provider_unavailable',
+        'The pinned Ubuntu 24.04 base image is unavailable or incompatible.',
+      );
+  }
   const owned = async (role: ImageResourceRole, id: string) => {
     const row = build.resources.find(
       (resource) =>
@@ -45,7 +65,10 @@ export async function checkImageCommand(
       !current ||
       current.id !== row.ref.id ||
       current.kind !== row.ref.kind ||
-      !matchesLabels(current.labels, imageBuildLabels(admission.id, role))
+      !matchesLabels(
+        current.labels,
+        imageEffectLabels({ buildId: admission.id, role, effectId: row.effectId }),
+      )
     )
       throw new CloudError('provider_outcome_unknown', 'Image dependency ownership changed.');
     return current;
@@ -155,7 +178,10 @@ export async function checkImageCommand(
       if (
         current.kind !== row.ref.kind ||
         current.id !== row.ref.id ||
-        !matchesLabels(current.labels, imageBuildLabels(admission.id, row.role))
+        !matchesLabels(
+          current.labels,
+          imageEffectLabels({ buildId: admission.id, role: row.role, effectId: row.effectId }),
+        )
       )
         throw new CloudError(
           'provider_outcome_unknown',

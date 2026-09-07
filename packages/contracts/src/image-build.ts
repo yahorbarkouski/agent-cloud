@@ -46,6 +46,16 @@ export function imageBuildLabels(buildId: ImageBuildId, role: ImageResourceRole)
     role,
   });
 }
+export function imageEffectLabels(input: {
+  buildId: ImageBuildId;
+  role: ImageResourceRole;
+  effectId: string;
+}) {
+  return {
+    ...imageBuildLabels(input.buildId, input.role),
+    effect_id: z.uuid().parse(input.effectId),
+  };
+}
 export function imageRoleKind(role: ImageResourceRole): ImageResourceRef['kind'] {
   switch (role) {
     case 'builder':

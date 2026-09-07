@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import {
   CloudError,
-  imageBuildLabels,
+  imageEffectLabels,
   imageRoleKind,
   isImageCreate,
   imageResourceStateSchema,
@@ -93,7 +93,11 @@ export async function observeImageResource(
     resource.kind !== ref.kind ||
     !matchesLabels(
       resource.labels,
-      imageBuildLabels(build.admission.id, effect.command.labels.role),
+      imageEffectLabels({
+        buildId: build.admission.id,
+        role: effect.command.labels.role,
+        effectId: effect.id,
+      }),
     )
   )
     throw new CloudError(
@@ -115,7 +119,14 @@ export function imageCreateMatches(
   if (
     !isImageCreate(command) ||
     resource.kind !== imageRoleKind(command.labels.role) ||
-    !matchesLabels(resource.labels, command.labels)
+    !matchesLabels(
+      resource.labels,
+      imageEffectLabels({
+        buildId: build.admission.id,
+        role: command.labels.role,
+        effectId: effect.id,
+      }),
+    )
   )
     return false;
   switch (command.kind) {

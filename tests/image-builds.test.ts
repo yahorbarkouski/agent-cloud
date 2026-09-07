@@ -5,11 +5,12 @@ import { join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { eq } from 'drizzle-orm';
-import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import {
   newId,
   imageBuildIdSchema,
   imageBuildLabels,
+  imageEffectLabels,
   type ImageProviderCommand,
 } from '../packages/contracts/dist/index.js';
 import {
@@ -32,6 +33,8 @@ import {
 } from '../apps/control/dist/image-budget.js';
 import { runImageEffect } from '../apps/control/dist/image-effect-journal.js';
 import { planImageCleanup } from '../apps/control/dist/image-cleanup.js';
+import { observeImageResource, imageCreateMatches } from '../apps/control/dist/image-resources.js';
+import { checkImageCommand } from '../apps/control/dist/image-effect-policy.js';
 import { imageBuildFixture, ImageProviderFixture, imagePricing } from './image-build-fixture.js';
 import { testDatabase, seedAccount } from './database.js';
 import { readHetznerImagePrice } from '../packages/hetzner/dist/image-pricing.js';
@@ -283,11 +286,13 @@ it('retains every duplicate create identity and never chooses one as successful'
   await admit();
   provider.mode = 'invisible';
   expect(await run(keyCommand())).toMatchObject({ value: { kind: 'pending' } });
+  const effectId = (await inspect()).effects[0]?.id;
+  if (!effectId) throw new Error('Expected key effect.');
   for (const id of ['100', '101'])
     provider.add({
       kind: 'ssh_key',
       id,
-      labels: imageBuildLabels(fixture.admission.id, 'access_key'),
+      labels: imageEffectLabels({ buildId: fixture.admission.id, role: 'access_key', effectId }),
       publicKey: fixture.admission.access.publicKey,
       fingerprint: id,
     });
@@ -310,6 +315,122 @@ it('retains every duplicate create identity and never chooses one as successful'
       .kind,
   ).toBe('pending');
 });
+
+it.each(['missing', 'other', 'matching'])(
+  'requires the exact effect label after an unknown create, with %s provider labels',
+  async (label) => {
+    await admit();
+    provider.mode = 'invisible';
+    await run(keyCommand());
+    const effect = (await inspect()).effects[0];
+    if (!effect) throw new Error('Expected create effect.');
+    const base = imageBuildLabels(fixture.admission.id, 'access_key');
+    const labels =
+      label === 'missing'
+        ? base
+        : { ...base, effect_id: label === 'matching' ? effect.id : randomUUID() };
+    const resource = {
+      kind: 'ssh_key',
+      id: '800',
+      labels,
+      publicKey: fixture.admission.access.publicKey,
+      fingerprint: 'fixture',
+    } satisfies Parameters<typeof provider.add>[0];
+    provider.add(resource);
+    const find = vi.spyOn(provider, 'find');
+    // A malformed provider result must fail the same ownership check even if it ignores the selector.
+    find.mockResolvedValue([resource]);
+    expect(await run(keyCommand())).toMatchObject({
+      value: { kind: label === 'matching' ? 'confirmed' : 'pending' },
+    });
+    expect(find).toHaveBeenCalledWith({
+      kind: 'ssh_key',
+      labels: { ...base, effect_id: effect.id },
+    });
+    expect((await inspect()).resources).toHaveLength(label === 'matching' ? 1 : 0);
+    expect(provider.submitted).toHaveLength(1);
+  },
+);
+
+it.each(['missing', 'other'])(
+  'retains an accepted receipt with a %s effect label without confirming or deleting it',
+  async (label) => {
+    await admit();
+    const effectId = randomUUID();
+    const command = keyCommand();
+    await database.connection.db.insert(imageBuildEffects).values({
+      id: effectId,
+      buildId: fixture.admission.id,
+      effectKey: 'create:access_key',
+      command,
+    });
+    await database.connection.db
+      .update(imageBuildEffects)
+      .set({
+        outcome: { kind: 'accepted', resource: { kind: 'ssh_key', id: '800' }, actionId: '777' },
+      })
+      .where(eq(imageBuildEffects.id, effectId));
+    provider.action = { kind: 'missing' };
+    const base = imageBuildLabels(fixture.admission.id, 'access_key');
+    provider.add({
+      kind: 'ssh_key',
+      id: '800',
+      labels: label === 'missing' ? base : { ...base, effect_id: randomUUID() },
+      publicKey: fixture.admission.access.publicKey,
+      fingerprint: 'fixture',
+    });
+    expect(await run(command)).toMatchObject({ value: { kind: 'pending' } });
+    expect((await inspect()).resources).toMatchObject([
+      { ref: { kind: 'ssh_key', id: '800' }, state: { kind: 'unverified' } },
+    ]);
+    await expect(cleanup()).rejects.toThrow('ownership');
+    expect(provider.submitted).toEqual([]);
+  },
+);
+
+it.each(['missing', 'other'])(
+  'rejects changed %s effect labels in observations, dependencies, deletion policy and SQL',
+  async (label) => {
+    await admit();
+    await builder();
+    const build = await inspect();
+    const effect = build.effects.find((effect) => effect.command.kind === 'create_server');
+    const resource = provider.resources.get('server:1004');
+    if (!effect || !resource) throw new Error('Expected builder.');
+    const base = imageBuildLabels(fixture.admission.id, 'builder');
+    const changed = {
+      ...resource,
+      labels: label === 'missing' ? base : { ...base, effect_id: randomUUID() },
+    };
+    const ref = { kind: 'server', id: '1004' } satisfies { kind: 'server'; id: string };
+    provider.add(changed);
+    expect(imageCreateMatches(build, effect, changed)).toBe(false);
+    await expect(observeImageResource(database.connection.db, build, ref, changed)).rejects.toThrow(
+      'ownership',
+    );
+    await expect(
+      checkImageCommand(build, { kind: 'delete', resource: ref }, provider),
+    ).rejects.toThrow('ownership');
+    await expect(
+      checkImageCommand(
+        build,
+        {
+          kind: 'create_snapshot',
+          serverId: ref.id,
+          name: 'snapshot',
+          labels: imageBuildLabels(fixture.admission.id, 'snapshot'),
+        },
+        provider,
+      ),
+    ).rejects.toThrow('ownership');
+    await expect(
+      database.connection.db
+        .update(imageBuildResources)
+        .set({ state: { kind: 'observed', resource: changed, at: new Date().toISOString() } })
+        .where(eq(imageBuildResources.providerId, ref.id)),
+    ).rejects.toThrow();
+  },
+);
 
 it.each(['prepared', 'unknown'])(
   'recovers a %s delete with a new exact-ID attempt and immutable original receipt',
@@ -343,6 +464,140 @@ it.each(['prepared', 'unknown'])(
   },
 );
 
+it.each(['present', 'absent', 'running', 'lookup_failed'])(
+  'reconciles an accepted delete with %s state without rewriting its receipt',
+  async (state) => {
+    await admit();
+    await run(keyCommand());
+    const plan = await cleanup();
+    if (plan.kind !== 'acquired' || plan.value.kind !== 'delete')
+      throw new Error('Expected deletion.');
+    const command = plan.value.command;
+    const id = randomUUID();
+    const outcome = { kind: 'accepted', resource: command.resource, actionId: '777' } satisfies {
+      kind: 'accepted';
+      resource: typeof command.resource;
+      actionId: string;
+    };
+    await database.connection.db.insert(imageBuildEffects).values({
+      id,
+      buildId: fixture.admission.id,
+      effectKey: `delete:${command.resource.kind}:${command.resource.id}:1`,
+      command,
+    });
+    await database.connection.db
+      .update(imageBuildEffects)
+      .set({ outcome })
+      .where(eq(imageBuildEffects.id, id));
+    provider.action = { kind: state === 'running' ? 'running' : 'missing' };
+    if (state === 'absent') provider.resources.clear();
+    if (state === 'lookup_failed')
+      vi.spyOn(provider, 'getAction').mockRejectedValue(new Error('Lookup unavailable.'));
+    if (state === 'lookup_failed') await expect(run(command)).rejects.toThrow('Lookup unavailable');
+    else
+      expect(await run(command)).toMatchObject({
+        value: { kind: state === 'running' ? 'pending' : 'confirmed' },
+      });
+    const effects = (await inspect()).effects.filter((effect) => effect.command.kind === 'delete');
+    expect(effects[0]?.outcome).toEqual(outcome);
+    expect(provider.submitted).toHaveLength(state === 'present' ? 2 : 1);
+    expect(effects).toHaveLength(state === 'present' ? 2 : 1);
+    expect(effects[0]?.resolution.kind).toBe(
+      state === 'present' ? 'superseded' : state === 'absent' ? 'confirmed' : 'pending',
+    );
+  },
+);
+
+it.each(['present', 'absent'])(
+  'does not repeat an accepted create after its action disappears and the resource is %s',
+  async (state) => {
+    await admit();
+    const command = keyCommand();
+    const id = randomUUID();
+    await database.connection.db
+      .insert(imageBuildEffects)
+      .values({ id, buildId: fixture.admission.id, effectKey: 'create:access_key', command });
+    await database.connection.db
+      .update(imageBuildEffects)
+      .set({
+        outcome: { kind: 'accepted', resource: { kind: 'ssh_key', id: '800' }, actionId: '777' },
+      })
+      .where(eq(imageBuildEffects.id, id));
+    provider.action = { kind: 'missing' };
+    if (state === 'present')
+      provider.add({
+        kind: 'ssh_key',
+        id: '800',
+        labels: imageEffectLabels({
+          buildId: fixture.admission.id,
+          role: 'access_key',
+          effectId: id,
+        }),
+        publicKey: fixture.admission.access.publicKey,
+        fingerprint: 'fixture',
+      });
+    for (let index = 0; index < 2; index++)
+      expect(await run(command)).toMatchObject({
+        value: { kind: state === 'present' ? 'confirmed' : 'pending' },
+      });
+    expect(provider.submitted).toEqual([]);
+    expect((await inspect()).resources).toHaveLength(1);
+  },
+);
+
+it.each([
+  'id',
+  'type',
+  'status',
+  'architecture',
+  'os',
+  'version',
+  'disk',
+  'deprecated',
+  'deleted',
+  'missing',
+])(
+  'rejects incompatible pinned base-image %s before recording or submitting a create',
+  async (change) => {
+    await admit();
+    const base = await provider.getBaseImage(fixture.admission.baseImageId);
+    if (!base) throw new Error('Fixture image absent.');
+    switch (change) {
+      case 'id':
+        base.id = '101';
+        break;
+      case 'type':
+        base.type = 'snapshot';
+        break;
+      case 'status':
+        base.status = 'unavailable';
+        break;
+      case 'architecture':
+        base.architecture = 'arm';
+        break;
+      case 'os':
+        base.osFlavor = 'debian';
+        break;
+      case 'version':
+        base.osVersion = '22.04';
+        break;
+      case 'disk':
+        base.diskGb = 41;
+        break;
+      case 'deprecated':
+        base.deprecated = true;
+        break;
+      case 'deleted':
+        base.deleted = true;
+        break;
+    }
+    vi.spyOn(provider, 'getBaseImage').mockResolvedValue(change === 'missing' ? null : base);
+    await expect(run(keyCommand())).rejects.toThrow('base image');
+    expect(provider.submitted).toEqual([]);
+    expect((await inspect()).effects).toEqual([]);
+  },
+);
+
 it('cleans duplicates after an accepted create action succeeds while retaining unresolved ownership', async () => {
   await admit();
   const id = randomUUID();
@@ -363,7 +618,7 @@ it('cleans duplicates after an accepted create action succeeds while retaining u
     provider.add({
       kind: 'primary_ip',
       id: providerId,
-      labels,
+      labels: { ...labels, effect_id: id },
       region: 'nbg1',
       ipv4: '203.0.113.9',
       autoDelete: false,

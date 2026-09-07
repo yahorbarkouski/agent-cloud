@@ -8,6 +8,28 @@ import {
 } from './image-build.js';
 import type { ProviderAction } from './provider.js';
 
+export const imageBaseSchema = z.strictObject({
+  id: imageProviderIdSchema,
+  type: z.string(),
+  status: z.string(),
+  architecture: architectureSchema,
+  osFlavor: z.string(),
+  osVersion: z.string().nullable(),
+  diskGb: z.number().nonnegative(),
+  deprecated: z.boolean(),
+  deleted: z.boolean(),
+});
+export type ImageBase = z.infer<typeof imageBaseSchema>;
+export type ImageAction = ProviderAction | { kind: 'missing' };
+
+/** Snapshot actions run on the source server; their receipt owns the resulting image. */
+export function imageActionTarget(
+  command: ImageProviderCommand,
+  resource: ImageResourceRef,
+): ImageResourceRef {
+  return command.kind === 'create_snapshot' ? { kind: 'server', id: command.serverId } : resource;
+}
+
 const fields = { id: imageProviderIdSchema, labels: z.record(z.string(), z.string()) };
 export const imageProviderResourceSchema = z.discriminatedUnion('kind', [
   z.strictObject({
@@ -62,7 +84,7 @@ export const imageProviderResourceSchema = z.discriminatedUnion('kind', [
     kind: z.literal('snapshot'),
     ...fields,
     architecture: architectureSchema,
-    status: z.enum(['creating', 'available']),
+    status: z.enum(['creating', 'available', 'unavailable']),
     sourceServerId: imageProviderIdSchema.nullable(),
     imageSizeGb: z.number().nonnegative().nullable(),
     diskGb: z.int().positive(),
@@ -82,11 +104,12 @@ export const imageResourceStateSchema = z.discriminatedUnion('kind', [
 ]);
 export interface ImageProvider {
   readonly kind: 'hetzner';
-  submit(command: ImageProviderCommand): Promise<ImageSubmission>;
+  submit(input: { effectId: string; command: ImageProviderCommand }): Promise<ImageSubmission>;
   get(resource: ImageResourceRef): Promise<ImageProviderResource | null>;
   find(input: {
     kind: ImageResourceRef['kind'];
     labels: Readonly<Record<string, string>>;
   }): Promise<ImageProviderResource[]>;
-  getAction(actionId: string): Promise<ProviderAction>;
+  getAction(input: { actionId: string; resource: ImageResourceRef }): Promise<ImageAction>;
+  getBaseImage(imageId: string): Promise<ImageBase | null>;
 }

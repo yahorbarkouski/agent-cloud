@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { imageBuilds, withImageBuildLock, type Connection } from '@agent-cloud/db';
 import {
+  imageActionTarget,
   type ImageBuildId,
   type ImageProvider,
   type ImageProviderCommand,
@@ -41,7 +42,12 @@ export async function planImageCleanup(input: {
       for (const effect of pending) {
         if (
           effect.outcome.kind === 'accepted' &&
-          (await input.provider.getAction(effect.outcome.actionId)).kind === 'running'
+          (
+            await input.provider.getAction({
+              actionId: effect.outcome.actionId,
+              resource: imageActionTarget(effect.command, effect.outcome.resource),
+            })
+          ).kind === 'running'
         )
           runningCreates.add(effect.id);
       }

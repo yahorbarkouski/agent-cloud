@@ -78,6 +78,20 @@
       "when": 1788752607761,
       "tag": "0010_image_scope_updates",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788754115778,
+      "tag": "0011_image_action_recovery",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788754820066,
+      "tag": "0012_image_effect_labels",
+      "breakpoints": true
     }
   ]
 }

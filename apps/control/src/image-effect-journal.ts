@@ -6,6 +6,8 @@ import {
   imageProviderCommandSchema,
   imageSubmissionSchema,
   imageRoleKind,
+  imageActionTarget,
+  imageEffectLabels,
   isImageCreate,
   type Catalog,
   type ImageBuildId,
@@ -32,12 +34,13 @@ type Effect = ImageBuild['effects'][number];
 type Resolution =
   | { kind: 'confirmed' }
   | { kind: 'failed'; reason: string }
+  | { kind: 'retry'; reason: string }
   | { kind: 'pending'; reason: string };
 
 async function settle(
   db: Database,
   effect: Effect,
-  result: Exclude<Resolution, { kind: 'pending' }>,
+  result: Extract<Resolution, { kind: 'confirmed' | 'failed' }>,
 ) {
   const resolution =
     result.kind === 'confirmed' ? { kind: 'confirmed', at: new Date().toISOString() } : result;
@@ -68,7 +71,10 @@ export async function reconcileImageEffect(
       );
       if (!receiptRecorded) await claimImageResource(db, build, effect, outcome.resource);
       if (outcome.kind === 'accepted') {
-        const action = await provider.getAction(outcome.actionId);
+        const action = await provider.getAction({
+          actionId: outcome.actionId,
+          resource: imageActionTarget(command, outcome.resource),
+        });
         if (action.kind === 'running')
           return { kind: 'pending', reason: 'Provider action is running.' };
         if (action.kind === 'failed')
@@ -79,7 +85,12 @@ export async function reconcileImageEffect(
       }
     }
     // Search even after a receipt: never silently select one of several matching resources.
-    const found = await provider.find({ kind, labels: command.labels });
+    const labels = imageEffectLabels({
+      buildId: build.admission.id,
+      role: command.labels.role,
+      effectId: effect.id,
+    });
+    const found = await provider.find({ kind, labels });
     let mismatched = false;
     const candidates = new Map(found.map((resource) => [resource.id, resource]));
     const knownIds = new Set([
@@ -89,7 +100,7 @@ export async function reconcileImageEffect(
         .map((resource) => resource.ref.id),
     ]);
     for (const resource of candidates.values()) {
-      if (resource.kind !== kind || !matchesLabels(resource.labels, command.labels)) {
+      if (resource.kind !== kind || !matchesLabels(resource.labels, labels)) {
         mismatched = true;
         continue;
       }
@@ -134,12 +145,17 @@ export async function reconcileImageEffect(
     (outcome.resource.id !== ref.id || outcome.resource.kind !== ref.kind)
   )
     return { kind: 'pending', reason: 'Provider receipt refers to another resource.' };
+  let retry = outcome.kind === 'prepared' || outcome.kind === 'unknown';
   if (outcome.kind === 'accepted') {
-    const action = await provider.getAction(outcome.actionId);
+    const action = await provider.getAction({
+      actionId: outcome.actionId,
+      resource: outcome.resource,
+    });
     if (action.kind === 'running')
       return { kind: 'pending', reason: 'Provider action is running.' };
     if (action.kind === 'failed')
       return settle(db, effect, { kind: 'failed', reason: 'Provider action failed.' });
+    retry = action.kind === 'missing';
   }
   const current = await provider.get(ref);
   await observeImageResource(db, build, ref, current);
@@ -153,7 +169,13 @@ export async function reconcileImageEffect(
     (command.kind === 'power_off' && current?.kind === 'server' && current.power === 'off')
   )
     return settle(db, effect, { kind: 'confirmed' });
-  return { kind: 'pending', reason: 'Provider resource has not reached the requested state.' };
+  return retry
+    ? {
+        kind: 'retry',
+        reason:
+          'The owned target still needs this exact-ID operation and no action is known to be running.',
+      }
+    : { kind: 'pending', reason: 'Provider resource has not reached the requested state.' };
 }
 
 /** Only a newly committed effect can reach submit. Existing intents always reconcile. */
@@ -178,6 +200,7 @@ export async function runImageEffect(input: {
           (!isImageCreate(command) && effect.key.startsWith(baseKey + ':')),
       );
       const last = previous.at(-1);
+      let supersede: Effect | null = null;
       if (last) {
         if (JSON.stringify(last.command) !== JSON.stringify(command))
           throw new CloudError(
@@ -186,11 +209,9 @@ export async function runImageEffect(input: {
           );
         const resolution = await reconcileImageEffect(db, build, last, input.provider);
         const retry =
-          !isImageCreate(command) &&
-          (resolution.kind === 'failed' ||
-            (resolution.kind === 'pending' &&
-              (last.outcome.kind === 'prepared' || last.outcome.kind === 'unknown')));
+          !isImageCreate(command) && (resolution.kind === 'failed' || resolution.kind === 'retry');
         if (!retry) return resolution;
+        if (resolution.kind === 'retry') supersede = last;
       }
       if (build.state.kind === 'cleaned') return { kind: 'confirmed' } satisfies Resolution;
       if (
@@ -245,18 +266,17 @@ export async function runImageEffect(input: {
           effectKey: !isImageCreate(command) ? `${baseKey}:${previous.length + 1}` : baseKey,
           command,
         });
-        if (
-          last?.resolution.kind === 'pending' &&
-          (last.outcome.kind === 'prepared' || last.outcome.kind === 'unknown')
-        )
+        if (supersede)
           await tx
             .update(imageBuildEffects)
             .set({ resolution: { kind: 'superseded', byEffectId: id } })
-            .where(eq(imageBuildEffects.id, last.id));
+            .where(eq(imageBuildEffects.id, supersede.id));
       });
       let outcome: ImageSubmission;
       try {
-        outcome = imageSubmissionSchema.parse(await input.provider.submit(command));
+        outcome = imageSubmissionSchema.parse(
+          await input.provider.submit({ effectId: id, command }),
+        );
       } catch {
         outcome = {
           kind: 'unknown',

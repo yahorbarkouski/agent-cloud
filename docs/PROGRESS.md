@@ -41,6 +41,16 @@
 
 ## Verification ledger
 
+M1 image/access transport and expired-action recovery, 2026-09-07:
+
+- Added the narrow Hetzner image/access HTTP adapter, exact resource decoding, prepared-effect renderer identity, separate IP/key/firewall requests and server/snapshot lifecycle requests. No CLI advancement or paid resource submission is exposed yet.
+- Fresh create policy requires the exact compatible Ubuntu 24.04 base image. Ownership inventory must finish pagination and contain only requested labels. Action identity/association and authoritative absence are validated; network errors and malformed mutation receipts remain uncertain.
+- Missing action records can finish from authoritative desired state or permit an identical stop/delete retry. Follow-up migration0011 preserves the original accepted receipt and still forbids create supersession. Unavailable snapshots remain observable for cleanup. Primary IP decoding covers the documented assignment-field transition.
+- Review found that build/role labels did not prove the persisted effect that created a resource. `imageEffectLabels` now binds submission, lookup, observations, final matching, dependency/deletion policy and new SQL observations in follow-up0012. Wrong or missing labels cannot confirm an unknown create; accepted receipts remain unverified and cannot authorize deletion. The original ownership finding is fixed in `research/m1-image-transport-review.md`; the configured gpt-5.6-sol reviewer independently passed65focused tests.
+- Final full session85939 passed232tests/22files, typecheck and strict lint. Its subsequent formatting check required one method-chain correction in96280d. Earlier225-test and focused58/63-test runs were superseded by this final result. The verification artifact is `research/m1-image-transport-verification.json`.
+- Migrations0011/0012 are applied;766251 confirmed both hashes,13migrations and zero open image builds/active allocations/simulated servers/IPs. Local CLI/API/worker smoke12358 passed with cleanup after0011 for `vm_c46d46b0-eaa1-477f-a22f-8f3a4aa07c3d`; subsequent image-only0012 is covered by the final suite. Guest sources did not change, so local guest VM smokes were not repeated.
+- Extended `pnpm hetzner:check` passed the real read-only account check42001, including compatible x86 Ubuntu24.04 image161547269 and zero resources of all five kinds. It records current catalog and snapshot storage pricing in `research/hetzner-image-transport-read-check-2026-09-07.json`. This does not prove a paid mutation, first builder SSH, snapshot boot or provider cleanup. No paid resource was created. Final formatting73724passed; push/Linux CI are pending this checkpoint.
+
 M1 operator image journal, 2026-09-07:
 
 - Migrations 0009–0010 add platform-owned builds, effects and resource records. It preserves immutable admission/commands/receipts/resolutions, prevents early reservation release, and uses a shared resource identity lock to exclude simultaneous customer/operator claims.

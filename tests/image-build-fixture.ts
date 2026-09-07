@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   imageBuildAdmissionSchema,
+  imageEffectLabels,
   imageBuildIdSchema,
   catalogResponseSchema,
   type ImageProvider,
@@ -10,6 +11,8 @@ import {
   type ImageProviderResource,
   type ImageResourceRef,
   type ImageSubmission,
+  type ImageBase,
+  type ImageAction,
 } from '../packages/contracts/dist/index.js';
 import { digestManifest, verifyImageInputs } from '../packages/images/dist/index.js';
 import { imageFixture } from './image-fixture.js';
@@ -111,6 +114,7 @@ export class ImageProviderFixture implements ImageProvider {
   readonly resources = new Map<string, ImageProviderResource>();
   readonly submitted: ImageProviderCommand[] = [];
   mode: 'normal' | 'lost' | 'rejected' | 'invisible' = 'normal';
+  action: ImageAction = { kind: 'succeeded' };
   get(ref: ImageResourceRef) {
     return Promise.resolve(this.resources.get(`${ref.kind}:${ref.id}`) ?? null);
   }
@@ -124,12 +128,25 @@ export class ImageProviderFixture implements ImageProvider {
     );
   }
   getAction() {
-    return Promise.resolve({ kind: 'succeeded' } satisfies { kind: 'succeeded' });
+    return Promise.resolve(this.action);
   }
   add(resource: ImageProviderResource) {
     this.resources.set(`${resource.kind}:${resource.id}`, resource);
   }
-  submit(command: ImageProviderCommand): Promise<ImageSubmission> {
+  getBaseImage(imageId: string): Promise<ImageBase | null> {
+    return Promise.resolve({
+      id: imageId,
+      type: 'system',
+      status: 'available',
+      architecture: 'x86',
+      osFlavor: 'ubuntu',
+      osVersion: '24.04',
+      diskGb: 10,
+      deprecated: false,
+      deleted: false,
+    });
+  }
+  submit({ effectId, command }: Parameters<ImageProvider['submit']>[0]): Promise<ImageSubmission> {
     this.submitted.push(command);
     if (this.mode === 'rejected')
       return Promise.resolve({ kind: 'rejected', reason: 'Fixture rejection.' });
@@ -147,7 +164,14 @@ export class ImageProviderFixture implements ImageProvider {
         resource: { kind: 'server', id: command.serverId },
       });
     }
-    const base = { id: String(1000 + this.submitted.length), labels: command.labels };
+    const base = {
+      id: String(1000 + this.submitted.length),
+      labels: imageEffectLabels({
+        buildId: command.labels.build_id,
+        role: command.labels.role,
+        effectId,
+      }),
+    };
     let resource: ImageProviderResource;
     switch (command.kind) {
       case 'create_ssh_key':
