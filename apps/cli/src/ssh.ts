@@ -80,7 +80,7 @@ async function proxy(path: string) {
   }
 }
 
-async function withCustomerSession<T>(
+export async function withCustomerSession<T>(
   client: CloudClient,
   machineId: MachineId,
   work: (options: string[], host: string) => Promise<T>,

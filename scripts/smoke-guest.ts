@@ -391,6 +391,9 @@ try {
         signer: createCustomerSshSigner(signerConfiguration),
         scratch,
         address: info.ip4,
+        reboot: async () => {
+          await command('orb', ['restart', owner.name], 120_000);
+        },
         vm,
       });
     else

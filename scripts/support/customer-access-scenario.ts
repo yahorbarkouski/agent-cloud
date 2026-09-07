@@ -17,6 +17,7 @@ import { hashToken } from '../../apps/control/src/auth.js';
 import type { Connection } from '../../packages/db/src/index.js';
 import type { CustomerSshSigner } from '../../packages/pki/dist/index.js';
 import type { prepareEnrollmentFixture } from './enrollment-fixture.js';
+import { exerciseDurableRuns } from './durable-runs-scenario.js';
 
 /** Actual CLI, Graphile worker, gateway, native SSH/SFTP and owned Ubuntu guest. No paid provider. */
 export async function exerciseCustomerAccess(input: {
@@ -25,6 +26,7 @@ export async function exerciseCustomerAccess(input: {
   signer: CustomerSshSigner;
   scratch: string;
   address: string;
+  reboot: () => Promise<void>;
   vm: (args: string[], timeout?: number) => Promise<string>;
 }) {
   const f = input.fixture;
@@ -197,6 +199,18 @@ export async function exerciseCustomerAccess(input: {
           ]),
         ),
       );
+    if (process.env.AGENT_CLOUD_RUN_SCENARIO === '1') {
+      await exerciseDurableRuns({
+        machine,
+        credentials: agentFile,
+        ownerCredentials: ownerFile,
+        scratch: input.scratch,
+        cli,
+        vm: input.vm,
+        reboot: input.reboot,
+      });
+      return;
+    }
     assert.equal(
       (
         await success(

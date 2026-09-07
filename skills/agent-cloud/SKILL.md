@@ -5,7 +5,7 @@ description: Operate agent-cloud machines through its JSON CLI, inspect durable 
 
 # Agent-cloud
 
-Use the installed `acld` CLI. In a source checkout, use `pnpm acld`. Run `acld --help` when unsure about available commands. The current release supports machine lifecycle, scoped delegation, SSH and single-file transfer. General application deployment, routes, protected backups and browser login are still being implemented.
+Use the installed `acld` CLI. In a source checkout, use `pnpm acld`. Run `acld --help` when unsure about available commands. The current release supports machine lifecycle, scoped delegation, SSH, single-file transfer and durable commands. General application deployment, routes, protected backups and browser login are still being implemented.
 
 ## Establish context
 
@@ -54,7 +54,22 @@ SSH and SFTP require `machine:exec` in the machine's project. The guest must be 
 
 SSH streams remote stdout/stderr and preserves the native exit code. Session metadata goes to stderr; do not try to parse all SSH output as JSON. `access inspect` returns JSON metadata without the transport ticket. File transfer uses native SFTP output. The CLI creates ephemeral credentials, verifies allocation-bound host trust and disables inherited SSH configuration, agents and forwarding. Do not bypass failed host authentication by disabling verification.
 
-A consumed ticket cannot reopen a connection. Reconnect with a new SSH command after inspecting the previous outcome. Connection loss does not prove that a remote command failed or rolled back. Do not blindly repeat migrations or other irreversible commands; durable command helpers are still in progress. Long-running applications should use Docker Compose or systemd so closing the CLI does not stop them. API/gateway outages close platform SSH within the15-second authority lease; they do not stop the guest or its applications.
+A consumed ticket cannot reopen a connection. Reconnect with a new SSH command after inspecting the previous outcome. Connection loss does not prove that a remote command failed or rolled back. Do not blindly repeat migrations or other irreversible commands; use the durable `run` commands when you need a retained invocation result. Long-running applications should use Docker Compose or systemd so closing the CLI does not stop them. API/gateway outages close platform SSH within the15-second authority lease; they do not stop the guest or its applications.
+
+## Run a durable command
+
+```sh
+acld run submit vm_... --id <stable-UUIDv4> --request ./run.json
+acld run inspect vm_... <same-UUID>
+acld run logs vm_... <same-UUID> --after 0
+acld run cancel vm_... <same-UUID>
+```
+
+Use an owner-only request file with an `argv` array and absolute executable/cwd, for example `{"argv":["/usr/local/bin/node","./migrate.js"],"cwd":"/srv/example","timeoutSeconds":300}`. Optional `env` and `stdin` carry explicit inputs. Shell interpretation requires explicitly choosing `/bin/sh -c`; arguments are otherwise passed directly. Invocation IDs are lowercase UUIDv4 values. The machine needs a current guest image with the run helper.
+
+Keep one ID and identical request through lost responses. A started invocation never runs again under that ID; changed intent returns `idempotency_conflict`. Read `run.state`, not just the CLI exit code: `queued`/`running` are pending; `exited` includes the command's exit code; `terminated` gives its reason. A successful CLI query does not imply the remote command succeeded. Resume logs with `nextCursor` until `complete` is true. Do not put sensitive command contents or output in shared logs.
+
+Closing the CLI stops waiting, while admitted work continues. Access revocation does not undo admitted work; use explicit cancellation when authorized. Reboot or an uncertain start produces `interrupted`, which must not be retried under a new ID without understanding possible effects. Runs have bounded time/output and systemd limits. Use Compose or a service unit for applications that should remain online; background children of a run are cleaned up when its unit ends.
 
 ## Change an existing machine
 

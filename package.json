@@ -48,7 +48,8 @@
     "machine:recover": "pnpm build && tsx --env-file-if-exists=.env scripts/machine-recover.ts",
     "smoke:reference": "pnpm build:guest && AGENT_CLOUD_REFERENCE_SCENARIO=1 tsx scripts/smoke-guest.ts",
     "gateway": "pnpm build && node --env-file-if-exists=.env apps/access-gateway/dist/index.js",
-    "smoke:access": "pnpm build:guest && AGENT_CLOUD_ACCESS_SCENARIO=1 tsx scripts/smoke-guest.ts"
+    "smoke:access": "pnpm build:guest && AGENT_CLOUD_ACCESS_SCENARIO=1 tsx scripts/smoke-guest.ts",
+    "smoke:runs": "pnpm build:guest && AGENT_CLOUD_ACCESS_SCENARIO=1 AGENT_CLOUD_RUN_SCENARIO=1 tsx scripts/smoke-guest.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

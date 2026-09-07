@@ -65,6 +65,11 @@ chmod 0644 /usr/lib/agent-cloud/ssh_user_ca.pub /usr/lib/agent-cloud/root_ca.crt
 cat > /usr/local/bin/guestctl <<'COMMAND'
 #!/bin/sh
 case "${1:-}" in
+  run) exec /usr/bin/flock --wait 5 /run/agent-cloud-runs.lock /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@" ;;
+  run-work)
+    [ "${#2}" -eq 36 ] || exit 1
+    case "$2" in *[!a-f0-9-]*) exit 1 ;; esac
+    exec /usr/bin/flock --nonblock "/run/agent-cloud-run-$2.lock" /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@" ;;
   reference) exec /usr/bin/flock --wait 5 /run/agent-cloud-reference-admission.lock /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@" ;;
   reference-work) exec /usr/bin/flock --nonblock /run/agent-cloud-reference-work.lock /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@" ;;
   enroll|renew|prepare-image) exec /usr/bin/flock --nonblock /run/agent-cloud-guest.lock /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@" ;;
@@ -86,6 +91,24 @@ cat > /etc/docker/daemon.json <<'DOCKER'
 {"log-driver":"local","log-opts":{"max-size":"10m","max-file":"3"},"live-restore":true,"userland-proxy":false}
 DOCKER
 systemctl daemon-reload
+cat > /etc/systemd/system/agent-cloud-run@.service <<'RUN_SERVICE'
+[Unit]
+Description=Durable customer command %i
+After=network-online.target
+[Service]
+Type=exec
+ExecStart=/usr/local/bin/guestctl run-work %i --json
+Restart=no
+KillMode=control-group
+TimeoutStopSec=5
+RuntimeMaxSec=3610
+TasksMax=128
+MemoryMax=512M
+CPUQuota=100%
+UMask=0077
+StandardOutput=null
+StandardError=null
+RUN_SERVICE
 cat > /etc/systemd/system/agent-cloud-reference.service <<'REFERENCE'
 [Unit]
 Description=Apply the internal reference application

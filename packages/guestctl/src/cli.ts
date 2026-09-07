@@ -1,5 +1,12 @@
 #!/usr/bin/env node
-import { guestBootProofSchema, referenceCommandSchema } from '@agent-cloud/contracts';
+import {
+  guestBootProofSchema,
+  referenceCommandSchema,
+  runCommandSchema,
+  runIdSchema,
+  CloudError,
+} from '@agent-cloud/contracts';
+import { createGuestRuns, runSystem } from './runs.js';
 import { createReferenceDeployment, referenceSystem } from './reference.js';
 import { startReferenceApp } from './reference-app.js';
 import { renewGuest } from './renewal.js';
@@ -18,7 +25,25 @@ const configuration = {
   keygen: '/usr/bin/ssh-keygen',
 };
 try {
-  if (process.argv[2] === 'reference-app' && process.argv.length === 3) {
+  if (process.argv[2] === 'run' || process.argv[2] === 'run-work') {
+    if (process.getuid?.() !== 0) throw new Error('Durable commands require root.');
+    const runs = createGuestRuns({ directory: '/var/lib/agent-cloud/runs', system: runSystem });
+    if (process.argv[2] === 'run-work') {
+      if (process.argv[4] !== '--json' || process.argv.length !== 5)
+        throw new Error('Invalid worker arguments.');
+      await runs.work(runIdSchema.parse(process.argv[3]));
+    } else {
+      if (process.argv[3] !== '--json' || process.argv.length !== 4)
+        throw new Error('Invalid command arguments.');
+      let body = '';
+      for await (const chunk of process.stdin) {
+        body += String(chunk);
+        if (Buffer.byteLength(body) > 262_144) throw new Error('Command request too large.');
+      }
+      const result = await runs.command(runCommandSchema.parse(JSON.parse(body)));
+      process.stdout.write(JSON.stringify(result) + '\n');
+    }
+  } else if (process.argv[2] === 'reference-app' && process.argv.length === 3) {
     await startReferenceApp();
   } else if (['reference', 'reference-work'].includes(process.argv[2] ?? '')) {
     if (process.getuid?.() !== 0 || process.argv[3] !== '--json' || process.argv.length !== 4)
@@ -72,12 +97,18 @@ try {
       process.stdout.write(JSON.stringify(result) + '\n');
     }
   }
-} catch {
-  process.stderr.write(
-    JSON.stringify({
-      error: 'guest_command_failed',
-      statusFile: '/var/lib/agent-cloud/enrollment-status.json',
-    }) + '\n',
-  );
-  process.exitCode = 1;
+} catch (error) {
+  if (process.argv[2] === 'run' && error instanceof CloudError) {
+    // Expected command outcomes belong to the reply channel. SSH may add its own
+    // diagnostics to stderr, so it cannot carry an unambiguous application reply.
+    process.stdout.write(JSON.stringify({ error: error.failure }) + '\n');
+  } else {
+    process.stderr.write(
+      JSON.stringify({
+        error: 'guest_command_failed',
+        statusFile: '/var/lib/agent-cloud/enrollment-status.json',
+      }) + '\n',
+    );
+    process.exitCode = 1;
+  }
 }
