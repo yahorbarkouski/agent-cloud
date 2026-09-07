@@ -3,15 +3,12 @@
 ## M2 customer access workflow
 
 - [x] Ground: traced account/grant/CLI authentication and guest/SSH trust in `research/m2-customer-access-grounding.md`.
-- [ ] Sketch: compare bounded customer SSH access designs against traced ownership and revocation behavior. Device/browser login remains a later M2 slice.
-  - [x] Frame: existing delegated grants, customer root semantics, isolated native SSH, short-lived issuance, gateway ownership and active revocation.
-  - [x] Fan out: three isolated usage-first designs.
-  - [x] Cross-judge: gpt-5.6-sol chose A21/25 over C18/B15; parent read all and agrees with corrections.
-  - [ ] Pick and graft: keep one coherent session model.
-  - [ ] Verify: trace scope, issuance crash recovery, network restrictions and revocation.
-- [ ] Agree: autonomous implementation is authorized; no human checkpoint requested.
-- [ ] Implement: fill the selected access contracts after the running M1 drill is safe.
+- [x] Sketch: three complete candidates, gpt-5.6-sol judgment and parent synthesis in `architecture/customer-ssh.md`.
+- [x] Agree: autonomous implementation is authorized; no human checkpoint requested.
+- [ ] Implement: shared authority loader and11targeted PostgreSQL tests pass. Final fullcheck7876 passed429tests/36files, typecheck/lint in102.76s. Independent review resolved the snapshot finding. Session contracts/storage, signer, gateway, guest and CLI remain open.
 - [ ] Scrap audit: revisit the shape if implementation needs repeated exceptions.
+
+Root checkout owns the live M1 drill and canonical milestone evidence. This isolated checkout's historical sections below are inherited from224a56a; root `docs/PROGRESS.md` and `docs/CONTEXT.md` retain newer live results until integration.
 
 ## Second customer lifecycle passed; certificate test corrected
 

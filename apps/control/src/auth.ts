@@ -1,9 +1,12 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
+import { z } from 'zod';
 import {
   CloudError,
   grantPolicySchema,
   principalSchema,
+  accountIdSchema,
+  grantIdSchema,
   newId,
   type Capability,
   type GrantId,
@@ -11,37 +14,85 @@ import {
   type Principal,
   type ProjectId,
 } from '@agent-cloud/contracts';
-import { grants, auditEvents, type Executor } from '@agent-cloud/db';
+import { grants, auditEvents, databaseTime, type Executor } from '@agent-cloud/db';
 
 export const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
 export const generateToken = () => `acld_${randomBytes(32).toString('base64url')}`;
 
-export async function loadPrincipal(db: Executor, grantId: GrantId): Promise<Principal> {
-  const [leaf] = await db.select().from(grants).where(eq(grants.id, grantId));
+const authorityObservationSchema = z.object({
+  checkedAt: z.number(),
+  chain: z
+    .array(
+      z.object({
+        id: grantIdSchema,
+        accountId: accountIdSchema,
+        parentId: grantIdSchema.nullable(),
+        policy: grantPolicySchema,
+        expiresAt: z.number(),
+        revoked: z.boolean(),
+      }),
+    )
+    .min(1)
+    .max(32),
+});
+
+export async function loadAuthority(db: Executor, grantId: GrantId) {
+  // One statement provides one ancestry snapshot. Materialize the walk before checking expiry.
+  const result = await db.execute(sql`
+    WITH RECURSIVE chain AS (
+      SELECT id, account_id, parent_id, policy, expires_at, revoked_at, 1 AS depth
+      FROM grants WHERE id = ${grantId}
+      UNION ALL
+      SELECT parent.id, parent.account_id, parent.parent_id, parent.policy,
+        parent.expires_at, parent.revoked_at, child.depth + 1
+      FROM grants parent JOIN chain child ON parent.id = child.parent_id
+      WHERE child.depth < 32
+    ), observation AS MATERIALIZED (
+      SELECT jsonb_agg(jsonb_build_object(
+        'id', id, 'accountId', account_id, 'parentId', parent_id, 'policy', policy,
+        'expiresAt', floor(extract(epoch FROM expires_at) * 1000)::float8,
+        'revoked', revoked_at IS NOT NULL
+      ) ORDER BY depth) AS chain FROM chain
+    )
+    SELECT chain, floor(extract(epoch FROM clock_timestamp()) * 1000)::float8 AS "checkedAt"
+    FROM observation
+  `);
+  const parsed = authorityObservationSchema.safeParse(result.rows[0]);
+  if (!parsed.success) throw new CloudError('unauthenticated', 'Credential is invalid or expired.');
+  const { chain, checkedAt } = parsed.data;
+  const leaf = chain[0];
   if (!leaf) throw new CloudError('unauthenticated', 'Credential is invalid or expired.');
-  let current = leaf;
+  let expiresAt = leaf.expiresAt;
+  let expectedId: GrantId | null = grantId;
   const seen = new Set<string>();
-  for (;;) {
+  for (const current of chain) {
     if (
       seen.has(current.id) ||
-      seen.size >= 32 ||
+      current.id !== expectedId ||
       current.accountId !== leaf.accountId ||
-      current.revokedAt ||
-      current.expiresAt.getTime() <= Date.now()
+      current.revoked ||
+      current.expiresAt <= checkedAt
     ) {
       throw new CloudError('unauthenticated', 'Credential is invalid or expired.');
     }
     seen.add(current.id);
-    if (!current.parentId) break;
-    const [parent] = await db.select().from(grants).where(eq(grants.id, current.parentId));
-    if (!parent) throw new CloudError('unauthenticated', 'Credential is invalid or expired.');
-    current = parent;
+    if (current.expiresAt < expiresAt) expiresAt = current.expiresAt;
+    expectedId = current.parentId;
   }
-  return principalSchema.parse({
-    accountId: leaf.accountId,
-    grantId: leaf.id,
-    policy: leaf.policy,
-  });
+  if (expectedId) throw new CloudError('unauthenticated', 'Credential is invalid or expired.');
+  return {
+    principal: principalSchema.parse({
+      accountId: leaf.accountId,
+      grantId: leaf.id,
+      policy: leaf.policy,
+    }),
+    checkedAt: new Date(checkedAt),
+    expiresAt: new Date(expiresAt),
+  };
+}
+
+export async function loadPrincipal(db: Executor, grantId: GrantId): Promise<Principal> {
+  return (await loadAuthority(db, grantId)).principal;
 }
 
 export async function authenticate(
@@ -108,14 +159,13 @@ export async function issueGrant(
     expiresAt: Date;
   },
 ) {
-  const principal = await loadPrincipal(db, input.principal.grantId);
+  const { principal, checkedAt, expiresAt } = await loadAuthority(db, input.principal.grantId);
   authorize(principal, 'grant:manage');
   assertPolicySubset(input.policy, principal.policy);
-  const [parent] = await db.select().from(grants).where(eq(grants.id, principal.grantId));
-  if (!parent || input.expiresAt > parent.expiresAt || input.expiresAt.getTime() <= Date.now()) {
+  if (input.expiresAt > expiresAt || input.expiresAt <= checkedAt) {
     throw new CloudError(
       'invalid_input',
-      'Expiry must be in the future and no later than the parent credential.',
+      'Expiry must be in the future and no later than any parent credential.',
     );
   }
   const id = newId.grant();
@@ -151,7 +201,7 @@ export async function revokeGrant(db: Executor, input: { principal: Principal; g
     throw new CloudError('not_found', 'Credential not found in your delegation tree.');
   await db
     .update(grants)
-    .set({ revokedAt: new Date() })
+    .set({ revokedAt: await databaseTime(db) })
     .where(and(eq(grants.id, input.grantId), eq(grants.accountId, input.principal.accountId)));
   await db.insert(auditEvents).values({
     accountId: input.principal.accountId,

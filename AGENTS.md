@@ -15,6 +15,7 @@ Build an open-source cloud operated by customers' existing coding agents. We do 
 - `packages/contracts` owns schemas; `packages/db` owns schema/migrations; `apps/control` owns authentication, admission and controllers. `packages/sdk` and `apps/cli` expose implemented behavior. `packages/hetzner` handles transport, not business policy.
 - Derive transport types from validated schemas. Use branded IDs and discriminated unions, not optional state bags. Validate external input at boundaries. Do not use `any`, non-null assertions or unchecked casts.
 - Prefer explicit modules to speculative frameworks. Keep tenant authorization, idempotency, concurrency, revocation and restore checks as real behavior. Tests should exercise failures rather than mirror implementation.
+- `loadAuthority` owns the grant ancestry decision. Its bounded recursive SQL query reads one snapshot and checks expiry with PostgreSQL time after traversal. Use the earliest ancestor expiry for delegated authority. Mutating admission still reloads authority under its account lock; a read snapshot cannot prevent a later revocation. Gateway leases must subtract RPC latency rather than treating an old database timestamp as fresh authority.
 - Applied migrations are immutable. Add a follow-up migration for corrections. Run `pnpm db:check` to verify migration hashes before claiming a deployment matches the schema.
 
 ## Durable cloud operations
