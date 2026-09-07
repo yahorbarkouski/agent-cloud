@@ -714,7 +714,28 @@ it('requires recorded sanitation and observed shutdown before a snapshot, then d
     effectKey: 'power_off:1004:1',
     command: stop,
   });
+  const submit = provider.submit.bind(provider);
+  const delayedShutdown = vi.spyOn(provider, 'submit').mockImplementation(async (input) => {
+    if (input.command.kind === 'power_off') {
+      return {
+        kind: 'accepted',
+        resource: { kind: 'server', id: input.command.serverId },
+        actionId: '999',
+      };
+    }
+    return submit(input);
+  });
+  provider.action = { kind: 'succeeded' };
+  expect(await run(stop)).toMatchObject({ value: { kind: 'pending' } });
+  await expect(run(command)).rejects.toThrow();
+  expect(await run(stop)).toMatchObject({ value: { kind: 'pending' } });
+  expect(delayedShutdown).toHaveBeenCalledTimes(1);
+  const runningBuilder = provider.resources.get('server:1004');
+  if (runningBuilder?.kind !== 'server') throw new Error('Expected the running builder.');
+  provider.add({ ...runningBuilder, power: 'off' });
   expect(await run(stop)).toMatchObject({ value: { kind: 'confirmed' } });
+  expect(delayedShutdown).toHaveBeenCalledTimes(1);
+  delayedShutdown.mockRestore();
   expect(await run(command)).toMatchObject({ value: { kind: 'confirmed' } });
   for (let index = 0; index < 5; index++) {
     const plan = await cleanup();

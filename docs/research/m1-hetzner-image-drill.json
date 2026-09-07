@@ -1,0 +1,188 @@
+{
+  "buildId": "bbb28cd4-aca1-4a94-87cf-364728bf6771",
+  "implementation": "9913342643ae10f8dadbd400cd0a1270cf902ba0",
+  "status": "verifier_failed_and_cleaned",
+  "startedAt": "2026-09-07T09:44:25.980Z",
+  "deadlineAt": "2026-09-07T11:13:23.631Z",
+  "budget": {
+    "currency": "USD",
+    "maxVmGrossMicros": 120000,
+    "maxSnapshotMonthlyGrossMicros": 1000000,
+    "maxSnapshotGb": 40
+  },
+  "ci": {
+    "runId": 34107140639,
+    "commit": "9913342643ae10f8dadbd400cd0a1270cf902ba0",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/yahorbarkouski/agent-cloud/actions/runs/34107140639",
+    "startedAt": "2026-09-07T09:38:21Z",
+    "completedAt": "2026-09-07T09:42:45Z",
+    "checks": [
+      "frozen install",
+      "351 tests",
+      "typecheck",
+      "lint",
+      "formatting",
+      "fresh PKI",
+      "native PKI",
+      "native SSH",
+      "native enrollment",
+      "cleanup"
+    ]
+  },
+  "progress": {
+    "state": {
+      "kind": "cleaned",
+      "at": "2026-09-07T09:59:14.223Z"
+    },
+    "builderWork": {
+      "kind": "recorded",
+      "serverId": "164920098",
+      "effectId": "f6b66b7a-150f-4506-a196-86154e1d7b80",
+      "progress": {
+        "kind": "sanitized",
+        "installation": {
+          "kind": "builder",
+          "builderId": "bbb28cd4-aca1-4a94-87cf-364728bf6771",
+          "manifestDigest": "06e2977ed433a27bd2e91ac741a126cb791be99f41746966789329b37d296764",
+          "machineId": "ffa5dc5f3e0a4972b8360995e2d2a486"
+        },
+        "sanitation": {
+          "kind": "sanitized",
+          "builderId": "bbb28cd4-aca1-4a94-87cf-364728bf6771",
+          "manifestDigest": "06e2977ed433a27bd2e91ac741a126cb791be99f41746966789329b37d296764"
+        }
+      },
+      "createdAt": "2026-09-07T09:44:44.506Z"
+    },
+    "verification": "prepared",
+    "resources": [
+      {
+        "role": "access_firewall",
+        "ref": {
+          "kind": "firewall",
+          "id": "11586190"
+        },
+        "state": "absent"
+      },
+      {
+        "role": "builder_ip",
+        "ref": {
+          "kind": "primary_ip",
+          "id": "148442892"
+        },
+        "state": "absent"
+      },
+      {
+        "role": "verifier_ip",
+        "ref": {
+          "kind": "primary_ip",
+          "id": "148443267"
+        },
+        "state": "absent"
+      },
+      {
+        "role": "builder",
+        "ref": {
+          "kind": "server",
+          "id": "164920098"
+        },
+        "state": "absent"
+      },
+      {
+        "role": "verifier",
+        "ref": {
+          "kind": "server",
+          "id": "164920620"
+        },
+        "state": "absent"
+      },
+      {
+        "role": "snapshot",
+        "ref": {
+          "kind": "snapshot",
+          "id": "429115183"
+        },
+        "state": "absent"
+      },
+      {
+        "role": "access_key",
+        "ref": {
+          "kind": "ssh_key",
+          "id": "118461456"
+        },
+        "state": "absent"
+      }
+    ]
+  },
+  "cleanupConfirmed": true,
+  "cleanup": {
+    "at": "2026-09-07T09:59:14.223Z",
+    "accessRemovedAt": "2026-09-07T09:59:14.236Z",
+    "provider": {
+      "servers": 0,
+      "primaryIps": 0,
+      "snapshots": 0,
+      "firewalls": 0,
+      "sshKeys": 0
+    },
+    "observedAt": "2026-09-07T10:00:18.634Z"
+  },
+  "failure": {
+    "source": "cancelled Hetzner verifier disk, mounted ro,noload in rescue",
+    "files": {
+      "etc/systemd/system/agent-cloud-enroll.service": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "etc/systemd/system/agent-cloud-proxy.service": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "usr/lib/agent-cloud/guestctl.mjs": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "usr/lib/agent-cloud/image.json": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "usr/lib/agent-cloud/image-inputs.json": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "usr/lib/agent-cloud/image-build.json": {
+        "bytes": 326,
+        "sha256": "6761df0fd2c9b528202d9c441cd493d155a3cd3cb00c7c69bf64b079b18c337c"
+      },
+      "usr/local/bin/node": {
+        "bytes": 126458664,
+        "sha256": "89af8424dd53e560b1933f87ba650d8bf57c83ca5a04600eefb31f416aabbae7"
+      },
+      "usr/local/bin/caddy": {
+        "bytes": 48521378,
+        "sha256": "b7105518e3ed1c0761f232e44fc09345535533c9cb0abf0e12809416c7ac64d9"
+      },
+      "usr/local/bin/step": {
+        "bytes": 44052797,
+        "sha256": "b795e5b0600b67bfb609f83a5fd2aa2cf1f753fa49e31558c688d90b0d1468c8"
+      },
+      "usr/local/bin/guestctl": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "etc/machine-id": {
+        "bytes": 33,
+        "sha256": "c6429f337860d68e090c474325ca6937dc8a837bb0891f66e2ac79d122f0a44c"
+      }
+    },
+    "bootError": "Failed to start agent-cloud-enroll.service: Unit agent-cloud-enroll.service is masked."
+  },
+  "diagnosis": {
+    "rescueActionId": "653805698256132",
+    "rebootActionId": "653805698256263",
+    "publicationCancelledBeforeRescue": true,
+    "inference": "Hard poweroff after sanitation can lose recently installed dirty data. Installed runtime files were empty on verifier boot; the fsynced sanitation record survived. Graceful shutdown and a successful filesystem flush are required before snapshotting."
+  }
+}

@@ -152,6 +152,24 @@ it('creates separate persistent IPv4 and single-host SSH access resources', asyn
   expect(await requests[2]?.json()).toMatchObject({ public_key: 'ssh-ed25519 AAAA' });
 });
 
+it('requests graceful shutdown without falling back to a hard power cut', async () => {
+  const request = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ action: { id: 61 } }));
+  expect(
+    await provider(request).submit({
+      effectId,
+      command: {
+        kind: 'power_off',
+        serverId: '42',
+        sanitation: { kind: 'sanitized', builderId: buildId, manifestDigest: 'a'.repeat(64) },
+      },
+    }),
+  ).toEqual({ kind: 'accepted', resource: { kind: 'server', id: '42' }, actionId: '61' });
+  expect(request).toHaveBeenCalledTimes(1);
+  const [url, options] = request.mock.calls[0] ?? [];
+  expect(url).toBe('https://api.hetzner.cloud/v1/servers/42/actions/shutdown');
+  expect(options?.method).toBe('POST');
+});
+
 it('records snapshot identity separately from the source server action and deletes exact resource kinds', async () => {
   const requests: Request[] = [];
   const source = provider((input, init) => {

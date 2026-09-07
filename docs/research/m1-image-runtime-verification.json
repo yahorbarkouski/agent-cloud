@@ -73,10 +73,45 @@
           }
         ]
       }
+    },
+    "ci": {
+      "runId": 34107140639,
+      "commit": "9913342643ae10f8dadbd400cd0a1270cf902ba0",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/yahorbarkouski/agent-cloud/actions/runs/34107140639",
+      "startedAt": "2026-09-07T09:38:21Z",
+      "completedAt": "2026-09-07T09:42:45Z",
+      "checks": [
+        "frozen install",
+        "351 tests",
+        "typecheck",
+        "lint",
+        "formatting",
+        "fresh PKI",
+        "native PKI",
+        "native SSH",
+        "native enrollment",
+        "cleanup"
+      ]
+    },
+    "cli": {
+      "command": "pnpm smoke:local",
+      "result": "passed",
+      "machineId": "vm_a8fb11cd-eb81-456a-aee9-c998144a2709",
+      "processExit": 0,
+      "tool": "e65857",
+      "provider": "simulated"
+    },
+    "migrations": {
+      "command": "pnpm db:check",
+      "applied": 17,
+      "expected": 17,
+      "matches": true
     }
   },
   "limitations": [
-    "No paid Hetzner resource created or booted",
+    "No paid resource was created by the runtime checkpoint checks. A later live drill is tracked separately.",
     "Public readiness proves HTTPS routing and API restrictions, not successful verifier enrollment",
     "Customer admission, renewal, deployment, routes and backups remain open"
   ],

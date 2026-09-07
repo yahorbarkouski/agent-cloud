@@ -140,6 +140,8 @@ export async function prepareImage(configuration: GuestConfiguration) {
       'docker.service',
       'docker.socket',
       'containerd.service',
+      // Its ExecStop saves a seed. Finish that writer before removing the builder's seed.
+      'systemd-random-seed.service',
     ]);
     for (const path of [
       '/var/lib/docker',
@@ -206,6 +208,23 @@ export async function prepareImage(configuration: GuestConfiguration) {
     throw new Error('Prepared image retains persistent builder logs.');
   if ((await directory('/etc/ssh')).some((name) => name.startsWith('ssh_host_')))
     throw new Error('Prepared image retains a system SSH identity.');
+  if (
+    (
+      await run('/usr/bin/systemctl', [
+        'show',
+        '--property=ActiveState',
+        '--value',
+        'systemd-random-seed.service',
+      ])
+    ).trim() !== 'inactive'
+  )
+    throw new Error('Prepared image still has a random-seed writer active.');
+  try {
+    await lstat('/var/lib/systemd/random-seed');
+    throw new Error('Prepared image retains a random seed.');
+  } catch (error) {
+    if (!isMissing(error)) throw error;
+  }
   for (const unit of ['ssh.service', 'ssh.socket'])
     if (
       (
@@ -214,6 +233,9 @@ export async function prepareImage(configuration: GuestConfiguration) {
     )
       throw new Error('Prepared image retains builder SSH startup.');
   await atomicWrite(recordPath, JSON.stringify({ ...record, kind: 'sanitized' }) + '\n', 0o600);
+  // The record's fsync does not flush installed files or erased builder data elsewhere.
+  // syncfs reports writeback failures; no sanitation receipt may escape before it succeeds.
+  await run('/usr/bin/sync', ['--file-system', '/']);
   return { kind: 'sanitized', builderId: record.builderId, manifestDigest: digest };
 }
 

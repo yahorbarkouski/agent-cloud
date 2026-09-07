@@ -123,7 +123,7 @@ The controller persists builder phases, stops and snapshots only after saved san
 
 Catalog entries specify the provider type, region, architecture, availability, and currency. Reservations include the VM and IPv4. `PROVIDER_CURRENCY` and `MAX_PROVIDER_HOURLY` define the deployment ceiling; use the currency returned by your provider account. There is no currency conversion. The simulator uses synthetic prices. An hourly reservation is not an invoice or a hard monthly cap; traffic and future ancillary services need separate limits before activation.
 
-Hetzner catalog reads have been verified against a real account. The API refreshes catalog snapshots outside request transactions. Operator image jobs require explicit configuration and start; live customer admission remains disabled. No VM has been rented.
+Hetzner catalog reads have been verified against a real account. The API refreshes catalog snapshots outside request transactions. Operator image jobs require explicit configuration and start; live customer admission remains disabled. The first bounded CPX12 image drill reached a snapshot and verifier, exposed a disk-durability failure, and was fully cleaned up. The correction passed local tests and native clone checks; a fresh successful Hetzner lifecycle and image publication remain to be verified. See [live drill evidence](docs/research/m1-hetzner-image-drill.json).
 
 ## Prepare Hetzner credentials
 

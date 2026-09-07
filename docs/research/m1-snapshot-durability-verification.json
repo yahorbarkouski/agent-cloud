@@ -1,0 +1,150 @@
+{
+  "status": "local_verification_passed",
+  "baselineCommit": "9913342643ae10f8dadbd400cd0a1270cf902ba0",
+  "causeEvidence": "m1-hetzner-image-drill.json",
+  "review": "m1-snapshot-durability-review.md",
+  "correction": [
+    "Await root filesystem flush before returning sanitation receipt, including replay",
+    "Graceful ACPI shutdown with independent observed-off gate and no force-off fallback",
+    "Stop the random-seed writer before deleting its seed; require inactive writer and absent seed, preserving normal service on clone boot"
+  ],
+  "focused": {
+    "tests": 66,
+    "files": 2,
+    "status": "passed",
+    "log": ".local/snapshot-durability-focused-verified.log"
+  },
+  "full": {
+    "status": "passed",
+    "tests": 352,
+    "files": 33,
+    "typecheck": "passed",
+    "lint": "passed",
+    "durationSeconds": 82.57,
+    "processExit": 0,
+    "log": ".local/snapshot-durability-seed-check.log"
+  },
+  "native": {
+    "status": "passed",
+    "manifestDigest": "61b1e3972798d86ebba0d8d104912aa9a9158d98e1f91ef76bb3d3ac8ec62329",
+    "imageVersion": "dev-d71c36cede486069faa8e373",
+    "log": ".local/snapshot-durability-native-final.log",
+    "fixture": "scripts/support/vm-seed.ts clears only the local container skip; clone relies on normal boot",
+    "processExit": 0,
+    "clones": [
+      {
+        "result": "guest-verified",
+        "machineId": "12cc96ee13b2461bb67192c5e3e14762",
+        "sshIdentity": "7d59288b9935b5e358ee80b7edfca8d9d9d513bcfd155e09de9f3a06d7c6e90a",
+        "tlsIdentity": "fc6460ecc2400aa57d94a807a9f8c713cc61d9f928cb030da29281912acaf814",
+        "allocationId": "alloc_cd83c8c5-69fc-44dc-8502-e2336b1adcdd"
+      },
+      {
+        "result": "guest-verified",
+        "machineId": "704c161d4c9d4db3a3b58c6af5226698",
+        "sshIdentity": "c7c80e66f83bbf318c5d758def03792b3c4ca42e4e1fbcd7ccfdaeec0dcd6995",
+        "tlsIdentity": "4b33b2d71632f53be45b50480bf9e425c4e5347772dd120ec8fe866299e2ce56",
+        "allocationId": "alloc_759a08b0-016c-4c7e-99ef-4ee7f50ed5d1"
+      }
+    ],
+    "bootstrapScans": [
+      {
+        "files": 125,
+        "bytes": 567332,
+        "matches": []
+      },
+      {
+        "files": 125,
+        "bytes": 565257,
+        "matches": []
+      }
+    ],
+    "cleanup": true,
+    "ownershipRecordsAbsent": true
+  },
+  "format": {
+    "status": "passed",
+    "log": ".local/snapshot-durability-checkpoint-format-check.log"
+  },
+  "positiveHetznerProof": "pending",
+  "intermediate": {
+    "full": {
+      "status": "passed",
+      "tests": 352,
+      "files": 33,
+      "typecheck": "passed",
+      "lint": "passed",
+      "durationSeconds": 82.67,
+      "processExit": 0,
+      "log": ".local/snapshot-durability-check.log"
+    },
+    "native": {
+      "status": "passed",
+      "processExit": 0,
+      "manifestDigest": "2940934d09f3b329ca993f8cd65609b78a15b6ec33cc2c5de72d24dd21e11a21",
+      "log": ".local/snapshot-durability-native.log",
+      "clones": [
+        {
+          "result": "guest-verified",
+          "machineId": "17eb45849b394acda58488bfaf63f744",
+          "sshIdentity": "5cf4c367cf82306162a2672e7fe416a21e667c13194b056b3a32051f3d5e3701",
+          "tlsIdentity": "a54cf09d3cca460d521e709a6e7fdfa1e4d584eb8b29ba8dc50d63f677841aea",
+          "allocationId": "alloc_346e3ebf-c2df-48a5-acaa-683269c10a7a"
+        },
+        {
+          "result": "guest-verified",
+          "machineId": "7fe795230b93494a8f4b146e20eae83d",
+          "sshIdentity": "fba81b0b30b22fb6084d0ccf3ad060385965d9da5f80349cbbc71c448f4dfcec",
+          "tlsIdentity": "1dea66e0359de6ef0179eb04743c5848d47f496401b390ee3add67554e818a61",
+          "allocationId": "alloc_53653d2b-2cf0-433d-a25a-126585b34386"
+        }
+      ],
+      "cleanup": true,
+      "limit": "Before random-seed writer correction; not final code proof"
+    }
+  },
+  "runtimeReadiness": {
+    "observedAt": "2026-09-07T10:14:29.386Z",
+    "origin": "https://main-improvements-perform-signal.trycloudflare.com",
+    "checks": [
+      {
+        "path": "/healthz",
+        "method": "GET",
+        "expected": 200,
+        "status": 200
+      },
+      {
+        "path": "/v1/projects",
+        "method": "GET",
+        "expected": 403,
+        "status": 403
+      },
+      {
+        "path": "/image/enroll",
+        "method": "POST",
+        "expected": 400,
+        "status": 400
+      },
+      {
+        "path": "/guest/enroll",
+        "method": "POST",
+        "expected": 404,
+        "status": 404
+      }
+    ]
+  },
+  "failedNative": {
+    "status": "failed",
+    "manifestDigest": "61b1e3972798d86ebba0d8d104912aa9a9158d98e1f91ef76bb3d3ac8ec62329",
+    "imageVersion": "dev-d71c36cede486069faa8e373",
+    "log": ".local/snapshot-durability-seed-native.log",
+    "failure": "Clone enrolled, but random-seed service skipped by ConditionVirtualization under OrbStack lxc",
+    "ownedResourcesRemoved": true
+  },
+  "scriptChecks": {
+    "typecheck": "passed",
+    "lint": "passed",
+    "typecheckLog": ".local/snapshot-durability-fixture-typecheck.log",
+    "lintLog": ".local/snapshot-durability-fixture-lint.log"
+  }
+}

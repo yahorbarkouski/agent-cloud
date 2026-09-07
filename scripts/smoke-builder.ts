@@ -1,4 +1,5 @@
 import { verifyImageClone } from './support/image-verifier-clone.js';
+import { prepareVmSeedFixture } from './support/vm-seed.js';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -296,6 +297,7 @@ try {
   );
   const installed = await remote.inspect(target);
   assert.equal(installed.kind, 'installed');
+  await prepareVmSeedFixture(vm);
   await vm(['rm', '/tmp/agent-cloud-input/install.sh']);
   assert.deepEqual(await remote.install(target), installed);
   await assert.rejects(remote.upload({ ...target, sourceDirectory }));

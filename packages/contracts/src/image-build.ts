@@ -184,6 +184,7 @@ export const imageProviderCommandSchema = z.discriminatedUnion('kind', [
     ]),
   }),
   z.strictObject({
+    // Desired stopped state, reached through graceful shutdown. Never force-cut a snapshot source.
     kind: z.literal('power_off'),
     serverId: imageProviderIdSchema,
     sanitation: imageSanitationReceiptSchema,

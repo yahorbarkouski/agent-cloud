@@ -164,7 +164,8 @@ export class HetznerImageProvider implements ImageProvider {
         case 'power_off': {
           const response = object.parse(
             await this.request({
-              path: `/servers/${command.serverId}/actions/poweroff`,
+              // The journal confirms the observed off state separately from this ACPI receipt.
+              path: `/servers/${command.serverId}/actions/shutdown`,
               method: 'POST',
             }),
           );

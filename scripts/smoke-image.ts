@@ -1,5 +1,6 @@
 import { imageInstallCommand } from '../packages/images/dist/index.js';
 import { readGuestBuild } from './support/guest-build.js';
+import { prepareVmSeedFixture } from './support/vm-seed.js';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -111,6 +112,7 @@ await vm(
 const manifest = guestManifestSchema.parse(
   JSON.parse(await readFile(guestBuild.directory + '/image.json', 'utf8')),
 );
+await prepareVmSeedFixture(vm);
 const refusalBootstrap = guestBootstrapFileSchema.parse({
   token: 'a'.repeat(43),
   spec: {
@@ -252,6 +254,24 @@ await assert.rejects(vm(['/usr/local/bin/guestctl', 'prepare-image', '--json']))
 await vm(['docker', 'volume', 'inspect', 'agent-cloud-retry-sentinel']);
 await vm(['docker', 'volume', 'rm', 'agent-cloud-retry-sentinel']);
 await vm(['systemctl', 'stop', 'docker.service', 'docker.socket']);
+progress('refusing a sanitation receipt when the filesystem flush fails');
+await vm(['mv', '/usr/bin/sync', '/usr/bin/agent-cloud-sync-original']);
+try {
+  await vm([
+    '/bin/sh',
+    '-ec',
+    "printf '#!/bin/sh\\ntouch /run/agent-cloud-flush-attempt\\nexit 74\\n' > /usr/bin/sync; chmod 0755 /usr/bin/sync",
+  ]);
+  await assert.rejects(vm(['/usr/local/bin/guestctl', 'prepare-image', '--json'], 120_000));
+  await vm(['test', '-f', '/run/agent-cloud-flush-attempt']);
+  assert.equal(
+    (await vm(['jq', '-r', '.kind', '/usr/lib/agent-cloud/image-build.json'])).trim(),
+    'sanitized',
+  );
+} finally {
+  await vm(['mv', '/usr/bin/agent-cloud-sync-original', '/usr/bin/sync']);
+  await vm(['rm', '-f', '/run/agent-cloud-flush-attempt']);
+}
 const receipt = imageReceiptSchema.parse(
   JSON.parse(await vm(['/usr/local/bin/guestctl', 'prepare-image', '--json'], 120_000)),
 );
@@ -262,6 +282,19 @@ assert.deepEqual(
   ),
   receipt,
 );
+assert.equal(
+  (
+    await vm([
+      'systemctl',
+      'show',
+      '--property=ActiveState',
+      '--value',
+      'systemd-random-seed.service',
+    ])
+  ).trim(),
+  'inactive',
+);
+await vm(['test', '!', '-e', '/var/lib/systemd/random-seed']);
 await vm(['logger', 'agent-cloud-sanitized-log-sentinel']);
 await vm(['journalctl', '--sync']);
 assert.equal((await vm(['find', '/var/log', '-mindepth', '1', '-print', '-quit'])).trim(), '');

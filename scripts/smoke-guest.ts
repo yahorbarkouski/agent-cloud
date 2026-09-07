@@ -1,5 +1,6 @@
 import { imageInstallCommand } from '../packages/images/dist/index.js';
 import { readGuestBuild } from './support/guest-build.js';
+import { prepareVmSeedFixture } from './support/vm-seed.js';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID, X509Certificate } from 'node:crypto';
@@ -140,6 +141,7 @@ try {
       }),
       600_000,
     );
+    await prepareVmSeedFixture(vm);
     imageReceiptSchema.parse(
       JSON.parse(await vm(['/usr/local/bin/guestctl', 'prepare-image', '--json'], 120_000)),
     );
@@ -305,6 +307,8 @@ try {
     await setTimeout(2000);
   }
   assert.ok(enrolled, 'Guest did not complete enrollment before the local deadline.');
+  await vm(['systemctl', 'is-active', '--quiet', 'systemd-random-seed.service']);
+  await vm(['test', '-s', '/var/lib/systemd/random-seed']);
   progress('verifying real SSH, Caddy and bootstrap cleanup');
   const proof = guestProofSchema.parse(
     JSON.parse(await vm(['/usr/local/bin/guestctl', 'identity', '--json'])),
