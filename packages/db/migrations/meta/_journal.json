@@ -141,6 +141,13 @@
       "when": 1788786391459,
       "tag": "0019_operator_recoveries",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1788795823283,
+      "tag": "0020_access_sessions",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,50 @@
+{
+  "checkpoint": "M2 access session persistence",
+  "date": "2026-09-07",
+  "baseCommit": "2ece39a4304f8c27ddba92e5bdf5207b32474cd7",
+  "branch": "yahor/customer-ssh",
+  "behavior": [
+    "Immutable session request, ownership, image/host/gateway pins and absolute deadlines.",
+    "One signing attempt with an immutable receipt committed atomically with its state transition.",
+    "One-way signing and claim/close states; closure retains gateway connection identity.",
+    "Contract and PostgreSQL validation of keys, gateway origins/CIDRs and deadline arithmetic."
+  ],
+  "verification": {
+    "targeted": {
+      "tests": 16,
+      "result": "passed",
+      "log": ".local/m2-access-storage-parity-test.log"
+    },
+    "full": {
+      "tests": 445,
+      "files": 38,
+      "seconds": 103.5,
+      "result": "passed",
+      "typecheck": "passed",
+      "lint": "passed",
+      "log": ".local/m2-access-storage-final-check.log"
+    },
+    "review": "m2-access-storage-review.md",
+    "formatting": {
+      "result": "passed",
+      "log": ".local/m2-access-storage-final-format-check.log"
+    },
+    "ci": "not yet submitted"
+  },
+  "corrections": [
+    "Earlier fixture extraction typo and SQL target-expression precedence failure were corrected before the initial439-test checkpoint.",
+    "Independent review required SQL admission validation, immutable signing receipts, and actual signing/closed-claim races.",
+    "A private backup path did not exist during draft regeneration; the shell continued. The unpublished0020 was regenerated again from committed0019 and all guards reconstructed before testing. No retained database used the failed draft.",
+    "The generated allocation uniqueness constraint was moved before the dependent foreign key.",
+    "A PL/pgSQL variable/column alias collision rejected valid admission; a qualified source alias fixed it, with the failed test log retained.",
+    "A later URL-normalization review concern was stale; the reviewer checked current contracts and a disposable PostgreSQL database and withdrew it. Permanent parity cases were added.",
+    "Exact raw origin matching and explicit identifier/hash boundaries reject trailing newline forms.",
+    "Generated Drizzle metadata needed ordinary Prettier formatting; final formatting passed."
+  ],
+  "limits": [
+    "No access admission endpoint, rate policy, signer, gateway, CLI SSH or access-capable guest image exists yet.",
+    "Storage fixtures prove transitions and persistence, not current grant authorization, live provider ownership or certificate cryptography.",
+    "Draft0020 has only been applied to disposable test databases; main database migrations0000\u20130019 are unchanged.",
+    "No paid resource was created. All M1 Hetzner resources remain removed."
+  ]
+}

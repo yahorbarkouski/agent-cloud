@@ -38,6 +38,10 @@ export const attemptIdSchema = z
   .string()
   .regex(new RegExp(`^att_${uuid}$`))
   .brand<'AttemptId'>();
+export const accessSessionIdSchema = z
+  .string()
+  .regex(new RegExp(`^access_${uuid}$`))
+  .brand<'AccessSessionId'>();
 
 export type AccountId = z.infer<typeof accountIdSchema>;
 export type ProjectId = z.infer<typeof projectIdSchema>;
@@ -46,6 +50,7 @@ export type AllocationId = z.infer<typeof allocationIdSchema>;
 export type OperationId = z.infer<typeof operationIdSchema>;
 export type GrantId = z.infer<typeof grantIdSchema>;
 export type AttemptId = z.infer<typeof attemptIdSchema>;
+export type AccessSessionId = z.infer<typeof accessSessionIdSchema>;
 
 export const newId = {
   account: (): AccountId => accountIdSchema.parse(`acc_${randomUUID()}`),
@@ -55,6 +60,7 @@ export const newId = {
   operation: (): OperationId => operationIdSchema.parse(`op_${randomUUID()}`),
   grant: (): GrantId => grantIdSchema.parse(`grant_${randomUUID()}`),
   attempt: (): AttemptId => attemptIdSchema.parse(`att_${randomUUID()}`),
+  accessSession: (): AccessSessionId => accessSessionIdSchema.parse(`access_${randomUUID()}`),
 };
 
 export const resourceRefSchema = z.discriminatedUnion('kind', [
