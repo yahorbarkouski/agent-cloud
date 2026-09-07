@@ -1,0 +1,207 @@
+{
+  "recordedAt": "2026-09-07T08:36:10.306694+00:00",
+  "checkpoint": "M1 allocation image pins and durable image scheduling",
+  "implementationCommit": null,
+  "fullGoalStatus": "active; M1 and M2\u2013M7 remain open; Stripe excluded",
+  "cloudResourcesCreated": 0,
+  "verification": {
+    "fullCheck": {
+      "command": "pnpm check",
+      "session": 79451,
+      "tests": 339,
+      "files": 31,
+      "typecheck": "passed",
+      "lint": "passed",
+      "result": "passed",
+      "log": ".local/image-use-full-check.log"
+    },
+    "finalQueueCliCheck": {
+      "command": "pnpm typecheck && pnpm lint && pnpm exec vitest run tests/image-scheduling.test.ts",
+      "session": 32612,
+      "tests": 4,
+      "files": 1,
+      "result": "passed",
+      "note": "After changing the queue start test to invoke the actual image-build CLI, and adding the read-only migration checker.",
+      "log": ".local/image-use-final-check.log"
+    },
+    "nativeEnrollment": {
+      "command": "pnpm smoke:enrollment",
+      "session": 97118,
+      "ok": true,
+      "enrollment": "guest library with real Smallstep and pinned OpenSSH",
+      "guestRetry": "keys survive lost response and bootstrap removal",
+      "guestActivation": "local fixture hooks, not systemd",
+      "replay": "same certificates without extra enrollment signing",
+      "wrongHostKey": "rejected before key claim",
+      "issuedHostCertificate": "verified native SSH connection",
+      "issuedTlsCertificate": "verified native TLS connection",
+      "operation": "waiting for runtime verification",
+      "provider": "local simulated observations",
+      "cloudResourcesCreated": 0
+    },
+    "localCli": {
+      "command": "pnpm smoke:local",
+      "session": 91748,
+      "result": "passed",
+      "provider": "simulated",
+      "machineId": "vm_ed4c9221-2170-4f2c-b9db-ae18eecb5968",
+      "verified": [
+        "CLI",
+        "HTTP API",
+        "PostgreSQL",
+        "Graphile worker",
+        "create",
+        "inspect",
+        "destroy",
+        "cleanup"
+      ]
+    },
+    "migrations": {
+      "directory": "/Users/yahorbarkouski/Documents/ChatGPT/learning/agent-cloud/packages/db/migrations/",
+      "applied": 17,
+      "expected": 17,
+      "matches": true,
+      "migrations": [
+        {
+          "name": "0000_initial",
+          "hash": "781a0ee0242898467beed523665bb0aaf3f8a64ae34a5924c12dbc6767cc9599",
+          "matches": true
+        },
+        {
+          "name": "0001_provider_attempt_guards",
+          "hash": "86a196a11ce073b71602360974da07fd7f957634153e80fdbf4710aad6d9e4b2",
+          "matches": true
+        },
+        {
+          "name": "0002_account_currency_offers",
+          "hash": "66bc2a941a8bdab7b6f9f1fbd0318bae5ab71130158fe0427321ece8027487ae",
+          "matches": true
+        },
+        {
+          "name": "0003_explicit_currency_guards",
+          "hash": "990229a0f93a3fe36bf73915d74b726b204298d373b602e2e94407e8452c49d0",
+          "matches": true
+        },
+        {
+          "name": "0004_offer_price_basis",
+          "hash": "02769b5ce8451805bb1670121e2cbe631103b21bd7f6a88592fdc6e95741c37b",
+          "matches": true
+        },
+        {
+          "name": "0005_provider_resources",
+          "hash": "826dbfaf36a7dee09be26cdd3a677f07de53662e2c0358c96ef57d52807ee90e",
+          "matches": true
+        },
+        {
+          "name": "0006_guest_identity",
+          "hash": "49976f0ebd84b4466d038bd94daa6aa0f2201dad55cfb0d4d002c558b4d97b7d",
+          "matches": true
+        },
+        {
+          "name": "0007_guest_signing_attempts",
+          "hash": "a03df3f2d0ff1639a404203a18d26e97de71c63dff038aedb6a098d158ec712e",
+          "matches": true
+        },
+        {
+          "name": "0008_guest_runtime",
+          "hash": "15fb67cbfd98ff8e36fbdf2eb10776e5021d2e06dd9cd74c0c8cb485dcac12a6",
+          "matches": true
+        },
+        {
+          "name": "0009_image_builds",
+          "hash": "03abef46c5653511dfb19d47ec04c5f6fb593f4a7919788f28271a5cde596338",
+          "matches": true
+        },
+        {
+          "name": "0010_image_scope_updates",
+          "hash": "4c6efe74a8f477101b62afe3a83aa4fd0e95f70b725386fe11b714573ecb4f0b",
+          "matches": true
+        },
+        {
+          "name": "0011_image_action_recovery",
+          "hash": "03a1e2ac5a530d573d580951d0ffe21c2b7d211af97cb8600ef6860105821de6",
+          "matches": true
+        },
+        {
+          "name": "0012_image_effect_labels",
+          "hash": "f9495440960f7771da236803b3f93d4770469583bdbd054aa868b47d1b2b956a",
+          "matches": true
+        },
+        {
+          "name": "0013_image_builder_work",
+          "hash": "d21783f290a9a3fb920cc08831b1943174ff94da4095f8ed5ddcb599ad50348b",
+          "matches": true
+        },
+        {
+          "name": "0014_image_verifier",
+          "hash": "26b87121b342de36f4f81b33de5be04c0a78882843a9f14c5ec2be52c002c4cd",
+          "matches": true
+        },
+        {
+          "name": "0015_image_publication",
+          "hash": "adbc2e2f429eddee001864851447641feead32b3d749be6cf10a86c0fe312899",
+          "matches": true
+        },
+        {
+          "name": "0016_allocation_images_and_image_work",
+          "hash": "569599f36dc2807f8c52acda47b867805a7bb8bcfaeeb09a524afd0146e8e048",
+          "matches": true
+        }
+      ]
+    },
+    "baseCleanup": {
+      "checkedAt": "2026-09-07T08:34:49.994Z",
+      "active_allocations": 0,
+      "simulated_servers": 0,
+      "simulated_ips": 0,
+      "open_image_builds": 0
+    },
+    "ci": {
+      "status": "pending"
+    },
+    "formatting": {
+      "command": "pnpm format:check",
+      "result": "passed",
+      "log": ".local/image-use-format-check.log"
+    },
+    "frozenInstall": {
+      "command": "pnpm install --frozen-lockfile",
+      "result": "passed",
+      "log": ".local/image-use-frozen-install.log"
+    }
+  },
+  "coveredBoundaries": [
+    "Signed release pinned atomically to the allocation, offer and boot deadline; admission makes no provider request.",
+    "Idempotent admission preserves the original pin after the configured default changes.",
+    "Resolver and bootstrap renderer verify current release trust and exact provider snapshot ownership.",
+    "SQL rejects changed pins, substituted bootstrap images, second create effects and reversed retirement.",
+    "Cancellation before fresh IP/VM creation compensates and retires the allocation.",
+    "Unknown create holds snapshot ownership until original labelled server confirmation; permanently unknown create retains its pin.",
+    "Rejected create releases its pin only after IP compensation and retirement.",
+    "Untrusted post-admission or renderer-time image selection compensates; a busy image lock remains retryable.",
+    "Admission queues only deadline cleanup; explicit CLI start and real Graphile tasks advance to publication.",
+    "Retained expiry timestamp is persisted; cancellation cleans on the running worker; filesystem cleanup retries across a new connection.",
+    "Cancellation and retention scheduling serialize on the same build row.",
+    "Verifier lifetime uses database time with a five-second host-ahead test; release publication/selection pass with host clock ahead and behind."
+  ],
+  "failuresResolved": [
+    "Post-admission release validation originally threw a plain Error; it now produces typed nonretryable failure and compensation.",
+    "Publication lock contention originally entered generic failure; retryable provider_unavailable now leaves progress for another tick.",
+    "A broad run exposed about two milliseconds of host/database skew at the verifier lifetime limit. The first DB helper assumed raw Drizzle timestamps were Date objects; it now requests numeric epoch milliseconds.",
+    "A subsequent full run found six failures from verifying DB-issued releases against host time. Signing verification, selection and admission now use database time consistently.",
+    "Adding the root Graphile dev dependency initially left an incomplete peer resolution; pnpm install --fix-lockfile repaired the lock and link. Final CI must confirm frozen installation."
+  ],
+  "limits": [
+    "Image and customer provider operations here use protocol fixtures. Native enrollment uses real Smallstep/OpenSSH but simulated provider observations.",
+    "The real queue test checks retained expiry scheduling and actual cancellation cleanup; it does not wait a day for a provider retention deadline.",
+    "No paid Hetzner create, snapshot, boot, or deletion was attempted.",
+    "Optional internal image configuration supports unpublished-image fixtures. Production admission must require a release before live activation.",
+    "Production image worker/signing configuration, reachable enrollment, certificate renewal/recovery and the bounded Hetzner drill remain open.",
+    "Application deployment, routes, recipes, backups/restoration and self-hosting remain later milestones."
+  ],
+  "review": {
+    "model": "gpt-5.6-sol",
+    "report": "docs/research/m1-image-use-review.md",
+    "result": "no blocking issue in local checkpoint; commit and CI pending"
+  }
+}

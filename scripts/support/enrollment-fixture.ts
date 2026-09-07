@@ -76,7 +76,7 @@ export async function prepareEnrollmentFixture(input: {
       limits,
       guest: {
         kind: 'enabled',
-        image,
+        resolveImage: () => Promise.resolve(image),
         seal,
         enrollmentUrl,
         runtime: { check: () => Promise.resolve({ kind: 'waiting' }) },

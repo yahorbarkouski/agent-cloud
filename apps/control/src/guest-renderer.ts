@@ -11,10 +11,16 @@ import { allocations, attempts, type Database } from '@agent-cloud/db';
 import type { GuestRenderer } from '@agent-cloud/hetzner';
 import type { BootstrapSeal } from './bootstrap-seal.js';
 import { recoverGuestBootstrap } from './guest-bootstrap.js';
+import type { GuestImage } from '@agent-cloud/contracts';
+import type { Allocation } from './resource-journal.js';
 import { matchesLabels } from './resource-journal.js';
 
 /** Called only for the initial journaled submission, never by effect reconciliation. */
-export function createGuestRenderer(db: Database, seal: BootstrapSeal): GuestRenderer {
+export function createGuestRenderer(
+  db: Database,
+  seal: BootstrapSeal,
+  resolveImage?: (allocation: Allocation) => Promise<GuestImage>,
+): GuestRenderer {
   return async (input) => {
     const [attempt] = await db.select().from(attempts).where(eq(attempts.id, input.attemptId));
     const [allocation] = await db
@@ -56,6 +62,11 @@ export function createGuestRenderer(db: Database, seal: BootstrapSeal): GuestRen
       reference: input.command.bootstrap,
       seal,
     });
+    if (resolveImage && !isDeepStrictEqual(await resolveImage(allocation), spec.image))
+      throw new CloudError(
+        'provider_rejected',
+        'Bootstrap image differs from its admitted release.',
+      );
     const labels = {
       managed_by: 'agent-cloud',
       account_id: spec.accountId,

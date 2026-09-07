@@ -25,6 +25,7 @@ import {
 } from '../apps/control/dist/image-builds.js';
 import { readPrivateFile } from '../apps/control/dist/private-file.js';
 import { createImageAccessStore } from '../apps/control/dist/image-access.js';
+import { requestImageRun } from '../apps/control/dist/image-scheduling.js';
 
 const configSchema = z.strictObject({
   id: imageBuildIdSchema,
@@ -51,12 +52,12 @@ async function readConfiguration(argument: string): Promise<unknown> {
 async function main() {
   const [command, argument, ...extra] = process.argv.slice(2);
   if (
-    !['prepare', 'admit', 'inspect', 'cancel'].includes(command ?? '') ||
+    !['prepare', 'admit', 'start', 'inspect', 'cancel'].includes(command ?? '') ||
     !argument ||
     extra.length
   )
     throw new Error(
-      'Usage: pnpm image:build prepare <config.json> | admit <config.json> | inspect <build-id> | cancel <build-id>',
+      'Usage: pnpm image:build prepare <config.json> | admit <config.json> | start <build-id> | inspect <build-id> | cancel <build-id>',
     );
   const store = createImageAccessStore({
     directory: resolve(process.env.IMAGE_ACCESS_DIRECTORY ?? '.local/image-access'),
@@ -146,6 +147,7 @@ async function main() {
       return await inspectImageBuild(connection.db, config.id);
     }
     const id = imageBuildIdSchema.parse(argument);
+    if (command === 'start') await requestImageRun(connection.db, id);
     if (command === 'cancel') await requestImageCleanup(connection.db, id);
     return await inspectImageBuild(connection.db, id);
   } finally {

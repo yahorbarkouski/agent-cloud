@@ -8,7 +8,8 @@ import {
   type MachineProvider,
 } from '@agent-cloud/contracts';
 import { operations, operationRecord, enqueueOperation, type Connection } from '@agent-cloud/db';
-import { advanceOperation } from './advance-operation.js';
+import { createImageTasks } from './image-tasks.js';
+import { advanceOperation, type GuestProvisioning } from './advance-operation.js';
 
 const payloadSchema = z.object({ operationId: operationIdSchema });
 
@@ -16,8 +17,13 @@ export function createTasks(input: {
   connection: Connection;
   provider: MachineProvider;
   limits: Config['limits'];
+  guest?: GuestProvisioning;
+  images?: Parameters<typeof createImageTasks>[0]['controller'];
 }): TaskList {
   return {
+    ...(input.images
+      ? createImageTasks({ connection: input.connection, controller: input.images })
+      : {}),
     advance_operation: async (payload, helpers) => {
       const { operationId } = payloadSchema.parse(payload);
       await advanceOperation({ ...input, operationId });

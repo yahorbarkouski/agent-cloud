@@ -228,7 +228,7 @@ try {
       limits: fixture.limits,
       guest: {
         kind: 'enabled',
-        image,
+        resolveImage: () => Promise.resolve(image),
         seal: fixture.seal,
         enrollmentUrl: fixture.bootstrap.spec.enrollmentUrl,
         runtime,

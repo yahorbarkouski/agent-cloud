@@ -33,6 +33,7 @@ import {
   type Transaction,
 } from '@agent-cloud/db';
 import { authorize, loadPrincipal } from './auth.js';
+import { pinAllocationImage, type ImageReleaseSelection } from './allocation-image.js';
 import type { Config } from './config.js';
 
 export type Admission =
@@ -157,6 +158,7 @@ export async function admit(input: {
   provider: MachineProvider['kind'];
   catalog: CatalogSource;
   limits: Config['limits'];
+  imageRelease?: ImageReleaseSelection;
 }): Promise<Operation> {
   return input.db.transaction(async (tx) => {
     // Shared admission ceiling spans accounts, so its lock precedes the account lock.
@@ -351,6 +353,15 @@ export async function admit(input: {
     await tx
       .insert(operations)
       .values({ ...operation, command, offer, createdAt: new Date(operation.createdAt) });
+    if (input.imageRelease && input.request.kind === 'create') {
+      if (machine.state.kind !== 'provisioning')
+        throw new Error('Create admission requires its allocation.');
+      await pinAllocationImage(tx, {
+        allocationId: machine.state.allocationId,
+        operation,
+        selection: input.imageRelease,
+      });
+    }
     await tx.insert(idempotency).values({
       accountId: principal.accountId,
       scope,

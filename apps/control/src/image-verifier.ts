@@ -11,6 +11,7 @@ import {
 } from '@agent-cloud/contracts';
 import {
   imageVerifierBootstraps,
+  databaseTime,
   withImageBuildLock,
   type Connection,
   type Database,
@@ -82,7 +83,10 @@ export async function prepareImageVerification(input: {
           expiresAt:
             existing?.expiresAt.toISOString() ??
             new Date(
-              Math.min(Date.parse(build.admission.deadlineAt), Date.now() + 30 * 60_000),
+              Math.min(
+                Date.parse(build.admission.deadlineAt),
+                (await databaseTime(tx)).getTime() + 30 * 60_000,
+              ),
             ).toISOString(),
           image: {
             providerImage: snapshot.ref.id,

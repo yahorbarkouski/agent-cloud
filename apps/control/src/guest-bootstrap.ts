@@ -66,7 +66,7 @@ export async function prepareGuestBootstrap(
     operationId: operation.id,
     image: input.image,
     enrollmentUrl: input.enrollmentUrl,
-    expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+    expiresAt: new Date(Date.parse(operation.createdAt) + 30 * 60_000).toISOString(),
   });
   const { sealed, hash } = input.seal.issue(binding(spec));
   await tx

@@ -6,7 +6,10 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vite
 import { type ImageReleaseKey } from '../packages/contracts/dist/index.js';
 import { connect, imageBuilds, imagePublications } from '../packages/db/dist/index.js';
 import { imageReleaseKeyId, signImageRelease } from '../packages/images/dist/index.js';
-import { advanceImageBuild } from '../apps/control/dist/advance-image-build.js';
+import {
+  advanceImageBuild,
+  completeImageAccessCleanup,
+} from '../apps/control/dist/advance-image-build.js';
 import { admitImageBuild, requestImageCleanup } from '../apps/control/dist/image-builds.js';
 import { planImageCleanup } from '../apps/control/dist/image-cleanup.js';
 import { runImageEffect } from '../apps/control/dist/image-effect-journal.js';
@@ -33,6 +36,7 @@ beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'agent-cloud-publication-'));
 });
 afterEach(async () => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   await rm(directory, { recursive: true, force: true });
 });
@@ -56,11 +60,14 @@ async function scenario(retain = true) {
   return { ...f, publication, advance: () => advanceImageBuild({ ...f, publication }) };
 }
 type Scenario = Awaited<ReturnType<typeof scenario>>;
-async function finishTemporary(f: Scenario) {
+async function finishTemporary(f: Scenario, removeAccess = true) {
   for (let pass = 0; pass < 15; pass++) {
     const plan = await planImageCleanup({ ...f, intent: 'release' });
     if (plan.kind === 'busy') throw new Error('Unexpected fixture lock.');
-    if (plan.value.kind === 'ready_to_publish') return;
+    if (plan.value.kind === 'ready_to_publish') {
+      if (removeAccess) await completeImageAccessCleanup(f, await f.inspection());
+      return;
+    }
     if (plan.value.kind !== 'delete') throw new Error('Unexpected incomplete fixture cleanup.');
     await runImageEffect({ ...f, command: plan.value.command });
   }
@@ -78,6 +85,18 @@ function snapshot(f: Scenario) {
   if (!value) throw new Error('Missing fixture snapshot.');
   return value;
 }
+
+it.each([-5000, 5000])(
+  'publishes and selects against database time with a host clock offset of %s ms',
+  async (offset) => {
+    const f = await scenario();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + offset);
+    const release = await retained(f);
+    const selected = await readPublishedImage({ ...f, keys: f.publication.keys });
+    expect(selected).toMatchObject({ value: { release } });
+  },
+);
 
 it('publishes only after temporary cleanup, preserves the exact release across connections and selects its live snapshot', async () => {
   const f = await scenario();
@@ -238,7 +257,7 @@ it('refuses an untrusted signature, retries after trust repair, and enforces rev
 it('keeps the snapshot unsigned when key removal fails and resumes without creating another machine', async () => {
   const f = await scenario();
   await prepareImagePublication(f);
-  await finishTemporary(f);
+  await finishTemporary(f, false);
   const creates = f.provider.submitted.filter((command) =>
     command.kind.startsWith('create_'),
   ).length;

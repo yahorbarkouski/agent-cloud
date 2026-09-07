@@ -25,6 +25,7 @@ import {
   type Database,
 } from '@agent-cloud/db';
 import { verifyImageInputs } from '@agent-cloud/images';
+import { enqueueImageBuild } from './image-scheduling.js';
 import { readImageVerification } from './image-verifier-records.js';
 import {
   checkImageAdmission,
@@ -88,6 +89,7 @@ export async function admitImageBuild(input: {
       input.limits,
     );
     await tx.insert(imageBuilds).values({ id: admission.id, admission });
+    await enqueueImageBuild(tx, admission.id, new Date(admission.deadlineAt));
     return { admission, state: imageBuildStateSchema.parse({ kind: 'running' }) };
   });
 }
@@ -117,6 +119,8 @@ export async function inspectImageBuild(db: Database, buildId: ImageBuildId) {
       .from(imagePublications)
       .where(eq(imagePublications.buildId, buildId));
     return {
+      runRequestedAt: row.runRequestedAt?.toISOString() ?? null,
+      accessRemovedAt: row.accessRemovedAt?.toISOString() ?? null,
       publication: imagePublicationSchema.parse(
         !publication
           ? { kind: 'waiting' }
@@ -174,5 +178,7 @@ export async function requestImageCleanup(
         .update(imageBuilds)
         .set({ state: { kind: 'cleaning', reason } })
         .where(eq(imageBuilds.id, buildId));
+    if (imageBuildStateSchema.parse(row.state).kind !== 'cleaned' || !row.accessRemovedAt)
+      await enqueueImageBuild(tx, buildId);
   });
 }

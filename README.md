@@ -53,6 +53,7 @@ pnpm acld usage
 ```sh
 pnpm check
 pnpm format:check
+pnpm db:check
 # With the API and worker running:
 pnpm smoke:local
 ```
@@ -99,13 +100,15 @@ After `pnpm db:migrate`, operators can inspect and cancel a recorded image build
 ```sh
 pnpm image:build inspect <build-id>
 pnpm image:build cancel <build-id>
+# Queue explicit advancement for a configured image worker:
+pnpm image:build start <build-id>
 ```
 
 `pnpm image:build prepare <config.json>` verifies public image inputs and generates independent management and host SSH keys. The input supplies a stable build UUID, input directory/digest, pinned base-image ID, exact offer mapping, management IPv4 address, gross spending caps and deadline. Its schema is in `scripts/image-build.ts`. The JSON result is the complete public configuration for admission. Private keys stay in owner-only `.local/image-access/<buildId>`, configurable with `IMAGE_ACCESS_DIRECTORY`; preserve that directory for retries and recovery. Preparation needs neither a database nor a provider token.
 
-`pnpm image:build admit <prepared-config.json>` checks the matching local key store, reads Hetzner pricing and reserves an operator allowance without creating resources. Reusing the same configuration returns its recorded admission; changed intent needs a new build ID. `cancel` records a full abort request; it does not claim cloud deletion or local key erasure has run.
+`pnpm image:build admit <prepared-config.json>` checks the matching local key store, reads Hetzner pricing and reserves an operator allowance without creating resources. Reusing the same configuration returns its recorded admission; changed intent needs a new build ID. `start` records an immutable run request. Admission alone queues only deadline cleanup and cannot start a machine. `cancel` queues a full abort request; it does not claim cloud deletion or local key erasure has run.
 
-The internal controller persists builder phases, stops and snapshots only after saved sanitation evidence, and removes temporary keys after full abort cleanup. Configured verifier ports now boot the confirmed snapshot, enroll with build-owned credentials and save restricted runtime evidence. Retained builds now remove temporary resources, sign the verified snapshot and retain its storage reservation. Selection checks current snapshot ownership and signing-key validity. Image scheduling, production allocation consumption and recovery wiring remain open, so there is no live image advancement command yet. See [image publication](docs/architecture/image-release.md).
+The internal controller persists builder phases, stops and snapshots only after saved sanitation evidence, and removes temporary keys after full abort cleanup. Configured verifier ports now boot the confirmed snapshot, enroll with build-owned credentials and save restricted runtime evidence. Retained builds now remove temporary resources, sign the verified snapshot and retain its storage reservation. Selection checks current snapshot ownership and signing-key validity. Durable Graphile tasks now schedule advancement, cancellation and retained expiry. Configured customer admission pins a signed snapshot through uncertain creation; the worker and bootstrap renderer recheck current trust before a fresh VM. Production image configuration, the runnable image worker and recovery wiring remain open, so live advancement is still gated. See [image publication](docs/architecture/image-release.md).
 
 ## What is enforced
 

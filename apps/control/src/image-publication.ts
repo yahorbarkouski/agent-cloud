@@ -13,6 +13,7 @@ import {
 import {
   imageBuilds,
   imagePublications,
+  databaseTime,
   withImageBuildLock,
   type Connection,
   type Database,
@@ -26,6 +27,18 @@ import { matchesLabels } from './resource-journal.js';
 
 type Ports = { connection: Connection; buildId: ImageBuildId; provider: ImageProvider };
 export type ImagePublicationSigner = { privateKey: KeyObject; keys: ImageReleaseKey[] };
+
+/** Validation has no I/O. An invalid release must fail admission or compensate an unsubmitted boot. */
+export function requireTrustedImageRelease(value: unknown, keys: ImageReleaseKey[], now: Date) {
+  try {
+    return verifySignedImageRelease(value, keys, now);
+  } catch {
+    throw new CloudError(
+      'permission_denied',
+      'Image release is invalid, expired or its signing key is not trusted.',
+    );
+  }
+}
 
 /** Capture provenance before cleanup removes the source and verifier observations. */
 export async function prepareImagePublication(input: Ports) {
@@ -181,14 +194,20 @@ export async function publishImageRelease(input: Ports & ImagePublicationSigner)
       if (build.state.kind !== 'releasing' || build.publication.kind !== 'prepared')
         throw new CloudError('permission_denied', 'The build has no active publication intent.');
       requireTemporaryCleanup(build);
+      if (!build.accessRemovedAt)
+        throw new CloudError(
+          'permission_denied',
+          'Publication requires recorded local key removal.',
+        );
       const { evidence } = build.publication;
       const snapshot = await observePublishedSnapshot(build, evidence, input.provider);
       await observeImageResource(db, build, { kind: 'snapshot', id: snapshot.id }, snapshot);
+      const issuedAt = await databaseTime(db);
       const release = signImageRelease(
-        { ...evidence, issuedAt: new Date().toISOString() },
+        { ...evidence, issuedAt: issuedAt.toISOString() },
         input.privateKey,
       );
-      verifySignedImageRelease(release, input.keys, new Date());
+      requireTrustedImageRelease(release, input.keys, issuedAt);
       await db.transaction(async (tx) => {
         // The database guard locks the build and rechecks cancellation, deadline and cleanup.
         await tx
@@ -213,7 +232,11 @@ async function resolvePublishedImage(
   if (build.state.kind !== 'retained' || build.publication.kind !== 'published')
     throw new CloudError('permission_denied', 'Only a retained published image can be selected.');
   requireTemporaryCleanup(build);
-  const result = verifySignedImageRelease(build.publication.release, input.keys, new Date());
+  const result = requireTrustedImageRelease(
+    build.publication.release,
+    input.keys,
+    await databaseTime(db),
+  );
   const evidence = imageReleaseEvidenceSchema.strip().parse(result.release.payload);
   if (!isDeepStrictEqual(result.release.payload.manifest, build.admission.source.manifest))
     throw new CloudError('permission_denied', 'Published image differs from its admission.');
@@ -221,7 +244,7 @@ async function resolvePublishedImage(
   const refreshed = await inspectImageBuild(db, input.buildId);
   if (refreshed.state.kind !== 'retained')
     throw new CloudError('permission_denied', 'Image retention was cancelled during selection.');
-  verifySignedImageRelease(result.release, input.keys, new Date());
+  requireTrustedImageRelease(result.release, input.keys, await databaseTime(db));
   return result;
 }
 

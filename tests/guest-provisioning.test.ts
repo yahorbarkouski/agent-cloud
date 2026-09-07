@@ -92,7 +92,7 @@ async function scenario(fault: SimulationFault = { kind: 'none' }) {
   const guest = {
     kind: 'enabled',
     runtime: { check: () => Promise.resolve({ kind: 'waiting' }) },
-    image,
+    resolveImage: () => Promise.resolve(image),
     seal,
     enrollmentUrl: 'https://enrollment.example.test/guest/enroll',
   } satisfies NonNullable<Parameters<typeof advanceOperation>[0]['guest']>;

@@ -221,7 +221,7 @@ export type GuestProvisioning =
   | { kind: 'disabled' }
   | {
       kind: 'enabled';
-      image: GuestImage;
+      resolveImage: (allocation: Allocation) => Promise<GuestImage>;
       seal: BootstrapSeal;
       enrollmentUrl: string;
       runtime: GuestReadiness;
@@ -401,6 +401,10 @@ async function advanceLocked(
       const create = effectOf(history, 'create');
       if (!create && provider.kind === 'hetzner' && guest.kind !== 'enabled')
         throw new CloudError('provider_rejected', 'Live guest provisioning is not configured.');
+      const image =
+        !create && provider.kind === 'hetzner' && guest.kind === 'enabled'
+          ? await guest.resolveImage(allocation)
+          : null;
       const ipEffect = effectOf(history, 'create_primary_ip');
       if (profile === 'managed_ipv4' && !ipEffect) {
         await journalEffect({
@@ -446,14 +450,14 @@ async function advanceLocked(
           labels,
         };
         let command: ProviderCommand;
-        if (provider.kind === 'hetzner' && guest.kind === 'enabled') {
+        if (provider.kind === 'hetzner' && guest.kind === 'enabled' && image) {
           if (!ip || profile !== 'managed_ipv4')
             throw new CloudError(
               'provider_rejected',
               'Guest creation requires an owned Primary IP.',
             );
           const bootstrap = await db.transaction((tx) =>
-            prepareGuestBootstrap(tx, { allocation, operation, ...guest }),
+            prepareGuestBootstrap(tx, { allocation, operation, ...guest, image }),
           );
           command = {
             ...details,
@@ -565,6 +569,8 @@ async function advanceLocked(
     });
   } catch (error) {
     if (!(error instanceof CloudError)) throw error;
+    // A busy image publication or temporary provider read failure needs another tick, not compensation.
+    if (error.failure.code === 'provider_unavailable' && error.failure.retryable) return;
     // A failure after submission must not turn an uncertain effect into cleanup.
     const currentHistory = await db
       .select()

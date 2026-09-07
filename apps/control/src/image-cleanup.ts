@@ -1,4 +1,5 @@
 import { CloudError } from '@agent-cloud/contracts';
+import { imageSnapshotInUse } from './allocation-image.js';
 import { eq } from 'drizzle-orm';
 import { imageBuilds, withImageBuildLock, type Connection } from '@agent-cloud/db';
 import {
@@ -72,6 +73,7 @@ export async function planImageCleanup(input: {
       // Server attachments must disappear before deleting their IP, firewall or access key.
       const order = ['server', 'snapshot', 'primary_ip', 'firewall', 'ssh_key'];
       const retaining = build.state.kind === 'releasing';
+      const pinned = await imageSnapshotInUse(db, input.buildId);
       const remaining = build.resources.filter(
         (resource) =>
           resource.state.kind !== 'absent' && !(retaining && resource.role === 'snapshot'),
@@ -79,6 +81,7 @@ export async function planImageCleanup(input: {
       const next = remaining
         .filter((resource) => {
           const creator = pending.find((effect) => effect.id === resource.effectId);
+          if (resource.role === 'snapshot' && pinned) return false;
           if ((creator && runningCreates.has(creator.id)) || resource.state.kind !== 'observed')
             return false;
           if (

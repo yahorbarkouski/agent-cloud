@@ -49,6 +49,16 @@
 
 ## Verification ledger
 
+M1 allocation image pins and durable image work, 2026-09-07:
+
+- Configured admission verifies a retained release inside its transaction and pins the exact snapshot to the allocation, offer and original boot deadline. Idempotent replay preserves that selection. The worker rechecks signature/current ownership before fresh IP/VM work, and the renderer repeats the check before producing boot data.
+- SQL rejects mutable pins, substituted bootstrap images, second create effects and reversed retirement. Snapshot cleanup locks the same source-build row as admission. Unknown customer creates retain the snapshot until original server confirmation or fully retired ownership; cancellation cannot guess that an uncertain create is absent.
+- Image admission queues only deadline cleanup. Explicit `image:build start` records durable run intent. Real Graphile tasks advance builds, schedule retained expiry and reconcile interrupted cleanup. Start/cancel/reschedule share one row lock. SQL requires the durable local-access-removal marker before signing; filesystem failure after provider cleanup resumes across worker connections.
+- Follow-up tests found plain signature exceptions could leave allocations retrying and transient publication contention could fail them. Typed trust failures now compensate; retryable provider unavailability waits. Broader tests then found millisecond host/database skew. Verifier lifetime, signing verification, selection and admission now consistently use PostgreSQL time, with host-ahead/behind regressions.
+- Full check 79451 passed **339 tests in 31 files**, typecheck and lint. Final 32612 passed typecheck/lint and four queue cases after the test began invoking the actual start CLI and the migration checker was added. Native enrollment 97118 passed real Smallstep/OpenSSH/TLS with fixture provider observations. Local CLI 91748 passed create/inspect/destroy/cleanup after the migration and service restart.
+- Migration 0016 is applied and immutable; `pnpm db:check` verified all 17 hashes. The base database has zero active allocations, simulated VMs/IPs and open image builds. No paid resource was created. Evidence and limits are in `research/m1-image-use-verification.json`. Independent gpt-5.6-sol artifact/trail review found no blocker; report `research/m1-image-use-review.md`. Exact-commit CI is pending.
+- Production configuration remains gated. Mandatory release selection, the runnable image worker and cron, signing configuration, reachable enrollment, renewal/recovery and the bounded Hetzner drill remain M1 work. M2–M7 remain open.
+
 M1 retained snapshot publication, 2026-09-07:
 
 - Publication captures immutable evidence from persisted admission, sanitation, stop/snapshot and verifier records. Temporary cleanup preserves only the exact snapshot. Signing and retained state commit together after temporary resource absence and local key removal. Cancellation and expiry retain the full-abort path.

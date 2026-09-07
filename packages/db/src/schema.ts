@@ -18,6 +18,8 @@ export const imageBuilds = pgTable('image_builds', {
   id: text('id').primaryKey(),
   admission: jsonb('admission').notNull(),
   state: jsonb('state').notNull().default({ kind: 'running' }),
+  runRequestedAt: timestamp('run_requested_at', { withTimezone: true }),
+  accessRemovedAt: timestamp('access_removed_at', { withTimezone: true }),
   createdAt: createdAt(),
 });
 
@@ -277,6 +279,30 @@ export const operations = pgTable(
     uniqueIndex('one_active_operation')
       .on(t.machineId)
       .where(sql`${t.progress}->>'kind' NOT IN ('succeeded', 'failed')`),
+  ],
+);
+
+export const allocationImages = pgTable(
+  'allocation_images',
+  {
+    allocationId: text('allocation_id').primaryKey(),
+    accountId: text('account_id').notNull(),
+    operationId: text('operation_id').notNull().unique(),
+    buildId: text('build_id')
+      .notNull()
+      .references(() => imagePublications.buildId),
+    snapshotId: text('snapshot_id').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.accountId, t.allocationId],
+      foreignColumns: [allocations.accountId, allocations.id],
+    }),
+    foreignKey({
+      columns: [t.accountId, t.operationId],
+      foreignColumns: [operations.accountId, operations.id],
+    }),
   ],
 );
 

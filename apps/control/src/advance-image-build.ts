@@ -4,8 +4,9 @@ import type {
   ImageBuildLimits,
   ImageProvider,
 } from '@agent-cloud/contracts';
-import type { Connection } from '@agent-cloud/db';
-import { inspectImageBuild, requestImageCleanup } from './image-builds.js';
+import { imageBuilds, type Connection } from '@agent-cloud/db';
+import { and, eq, isNull, sql } from 'drizzle-orm';
+import { inspectImageBuild, requestImageCleanup, type ImageBuild } from './image-builds.js';
 import { runImageEffect } from './image-effect-journal.js';
 import { runImageBuilderWork } from './image-builder-work.js';
 import { planImageCleanup } from './image-cleanup.js';
@@ -36,6 +37,18 @@ type Advance =
   | { kind: 'busy' }
   | { kind: 'waiting'; effects: string[] }
   | { kind: 'cleaned' };
+
+export async function completeImageAccessCleanup(
+  input: { connection: Connection; access: Parameters<typeof runImageBuilderWork>[0]['access'] },
+  build: ImageBuild,
+) {
+  if (build.accessRemovedAt) return;
+  await input.access.remove(build.admission);
+  await input.connection.db
+    .update(imageBuilds)
+    .set({ accessRemovedAt: sql`clock_timestamp()` })
+    .where(and(eq(imageBuilds.id, build.admission.id), isNull(imageBuilds.accessRemovedAt)));
+}
 
 /** One recoverable controller pass. Live CLI activation still requires production recovery and bounded provider proof. */
 export async function advanceImageBuild(input: {
@@ -85,7 +98,7 @@ export async function advanceImageBuild(input: {
     case 'publication_prepare':
       return { kind: 'publication_prepared', result: await prepareImagePublication(input) };
     case 'retained': {
-      await input.access.remove(build.admission);
+      await completeImageAccessCleanup(input, build);
       if (!input.publication)
         throw new Error('Returning a release requires its verification key policy.');
       const selected = await readPublishedImage({ ...input, keys: input.publication.keys });
@@ -103,7 +116,7 @@ export async function advanceImageBuild(input: {
       if (cleanup.value.kind === 'waiting') return cleanup.value;
       if (cleanup.value.kind !== 'ready_to_publish' || !input.publication)
         throw new Error('Publication requires its configured signer after retained cleanup.');
-      await input.access.remove(build.admission);
+      await completeImageAccessCleanup(input, build);
       const published = await publishImageRelease({ ...input, ...input.publication });
       if (published.kind === 'busy') return published;
       return { kind: 'retained', release: published.value };
@@ -120,11 +133,11 @@ export async function advanceImageBuild(input: {
       if (cleanup.value.kind === 'waiting') return cleanup.value;
       if (cleanup.value.kind !== 'cleaned')
         throw new Error('Full abort must remove every resource.');
-      await input.access.remove(build.admission);
+      await completeImageAccessCleanup(input, build);
       return { kind: 'cleaned' };
     }
     case 'cleaned':
-      await input.access.remove(build.admission);
+      await completeImageAccessCleanup(input, build);
       return { kind: 'cleaned' };
     default: {
       const exhaustive: never = plan;

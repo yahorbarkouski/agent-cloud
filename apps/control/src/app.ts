@@ -35,6 +35,7 @@ import {
 } from '@agent-cloud/db';
 import { authenticate, authorize, issueGrant, loadPrincipal, revokeGrant } from './auth.js';
 import { admit, lockAccount } from './lifecycle.js';
+import type { ImageReleaseSelection } from './allocation-image.js';
 import type { Config } from './config.js';
 import type { EnrollmentService } from './guest-enrollment.js';
 import type { ImageVerifierEnrollment } from './image-verifier-enrollment.js';
@@ -46,6 +47,7 @@ export function createApp(input: {
   limits: Config['limits'];
   enrollment?: EnrollmentService;
   imageEnrollment?: ImageVerifierEnrollment;
+  imageRelease?: ImageReleaseSelection;
 }) {
   const app = new Hono<{ Variables: { principal: Principal; requestId: string } }>();
   app.use('*', async (c, next) => {

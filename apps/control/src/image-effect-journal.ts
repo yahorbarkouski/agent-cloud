@@ -1,3 +1,4 @@
+import { imageSnapshotInUse } from './allocation-image.js';
 import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import {
@@ -237,6 +238,15 @@ export async function runImageEffect(input: {
         throw new CloudError(
           'provider_outcome_unknown',
           'Reconcile pending image effects before starting another.',
+        );
+      if (
+        command.kind === 'delete' &&
+        command.resource.kind === 'snapshot' &&
+        (await imageSnapshotInUse(db, input.buildId))
+      )
+        throw new CloudError(
+          'provider_outcome_unknown',
+          'Snapshot is pinned by an unsettled customer create.',
         );
       await checkImageCommand(build, command, input.provider);
       const prices = isImageCreate(command) ? await input.pricing() : null;

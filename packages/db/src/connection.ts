@@ -23,6 +23,18 @@ export function connect(connectionString: string, max = 12) {
   return { pool, db: drizzle(pool, { schema }) };
 }
 export type Connection = ReturnType<typeof connect>;
+
+/** Use the database clock when a SQL guard enforces the same instant or lifetime. */
+export async function databaseTime(db: Executor): Promise<Date> {
+  // Drizzle returns raw timestamp columns as strings; request numeric milliseconds explicitly.
+  const result = await db.execute<{ now: number }>(
+    sql`SELECT floor(extract(epoch FROM clock_timestamp()) * 1000)::float8 AS now`,
+  );
+  const row = result.rows[0];
+  if (!row || !Number.isFinite(row.now))
+    throw new Error('Database clock returned no valid instant.');
+  return new Date(row.now);
+}
 export type Database = NodePgDatabase<typeof schema>;
 export type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 export type Executor = Database | Transaction;

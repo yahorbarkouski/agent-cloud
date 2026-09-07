@@ -8,14 +8,14 @@ Build an open-source cloud operated by customers' existing coding agents. We do 
 - Use TypeScript, ordinary Linux VMs, Docker Compose, SSH and Hetzner. Stripe is deferred until the product works.
 - Hetzner verification and credentials are ready. Prefer local services and protocol fixtures. Rent capacity only for a bounded inexpensive test with recorded ownership, explicit spending limits and complete cleanup. No expensive plans, warm pool, benchmarks or automatic type/region fallback.
 - Never put provider credentials in a guest. Do not log secrets, customer commands or application data. Use dedicated development credentials and scoped CI secrets.
-- Do not report a live integration as verified from a simulated provider or local VM. The live CLI remains gated until its complete bounded lifecycle is ready, including scheduled retention cleanup and image pinning through uncertain customer creates.
+- Do not report a live integration as verified from a simulated provider or local VM. The live CLI remains gated until its complete bounded lifecycle is ready, including mandatory published-image selection, configured image scheduling, reachable enrollment and recovery. Internal scheduling and allocation pin behavior alone do not enable live entrypoints.
 
 ## Code boundaries
 
 - `packages/contracts` owns schemas; `packages/db` owns schema/migrations; `apps/control` owns authentication, admission and controllers. `packages/sdk` and `apps/cli` expose implemented behavior. `packages/hetzner` handles transport, not business policy.
 - Derive transport types from validated schemas. Use branded IDs and discriminated unions, not optional state bags. Validate external input at boundaries. Do not use `any`, non-null assertions or unchecked casts.
 - Prefer explicit modules to speculative frameworks. Keep tenant authorization, idempotency, concurrency, revocation and restore checks as real behavior. Tests should exercise failures rather than mirror implementation.
-- Applied migrations are immutable. Add a follow-up migration for corrections. Verify migration hashes before claiming a deployment matches the schema.
+- Applied migrations are immutable. Add a follow-up migration for corrections. Run `pnpm db:check` to verify migration hashes before claiming a deployment matches the schema.
 
 ## Durable cloud operations
 
@@ -34,6 +34,8 @@ Build an open-source cloud operated by customers' existing coding agents. We do 
 - Installation requires the caller's builder UUID. Execute controller-owned `imageInstallCommand` to validate the pinned transfer checksum with base OS tools before uploaded code. The install-start marker prevents a second installer after a lost response. Partial installation requires disposal or explicit recovery.
 - `guestctl prepare-image --json` accepts only an exclusive fresh builder without guest or Docker data. It must not start Docker to inspect it. Persist installation and sanitation intent before SSH. Unknown sanitation requests full cleanup. Only a saved sanitation receipt and confirmed stopped source authorize a snapshot. See `docs/architecture/image-sanitation.md`.
 - Image builds use sibling SQL journals with no customer ownership. Verify a snapshot using a build-owned bootstrap, exact provider boot source and restricted runtime evidence. Compare its machine ID with the sanitized builder. A successful enrollment alone cannot publish a release. Retained publication and full abort are different intents. Save release evidence before temporary cleanup; sign only after temporary resources and local keys are gone. Every image-selection and publication replay path checks current key trust and snapshot ownership. Inspection returns recorded audit evidence, which is not authorization to deploy. Retained storage stays reserved until snapshot absence. See `docs/architecture/image-verifier.md` and `image-release.md`.
+- Pin published images in the admission transaction before provider effects. Lock the source build row for pin insertion and snapshot deletion. Keep the pin through pending or unknown creates; only confirmed original creation or fully retired ownership releases it. Never substitute a current default on retry. Validate current release trust before each fresh create and again at bootstrap rendering. Use database time for timestamps constrained by SQL time.
+- Image admission queues deadline cleanup only. Explicit start records durable run intent. Cancellation and rescheduling share the build row lock. Reconcile cleaned builds until local key removal has a durable marker; filesystem cleanup failure must survive process restart.
 - Operator builder keys default to `.local/image-access/<buildId>`, outside SQL. Preparation preserves the first identity for an exact admission. Retain keys while provider outcomes are uncertain. Remove them only after authoritative cleanup; removal must be retryable. See `docs/architecture/guest-bootstrap.md` and `guest-image.md` for remaining production integration.
 
 ## Local verification

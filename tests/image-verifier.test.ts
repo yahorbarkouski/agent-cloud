@@ -41,6 +41,17 @@ afterEach(async () => {
 
 const scenario = () => imageVerifierScenario(database.connection, directory);
 
+it('bounds verifier lifetime with the database clock when the controller clock is ahead', async () => {
+  const realNow = Date.now;
+  vi.spyOn(Date, 'now').mockImplementation(() => realNow() + 5000);
+  const f = await scenario();
+  const result = await database.connection.pool.query<{ bounded: boolean }>(
+    "SELECT expires_at <= clock_timestamp() + interval '30 minutes' AS bounded FROM image_verifier_bootstraps WHERE build_id=$1",
+    [f.buildId],
+  );
+  expect(result.rows[0]?.bounded).toBe(true);
+});
+
 it('verifies a build-owned snapshot boot, replays across connections, and cleans every resource without customer allocations', async () => {
   const f = await scenario();
   expect(await f.advance()).toMatchObject({
