@@ -104,10 +104,144 @@ export type GuestRenderer = (input: {
   command: Extract<ProviderCommand, { kind: 'create_guest' }>;
 }) => Promise<z.infer<typeof renderedGuestSchema>>;
 
-/** Transport adapter only. Activating live work also requires the control-plane guest and cleanup checks. */
-export class HetznerProvider implements MachineProvider {
+/** Read-only provider access for operator recovery, independent of deployment configuration. */
+export class HetznerInventory {
   readonly kind = 'hetzner';
-  private readonly request: ReturnType<typeof createHetznerRequest>;
+  protected readonly request: ReturnType<typeof createHetznerRequest>;
+
+  constructor(input: { token: string; transport?: typeof fetch }) {
+    this.request = createHetznerRequest(input);
+  }
+
+  async getAction(input: { actionId: string }): Promise<ProviderAction> {
+    const id = z
+      .string()
+      .regex(/^[1-9][0-9]*$/)
+      .parse(input.actionId);
+    const { action } = z
+      .object({ action: actionSchema })
+      .parse(await this.request({ path: `/actions/${id}` }));
+    switch (action.status) {
+      case 'running':
+        return { kind: 'running' };
+      case 'success':
+        return { kind: 'succeeded' };
+      case 'error':
+        return {
+          kind: 'failed',
+          error: { code: 'provider_rejected', message: 'Hetzner action failed.', retryable: false },
+        };
+    }
+  }
+
+  async getServer(input: { serverId: string }): Promise<ProviderServer | null> {
+    const id = z
+      .string()
+      .regex(/^[1-9][0-9]*$/)
+      .parse(input.serverId);
+    try {
+      const { server } = z
+        .object({ server: serverSchema })
+        .parse(await this.request({ path: `/servers/${id}` }));
+      return serverRecord(server);
+    } catch (error) {
+      if (error instanceof HttpError && error.status === 404 && error.code === 'not_found')
+        return null;
+      throw error;
+    }
+  }
+
+  async getPrimaryIp(input: { primaryIpId: string }): Promise<ProviderPrimaryIp | null> {
+    const id = z
+      .string()
+      .regex(/^[1-9][0-9]*$/)
+      .parse(input.primaryIpId);
+    try {
+      const result = z
+        .object({ primary_ip: primaryIpSchema })
+        .parse(await this.request({ path: `/primary_ips/${id}` }));
+      return primaryIpRecord(result.primary_ip);
+    } catch (error) {
+      if (error instanceof HttpError && error.status === 404 && error.code === 'not_found')
+        return null;
+      throw error;
+    }
+  }
+  async findPrimaryIps(input: {
+    labels: Readonly<Record<string, string>>;
+  }): Promise<ProviderPrimaryIp[]> {
+    const selector = Object.entries(input.labels)
+      .map(([key, value]) => `${key}=${value}`)
+      .join(',');
+    const ips: ProviderPrimaryIp[] = [];
+    let page: number | null = 1;
+    const seen = new Set<number>();
+    while (page !== null) {
+      if (seen.has(page) || seen.size >= 1000)
+        throw new CloudError('provider_unavailable', 'Hetzner returned invalid pagination.', true);
+      seen.add(page);
+      const result = z
+        .object({
+          primary_ips: z.array(primaryIpSchema),
+          meta: z.object({ pagination: z.object({ next_page: z.int().positive().nullable() }) }),
+        })
+        .parse(
+          await this.request({
+            path: `/primary_ips?per_page=50&page=${page}&label_selector=${encodeURIComponent(selector)}`,
+          }),
+        );
+      ips.push(
+        ...result.primary_ips
+          .filter(
+            (ip) =>
+              ip.type === 'ipv4' &&
+              Object.entries(input.labels).every(([key, value]) => ip.labels[key] === value),
+          )
+          .map(primaryIpRecord),
+      );
+      page = result.meta.pagination.next_page;
+    }
+    return ips;
+  }
+
+  async findServers(input: {
+    labels: Readonly<Record<string, string>>;
+  }): Promise<ProviderServer[]> {
+    const selector = Object.entries(input.labels)
+      .map(([key, value]) => `${key}=${value}`)
+      .join(',');
+    const servers: ProviderServer[] = [];
+    let page: number | null = 1;
+    const seen = new Set<number>();
+    while (page !== null) {
+      if (seen.has(page) || seen.size >= 1000)
+        throw new CloudError('provider_unavailable', 'Hetzner returned invalid pagination.', true);
+      seen.add(page);
+      const result = z
+        .object({
+          servers: z.array(serverSchema),
+          meta: z.object({ pagination: z.object({ next_page: z.int().positive().nullable() }) }),
+        })
+        .parse(
+          await this.request({
+            path: `/servers?per_page=50&page=${page}&label_selector=${encodeURIComponent(selector)}`,
+          }),
+        );
+      servers.push(
+        ...result.servers
+          .map(serverRecord)
+          .filter((server) =>
+            Object.entries(input.labels).every(([key, value]) => server.labels[key] === value),
+          ),
+      );
+      page = result.meta.pagination.next_page;
+    }
+    return servers;
+  }
+}
+
+/** Transport adapter only. Activating live work also requires the control-plane guest and cleanup checks. */
+export class HetznerProvider extends HetznerInventory implements MachineProvider {
   private readonly offers: OfferConfiguration;
   private readonly access: z.infer<typeof accessSchema>;
   private readonly renderGuest: GuestRenderer;
@@ -119,8 +253,8 @@ export class HetznerProvider implements MachineProvider {
     renderGuest: GuestRenderer;
     transport?: typeof fetch;
   }) {
+    super(input);
     this.offers = offerConfigurationSchema.parse(input.offers);
-    this.request = createHetznerRequest(input);
     this.access = accessSchema.parse(input.access);
     this.renderGuest = input.renderGuest;
   }
@@ -282,131 +416,5 @@ export class HetznerProvider implements MachineProvider {
         reason: 'Hetzner did not return a definitive, valid submission result.',
       };
     }
-  }
-
-  async getAction(input: { actionId: string }): Promise<ProviderAction> {
-    const id = z
-      .string()
-      .regex(/^[1-9][0-9]*$/)
-      .parse(input.actionId);
-    const { action } = z
-      .object({ action: actionSchema })
-      .parse(await this.request({ path: `/actions/${id}` }));
-    switch (action.status) {
-      case 'running':
-        return { kind: 'running' };
-      case 'success':
-        return { kind: 'succeeded' };
-      case 'error':
-        return {
-          kind: 'failed',
-          error: { code: 'provider_rejected', message: 'Hetzner action failed.', retryable: false },
-        };
-    }
-  }
-
-  async getServer(input: { serverId: string }): Promise<ProviderServer | null> {
-    const id = z
-      .string()
-      .regex(/^[1-9][0-9]*$/)
-      .parse(input.serverId);
-    try {
-      const { server } = z
-        .object({ server: serverSchema })
-        .parse(await this.request({ path: `/servers/${id}` }));
-      return serverRecord(server);
-    } catch (error) {
-      if (error instanceof HttpError && error.status === 404 && error.code === 'not_found')
-        return null;
-      throw error;
-    }
-  }
-
-  async getPrimaryIp(input: { primaryIpId: string }): Promise<ProviderPrimaryIp | null> {
-    const id = z
-      .string()
-      .regex(/^[1-9][0-9]*$/)
-      .parse(input.primaryIpId);
-    try {
-      const result = z
-        .object({ primary_ip: primaryIpSchema })
-        .parse(await this.request({ path: `/primary_ips/${id}` }));
-      return primaryIpRecord(result.primary_ip);
-    } catch (error) {
-      if (error instanceof HttpError && error.status === 404 && error.code === 'not_found')
-        return null;
-      throw error;
-    }
-  }
-  async findPrimaryIps(input: {
-    labels: Readonly<Record<string, string>>;
-  }): Promise<ProviderPrimaryIp[]> {
-    const selector = Object.entries(input.labels)
-      .map(([key, value]) => `${key}=${value}`)
-      .join(',');
-    const ips: ProviderPrimaryIp[] = [];
-    let page: number | null = 1;
-    const seen = new Set<number>();
-    while (page !== null) {
-      if (seen.has(page) || seen.size >= 1000)
-        throw new CloudError('provider_unavailable', 'Hetzner returned invalid pagination.', true);
-      seen.add(page);
-      const result = z
-        .object({
-          primary_ips: z.array(primaryIpSchema),
-          meta: z.object({ pagination: z.object({ next_page: z.int().positive().nullable() }) }),
-        })
-        .parse(
-          await this.request({
-            path: `/primary_ips?per_page=50&page=${page}&label_selector=${encodeURIComponent(selector)}`,
-          }),
-        );
-      ips.push(
-        ...result.primary_ips
-          .filter(
-            (ip) =>
-              ip.type === 'ipv4' &&
-              Object.entries(input.labels).every(([key, value]) => ip.labels[key] === value),
-          )
-          .map(primaryIpRecord),
-      );
-      page = result.meta.pagination.next_page;
-    }
-    return ips;
-  }
-
-  async findServers(input: {
-    labels: Readonly<Record<string, string>>;
-  }): Promise<ProviderServer[]> {
-    const selector = Object.entries(input.labels)
-      .map(([key, value]) => `${key}=${value}`)
-      .join(',');
-    const servers: ProviderServer[] = [];
-    let page: number | null = 1;
-    const seen = new Set<number>();
-    while (page !== null) {
-      if (seen.has(page) || seen.size >= 1000)
-        throw new CloudError('provider_unavailable', 'Hetzner returned invalid pagination.', true);
-      seen.add(page);
-      const result = z
-        .object({
-          servers: z.array(serverSchema),
-          meta: z.object({ pagination: z.object({ next_page: z.int().positive().nullable() }) }),
-        })
-        .parse(
-          await this.request({
-            path: `/servers?per_page=50&page=${page}&label_selector=${encodeURIComponent(selector)}`,
-          }),
-        );
-      servers.push(
-        ...result.servers
-          .map(serverRecord)
-          .filter((server) =>
-            Object.entries(input.labels).every(([key, value]) => server.labels[key] === value),
-          ),
-      );
-      page = result.meta.pagination.next_page;
-    }
-    return servers;
   }
 }

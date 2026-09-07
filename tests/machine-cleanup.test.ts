@@ -1,4 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
 import { eq, isNull } from 'drizzle-orm';
 import {
@@ -10,6 +15,7 @@ import {
   providerPrimaryIpSchema,
   effectResolutionSchema,
   newId,
+  operatorRecoverySchema,
   type Operation,
   type MachineProvider,
   type Submission,
@@ -19,6 +25,7 @@ import {
   attempts,
   operations,
   operationCleanups,
+  operatorRecoveries,
   providerResources,
   grants,
   simulatedServers,
@@ -27,6 +34,97 @@ import {
 } from '../packages/db/src/index.js';
 import { createApp, advanceOperation, SimulatedProvider } from '../apps/control/src/index.js';
 import { testDatabase, seedAccount } from './database.js';
+import {
+  applyOperatorRecovery,
+  inspectOperatorRecovery,
+} from '../apps/control/src/operator-recovery.js';
+
+async function recoveryRequest(
+  op: Operation,
+  kind: 'close_create' | 'retry_delete' = 'close_create',
+) {
+  const inspected = await inspectOperatorRecovery(fixture.connection, op.id);
+  const target =
+    kind === 'close_create'
+      ? inspected.attempts.find(
+          (attempt) =>
+            ['create', 'create_guest', 'create_primary_ip'].includes(attempt.command.kind) &&
+            attempt.resolution.kind === 'pending',
+        )
+      : inspected.attempts
+          .filter((attempt) => ['destroy', 'delete_primary_ip'].includes(attempt.command.kind))
+          .at(-1);
+  if (!target) throw new Error('Expected a recovery target.');
+  return operatorRecoverySchema.parse({
+    id: randomUUID(),
+    kind,
+    operationId: op.id,
+    allocationId: inspected.allocation.id,
+    accountId: op.accountId,
+    attemptId: target.id,
+    expectedState: inspected.stateDigest,
+    operator: 'fixture-operator',
+    evidence: { reference: 'fixture:provider-confirmation', sha256: 'f'.repeat(64) },
+    ...(kind === 'close_create'
+      ? {
+          providerRequestFinished: true,
+          resourceIds: inspected.resources
+            .filter(
+              (resource) =>
+                resource.kind ===
+                  (target.command.kind === 'create_primary_ip' ? 'primary_ip' : 'server') &&
+                resource.labels.operation_id === target.operationId,
+            )
+            .map((resource) => resource.providerId),
+        }
+      : {}),
+  });
+}
+
+async function uncertainCleanup() {
+  const created = await create();
+  await submitVm(
+    created,
+    new SimulatedProvider({ db: fixture.connection.db, fault: { kind: 'timeout_before_submit' } }),
+  );
+  const cleanup = await destroy(created);
+  await tick(cleanup);
+  return cleanup;
+}
+
+async function exhaustedCleanup() {
+  const created = await create();
+  await until(created, 'succeeded');
+  const cleanup = await destroy(created);
+  const [server] = await fixture.connection.db
+    .select()
+    .from(providerResources)
+    .where(eq(providerResources.kind, 'server'));
+  if (!server) throw new Error('Expected a server.');
+  for (let sequence = 1; sequence <= 3; sequence++) {
+    const id = newId.attempt();
+    await fixture.connection.db.insert(attempts).values({
+      id,
+      accountId: cleanup.accountId,
+      operationId: cleanup.id,
+      sequence,
+      command: { kind: 'destroy', serverId: server.providerId },
+      outcome: { kind: 'prepared' },
+      createdAt: new Date(Date.now() - (4 - sequence) * 60_000),
+    });
+    const error = {
+      code: 'provider_rejected',
+      message: 'Fixture deletion failure.',
+      retryable: true,
+    };
+    await fixture.connection.db
+      .update(attempts)
+      .set({ outcome: { kind: 'rejected', error }, resolution: { kind: 'failed', error } })
+      .where(eq(attempts.id, id));
+  }
+  await tick(cleanup);
+  return cleanup;
+}
 
 const limits = { currency: 'EUR', maxMachines: 100, maxHourlyMicros: 10_000_000 };
 let fixture: Awaited<ReturnType<typeof testDatabase>>;
@@ -612,4 +710,389 @@ it('retains every valid duplicate even when inventory also returns a mismatched 
     (row) => providerCommandSchema.parse(row.command).kind === 'create',
   );
   expect(source?.resolution).toEqual({ kind: 'pending' });
+});
+
+it('records explicit provider closure without changing the source receipt and completes ordinary cleanup', async () => {
+  const cleanup = await uncertainCleanup();
+  const request = await recoveryRequest(cleanup);
+  const original = (await history()).find((attempt) => attempt.id === request.attemptId);
+  const applied = await applyOperatorRecovery({
+    connection: fixture.connection,
+    provider,
+    request,
+  });
+  const closed = (await history()).find((attempt) => attempt.id === request.attemptId);
+  expect(closed?.outcome).toEqual(original?.outcome);
+  expect(closed?.resolution).toEqual({ kind: 'operator_closed', recoveryId: request.id });
+  expect(await fixture.connection.db.select().from(simulatedPrimaryIps)).toHaveLength(1);
+  await until(cleanup, 'cancelled');
+  await absent();
+  expect(
+    await applyOperatorRecovery({ connection: fixture.connection, provider, request }),
+  ).toEqual(applied);
+  await expect(
+    applyOperatorRecovery({
+      connection: fixture.connection,
+      provider,
+      request: { ...request, operator: 'different' },
+    }),
+  ).rejects.toMatchObject({ failure: { code: 'idempotency_conflict' } });
+  expect(
+    (await history()).filter(
+      (attempt) => providerCommandSchema.parse(attempt.command).kind === 'create',
+    ),
+  ).toHaveLength(1);
+});
+
+it('rejects closure without admitted cleanup, cross-allocation scope, stale state and missing attestation', async () => {
+  const created = await create();
+  await expect(inspectOperatorRecovery(fixture.connection, created.id)).rejects.toMatchObject({
+    failure: { code: 'permission_denied' },
+  });
+  await submitVm(
+    created,
+    new SimulatedProvider({ db: fixture.connection.db, fault: { kind: 'timeout_before_submit' } }),
+  );
+  const cleanup = await destroy(created);
+  await tick(cleanup);
+  const request = await recoveryRequest(cleanup);
+  for (const changed of [
+    { ...request, allocationId: newId.allocation() },
+    { ...request, accountId: newId.account() },
+  ])
+    await expect(
+      applyOperatorRecovery({ connection: fixture.connection, provider, request: changed }),
+    ).rejects.toMatchObject({ failure: { code: 'permission_denied' } });
+  await expect(
+    applyOperatorRecovery({
+      connection: fixture.connection,
+      provider,
+      request: { ...request, expectedState: '0'.repeat(64) },
+    }),
+  ).rejects.toMatchObject({ failure: { code: 'version_conflict' } });
+  expect(
+    operatorRecoverySchema.safeParse({ ...request, providerRequestFinished: false }).success,
+  ).toBe(false);
+  expect(await fixture.connection.db.select().from(operatorRecoveries)).toHaveLength(0);
+});
+
+it('serializes operator recovery with the existing machine lock', async () => {
+  const cleanup = await uncertainCleanup();
+  const request = await recoveryRequest(cleanup);
+  await withMachineLock({
+    pool: fixture.connection.pool,
+    machineId: cleanup.machineId,
+    work: async () => {
+      await expect(
+        applyOperatorRecovery({ connection: fixture.connection, provider, request }),
+      ).rejects.toMatchObject({ failure: { code: 'resource_busy' } });
+      await expect(inspectOperatorRecovery(fixture.connection, cleanup.id)).rejects.toMatchObject({
+        failure: { code: 'resource_busy' },
+      });
+    },
+  });
+});
+
+it('retains newly discovered duplicate IDs before rejecting a stale closure request', async () => {
+  const created = await create();
+  await submitVm(
+    created,
+    new SimulatedProvider({ db: fixture.connection.db, fault: { kind: 'duplicate_create' } }),
+  );
+  const cleanup = await destroy(created);
+  const request = await recoveryRequest(cleanup);
+  await expect(
+    applyOperatorRecovery({ connection: fixture.connection, provider, request }),
+  ).rejects.toMatchObject({ failure: { code: 'version_conflict' } });
+  expect(
+    (await fixture.connection.db.select().from(providerResources)).filter(
+      (row) => row.kind === 'server',
+    ),
+  ).toHaveLength(2);
+  expect(await fixture.connection.db.select().from(operatorRecoveries)).toHaveLength(0);
+  const fresh = await recoveryRequest(cleanup);
+  if (fresh.kind !== 'close_create') throw new Error('Expected closure.');
+  await expect(
+    applyOperatorRecovery({
+      connection: fixture.connection,
+      provider,
+      request: { ...fresh, resourceIds: [] },
+    }),
+  ).rejects.toMatchObject({ failure: { code: 'invalid_input' } });
+  await applyOperatorRecovery({ connection: fixture.connection, provider, request: fresh });
+  await until(cleanup, 'cancelled');
+  await absent();
+  expect(
+    (await fixture.connection.db.select().from(providerResources)).filter(
+      (row) => row.kind === 'server',
+    ),
+  ).toHaveLength(2);
+});
+
+it('requires absent duplicate IDs in the closure evidence and keeps their absence records', async () => {
+  const created = await create();
+  await submitVm(
+    created,
+    new SimulatedProvider({ db: fixture.connection.db, fault: { kind: 'duplicate_create' } }),
+  );
+  const [ipRow] = await fixture.connection.db.select().from(simulatedPrimaryIps);
+  if (!ipRow) throw new Error('Expected an IP.');
+  await fixture.connection.db
+    .update(simulatedPrimaryIps)
+    .set({ value: { ...providerPrimaryIpSchema.parse(ipRow.value), autoDelete: false } })
+    .where(eq(simulatedPrimaryIps.id, ipRow.id));
+  const cleanup = await destroy(created);
+  await expect
+    .poll(
+      async () => {
+        await tick(cleanup);
+        return (await fixture.connection.db.select().from(simulatedServers)).length;
+      },
+      { interval: 20 },
+    )
+    .toBe(0);
+  await tick(cleanup);
+  const request = await recoveryRequest(cleanup);
+  if (request.kind !== 'close_create') throw new Error('Expected closure.');
+  expect(request.resourceIds).toHaveLength(2);
+  await expect(
+    applyOperatorRecovery({
+      connection: fixture.connection,
+      provider,
+      request: { ...request, resourceIds: [] },
+    }),
+  ).rejects.toMatchObject({ failure: { code: 'invalid_input' } });
+  await applyOperatorRecovery({ connection: fixture.connection, provider, request });
+  await until(cleanup, 'cancelled');
+  await absent();
+});
+
+it('does not turn provider read failures into closure', async () => {
+  const cleanup = await uncertainCleanup();
+  const request = await recoveryRequest(cleanup);
+  class FailedInventory extends SimulatedProvider {
+    override findServers(): Promise<never> {
+      return Promise.reject(new Error('Read unavailable.'));
+    }
+  }
+  await expect(
+    applyOperatorRecovery({
+      connection: fixture.connection,
+      provider: new FailedInventory({ db: fixture.connection.db }),
+      request,
+    }),
+  ).rejects.toThrow('Read unavailable.');
+  expect(await fixture.connection.db.select().from(operatorRecoveries)).toHaveLength(0);
+  expect((await history()).find((row) => row.id === request.attemptId)?.resolution).toEqual({
+    kind: 'pending',
+  });
+});
+
+it('prevents forged closure and mutation or removal of admitted recovery evidence in SQL', async () => {
+  const cleanup = await uncertainCleanup();
+  const request = await recoveryRequest(cleanup);
+  await expect(
+    fixture.connection.db
+      .update(attempts)
+      .set({ resolution: { kind: 'operator_closed', recoveryId: request.id } })
+      .where(eq(attempts.id, request.attemptId)),
+  ).rejects.toMatchObject({ cause: { code: '23514' } });
+  await applyOperatorRecovery({ connection: fixture.connection, provider, request });
+  await expect(
+    fixture.connection.db
+      .update(operatorRecoveries)
+      .set({ request: { ...request, operator: 'other' } }),
+  ).rejects.toThrow();
+  await expect(fixture.connection.db.delete(operatorRecoveries)).rejects.toThrow();
+  await expect(
+    fixture.connection.db
+      .update(attempts)
+      .set({ resolution: { kind: 'pending' } })
+      .where(eq(attempts.id, request.attemptId)),
+  ).rejects.toThrow();
+});
+
+it('grants one additional exact deletion after exhaustion and replays without another allowance', async () => {
+  const cleanup = await exhaustedCleanup();
+  const request = await recoveryRequest(cleanup, 'retry_delete');
+  const original = await history();
+  const saved = await applyOperatorRecovery({ connection: fixture.connection, provider, request });
+  expect(await history()).toEqual(original);
+  expect(
+    await applyOperatorRecovery({ connection: fixture.connection, provider, request }),
+  ).toEqual(saved);
+  const extra = {
+    ...request,
+    id: operatorRecoverySchema.parse({ ...request, id: randomUUID() }).id,
+    expectedState: (await inspectOperatorRecovery(fixture.connection, cleanup.id)).stateDigest,
+  };
+  await expect(
+    applyOperatorRecovery({ connection: fixture.connection, provider, request: extra }),
+  ).rejects.toMatchObject({ failure: { code: 'permission_denied' } });
+  await until(cleanup, 'succeeded');
+  await absent();
+  expect(
+    (await history()).filter(
+      (attempt) => providerCommandSchema.parse(attempt.command).kind === 'destroy',
+    ),
+  ).toHaveLength(4);
+  expect(await fixture.connection.db.select().from(operatorRecoveries)).toHaveLength(1);
+});
+
+it('does not grant deletion retry authority to a source create', async () => {
+  const cleanup = await uncertainCleanup();
+  const request = await recoveryRequest(cleanup);
+  const retry = operatorRecoverySchema.parse({
+    kind: 'retry_delete',
+    id: request.id,
+    accountId: request.accountId,
+    allocationId: request.allocationId,
+    operationId: request.operationId,
+    attemptId: request.attemptId,
+    expectedState: request.expectedState,
+    operator: request.operator,
+    evidence: request.evidence,
+  });
+  await expect(
+    applyOperatorRecovery({ connection: fixture.connection, provider, request: retry }),
+  ).rejects.toMatchObject({ failure: { code: 'permission_denied' } });
+});
+
+it('runs operator inspection and explicit closure through the actual CLI with private input', async () => {
+  const cleanup = await uncertainCleanup();
+  const directory = await mkdtemp(join(tmpdir(), 'agent-cloud-recovery-'));
+  const run = promisify(execFile);
+  const env = {
+    ...process.env,
+    DATABASE_URL: fixture.databaseUrl,
+    HCLOUD_TOKEN_FILE: '/missing/provider-token',
+    AGENT_CLOUD_RUNTIME: '/missing/runtime',
+  };
+  try {
+    const result = await run(
+      process.execPath,
+      ['--import', 'tsx', 'scripts/machine-recover.ts', 'inspect', cleanup.id],
+      { env },
+    );
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      operation: { id: cleanup.id },
+      stateDigest: (await inspectOperatorRecovery(fixture.connection, cleanup.id)).stateDigest,
+    });
+    const request = await recoveryRequest(cleanup);
+    const path = join(directory, 'request.json');
+    await writeFile(path, JSON.stringify(request), { mode: 0o600 });
+    const applied = await run(
+      process.execPath,
+      ['--import', 'tsx', 'scripts/machine-recover.ts', 'apply', path],
+      { env },
+    );
+    expect(JSON.parse(applied.stdout)).toMatchObject({
+      id: request.id,
+      attemptId: request.attemptId,
+    });
+    await until(cleanup, 'cancelled');
+    await absent();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it('keeps a failed extra deletion bounded until another explicit operator decision', async () => {
+  const cleanup = await exhaustedCleanup();
+  await applyOperatorRecovery({
+    connection: fixture.connection,
+    provider,
+    request: await recoveryRequest(cleanup, 'retry_delete'),
+  });
+  const previous = (await history())
+    .filter((attempt) => providerCommandSchema.parse(attempt.command).kind === 'destroy')
+    .at(-1);
+  if (!previous) throw new Error('Expected deletion history.');
+  const id = newId.attempt();
+  // Age only newly inserted fixture history to exercise persisted limits without a 30-second wait.
+  await fixture.connection.db.insert(attempts).values({
+    id,
+    accountId: cleanup.accountId,
+    operationId: cleanup.id,
+    sequence: 4,
+    command: previous.command,
+    outcome: { kind: 'prepared' },
+    createdAt: new Date(Date.now() - 35_000),
+  });
+  const error = { code: 'provider_rejected', message: 'Extra deletion failed.', retryable: true };
+  await fixture.connection.db
+    .update(attempts)
+    .set({ outcome: { kind: 'rejected', error }, resolution: { kind: 'failed', error } })
+    .where(eq(attempts.id, id));
+  await tick(cleanup);
+  expect((await read(cleanup)).progress).toEqual({
+    kind: 'blocked',
+    reason: 'cleanup_retry_exhausted',
+  });
+  await expect(
+    fixture.connection.db.insert(attempts).values({
+      id: newId.attempt(),
+      accountId: cleanup.accountId,
+      operationId: cleanup.id,
+      sequence: 5,
+      command: previous.command,
+      outcome: { kind: 'prepared' },
+    }),
+  ).rejects.toMatchObject({ cause: { code: '23514' } });
+  await applyOperatorRecovery({
+    connection: fixture.connection,
+    provider,
+    request: await recoveryRequest(cleanup, 'retry_delete'),
+  });
+  await until(cleanup, 'succeeded');
+  await absent();
+  expect(
+    (await history()).filter(
+      (attempt) => providerCommandSchema.parse(attempt.command).kind === 'destroy',
+    ),
+  ).toHaveLength(5);
+});
+
+it('closes an unknown IP submission without submitting a VM', async () => {
+  const created = await create();
+  await tick(
+    created,
+    new SimulatedProvider({
+      db: fixture.connection.db,
+      primaryIpFault: { kind: 'timeout_before_submit' },
+    }),
+  );
+  const cleanup = await destroy(created);
+  await tick(cleanup);
+  const request = await recoveryRequest(cleanup);
+  await applyOperatorRecovery({ connection: fixture.connection, provider, request });
+  await until(cleanup, 'cancelled');
+  await absent();
+  expect(
+    (await history()).map((attempt) => providerCommandSchema.parse(attempt.command).kind),
+  ).toEqual(['create_primary_ip']);
+});
+
+it('blocks operator closure when a retained exact resource now has foreign labels', async () => {
+  const created = await create();
+  await submitVm(
+    created,
+    new SimulatedProvider({ db: fixture.connection.db, fault: { kind: 'duplicate_create' } }),
+  );
+  const cleanup = await destroy(created);
+  for (let index = 0; index < 4; index++) await tick(cleanup);
+  const [ipRow] = await fixture.connection.db.select().from(simulatedPrimaryIps);
+  const ip = providerPrimaryIpSchema.parse(ipRow?.value);
+  if (ip.assignment.kind !== 'server') throw new Error('Expected attached source IP.');
+  const server = await provider.getServer({ serverId: ip.assignment.serverId });
+  if (!server) throw new Error('Expected retained server.');
+  await fixture.connection.db
+    .update(simulatedServers)
+    .set({ value: { ...server, labels: { ...server.labels, account_id: 'foreign' } } })
+    .where(eq(simulatedServers.id, server.id));
+  const request = await recoveryRequest(cleanup);
+  await expect(
+    applyOperatorRecovery({ connection: fixture.connection, provider, request }),
+  ).rejects.toMatchObject({ failure: { code: 'provider_outcome_unknown' } });
+  expect(await fixture.connection.db.select().from(operatorRecoveries)).toHaveLength(0);
 });

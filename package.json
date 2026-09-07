@@ -43,7 +43,8 @@
     "smoke:image": "pnpm build:guest && tsx scripts/smoke-image.ts",
     "smoke:builder": "pnpm build:guest && tsx scripts/smoke-builder.ts",
     "image:build": "pnpm build && tsx --env-file-if-exists=.env scripts/image-build.ts",
-    "smoke:cleanup": "pnpm build && tsx scripts/smoke-cleanup.ts"
+    "smoke:cleanup": "pnpm build && tsx scripts/smoke-cleanup.ts",
+    "machine:recover": "pnpm build && tsx --env-file-if-exists=.env scripts/machine-recover.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

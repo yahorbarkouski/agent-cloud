@@ -360,6 +360,19 @@ export const attempts = pgTable(
   ],
 );
 
+export const operatorRecoveries = pgTable('operator_recoveries', {
+  id: text('id').primaryKey(),
+  operationId: text('operation_id')
+    .notNull()
+    .references(() => operationCleanups.operationId),
+  attemptId: text('attempt_id')
+    .notNull()
+    .unique()
+    .references(() => attempts.id),
+  request: jsonb('request').notNull(),
+  createdAt: createdAt(),
+});
+
 export const idempotency = pgTable(
   'idempotency',
   {

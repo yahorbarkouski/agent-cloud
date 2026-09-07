@@ -22,6 +22,7 @@ import {
 } from '@agent-cloud/db';
 import { journalEffect, resolveEffect, setProgress, type Attempt } from './effect-journal.js';
 import {
+  cleanupDeleteLimit,
   ownedLabels,
   ownedRef,
   matchesLabels,
@@ -165,7 +166,11 @@ async function advance(work: CleanupWork) {
         const action = await provider.getAction({ actionId: outcome.actionId });
         if (action.kind !== 'succeeded') return;
       }
-      if (previous.length >= 3) {
+      const command: ProviderCommand =
+        ref.kind === 'server'
+          ? { kind: 'destroy', serverId: ref.id }
+          : { kind: 'delete_primary_ip', primaryIpId: ref.id };
+      if (previous.length >= (await cleanupDeleteLimit(db, operation.id, command))) {
         await setProgress(db, operation, { kind: 'blocked', reason: 'cleanup_retry_exhausted' });
         return;
       }

@@ -1,10 +1,12 @@
 import { z } from 'zod';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import {
   CloudError,
   resourceRefSchema,
   type ResourceRef,
   type Operation,
+  type OperationId,
+  type ProviderCommand,
 } from '@agent-cloud/contracts';
 import { providerResources, allocations, auditEvents, type Executor } from '@agent-cloud/db';
 
@@ -97,4 +99,19 @@ export async function recordAbsence(db: Executor, allocation: Allocation, resour
       event: 'resource.absence_confirmed',
       details: resource,
     });
+}
+
+/** SQL owns the allowance so operator admission and the worker count the same retained grants. */
+export async function cleanupDeleteLimit(
+  db: Executor,
+  operationId: OperationId,
+  command: ProviderCommand,
+) {
+  const result = await db.execute<{ limit: number }>(
+    sql`SELECT cleanup_delete_limit(${operationId}, ${JSON.stringify(command)}::jsonb) AS limit`,
+  );
+  const limit = result.rows[0]?.limit;
+  if (!Number.isSafeInteger(limit) || limit === undefined || limit < 3)
+    throw new CloudError('internal_error', 'Cleanup deletion allowance is invalid.');
+  return limit;
 }

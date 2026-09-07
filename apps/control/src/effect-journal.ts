@@ -241,7 +241,7 @@ export async function journalEffect(input: {
 }
 
 type Evaluation =
-  | Exclude<EffectResolution, { kind: 'pending' }>
+  | Exclude<EffectResolution, { kind: 'pending' | 'operator_closed' }>
   | { kind: 'pending'; progress: OperationProgress };
 const blocked = (
   reason: Extract<OperationProgress, { kind: 'blocked' }>['reason'],

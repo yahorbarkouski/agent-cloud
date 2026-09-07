@@ -1,5 +1,13 @@
 # Implementation progress
 
+## Operator recovery verified locally
+
+The local `machine:recover` command inspects admitted cleanup, records externally established source closure as `operator_closed`, and permits one more exact deletion after exhaustion. The original receipt, resource ledger and terminal source result remain unchanged. Recovery decisions bind the inspected state, account, allocation, source attempt, operator attribution and evidence. The existing worker still proves owned resource absence before retirement. The command exposes provider reads only and needs no image, pricing or signing configuration.
+
+Full94746 passed420tests/36files, typecheck/lint,104.25s. The independent review reran33cleanup tests successfully and found no production blocker. Cleanup smoke60304 and restarted CLI smoke49678 passed with complete disposal. Migration0019 is applied and all20 hashes match. API42350/worker86187 serve simulated development on4319. SQL and actual Hetzner inventory are empty at13:21–13:22Z. Customer skill validation passed. [Evidence](research/m1-operator-recovery-verification.json) records intermediate fixture/type/lint failures and the attestation boundary. Final formatting passed. Private push and exact Linux CI are the remaining checkpoint steps.
+
+Next M1 work is the bounded customer Hetzner drill using a renewal-capable retained image and owned firewall. Operator source closure requires independent evidence; no current resource needs such an attestation. M2–M7 remain open.
+
 ## Customer provisioning recovery workflow
 
 - [x] Ground: trace admission, provider journal, cleanup, guest authorization and lock ordering in `research/m1-provisioning-recovery-grounding.md`.

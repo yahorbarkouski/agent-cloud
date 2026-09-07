@@ -4,6 +4,7 @@ import { resourceRefSchema, type attemptIdSchema } from './ids.js';
 import type { Catalog } from './catalog.js';
 import { powerSchema } from './lifecycle.js';
 import { bootstrapReferenceSchema } from './guest.js';
+import { recoveryIdSchema } from './operator-recovery.js';
 
 export const networkProfileSchema = z.enum(['legacy', 'managed_ipv4']);
 export const providerNetworkSchema = z.discriminatedUnion('kind', [
@@ -99,6 +100,7 @@ export const effectResolutionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('pending') }),
   z.object({ kind: z.literal('confirmed'), observation: resourceObservationSchema }),
   z.object({ kind: z.literal('failed'), error: failureSchema }),
+  z.strictObject({ kind: z.literal('operator_closed'), recoveryId: recoveryIdSchema }),
 ]);
 export type EffectResolution = z.infer<typeof effectResolutionSchema>;
 export const attemptOutcomeSchema = z.discriminatedUnion('kind', [

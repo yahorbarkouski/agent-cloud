@@ -104,6 +104,17 @@ The guest library and configured `/guest/renew` endpoint renew SSH/TLS certifica
 
 The native enrollment smoke covers renewal with actual Smallstep, SSH and TLS. It advances issuance metadata only inside an isolated fixture to avoid a thirty-minute wait. The local Ubuntu smoke separately exercises the installed timer and real service reload. These checks do not enable customer Hetzner mode or prove renewal on a deployed customer VM.
 
+## Operator recovery
+
+For admitted customer cleanup that remains blocked, operators can inspect its retained evidence:
+
+```sh
+pnpm machine:recover inspect <cleanup-operation-id>
+pnpm machine:recover apply <private-request.json>
+```
+
+The request file must be owner-only and at most 16 KiB. Inspection needs database access. Applying a recovery decision also checks the allocation's provider, without loading images, prices or signing keys. `close_create` records an explicit operator attestation of provider request completion and all resource IDs. `retry_delete` permits one further exact-target attempt after exhaustion. Existing customer destroy authority and worker cleanup remain required. See [operator recovery](docs/architecture/operator-recovery.md) for the request format and evidence requirements.
+
 ## Operator image builds
 
 After `pnpm db:migrate`, operators can inspect and cancel a recorded image build without provider credentials:

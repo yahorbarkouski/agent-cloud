@@ -1,0 +1,150 @@
+{
+  "date": "2026-09-07",
+  "status": "verified_locally",
+  "scope": "Explicit operator closure of unknown customer source creates and one additional exact-target deletion after retry exhaustion.",
+  "baseCommit": "4030e9d",
+  "implementationCommit": "pending",
+  "checks": {
+    "full": {
+      "session": 94746,
+      "tests": 420,
+      "files": 36,
+      "durationSeconds": 104.25,
+      "typecheck": "passed",
+      "lint": "passed",
+      "log": ".local/operator-recovery-check-2.log"
+    },
+    "independentFocused": {
+      "model": "gpt-5.6-sol",
+      "passed": 33,
+      "total": 33,
+      "durationSeconds": 13.4
+    },
+    "cleanupSmoke": {
+      "session": 60304,
+      "result": {
+        "result": "passed",
+        "provider": "simulated",
+        "operationId": "op_cef81d3c-7516-4165-ad51-cd216e22ffc8",
+        "machineId": "vm_96b9c4a9-678d-4c1b-a400-5f1a48951714",
+        "progress": {
+          "kind": "cancelled",
+          "completedAt": "2026-09-07T13:20:40.266Z"
+        },
+        "verified": [
+          "real CLI",
+          "HTTP API",
+          "PostgreSQL",
+          "Graphile worker",
+          "blocked lost response",
+          "destroy admission",
+          "single source create",
+          "complete VM/IP cleanup"
+        ],
+        "fixture": "Delayed provider visibility released after cancellation; no live cloud claim."
+      },
+      "log": ".local/operator-recovery-cleanup-smoke.log"
+    },
+    "developmentCli": {
+      "session": 49678,
+      "result": {
+        "result": "passed",
+        "provider": "simulated",
+        "machineId": "vm_3e3cf038-e825-42c8-9bb2-17f1a2ab662b",
+        "verified": [
+          "CLI",
+          "HTTP API",
+          "PostgreSQL",
+          "Graphile worker",
+          "create",
+          "inspect",
+          "destroy",
+          "cleanup"
+        ]
+      },
+      "log": ".local/operator-recovery-local-smoke.log"
+    },
+    "migration": {
+      "applied": 20,
+      "expected": 20,
+      "allHashesMatch": true,
+      "new": {
+        "name": "0019_operator_recoveries",
+        "hash": "92dcf490e4a775ed21daa5a69beefc67e914d308e0f55b87201722c8562f931b",
+        "matches": true
+      }
+    },
+    "skillValidation": "passed",
+    "format": {
+      "status": "passed",
+      "log": ".local/operator-recovery-format-final.log"
+    }
+  },
+  "resourceState": {
+    "development": {
+      "checked_at": "2026-09-07T13:22:12.600Z",
+      "active_allocations": 0,
+      "simulated_servers": 0,
+      "simulated_ips": 0,
+      "unfinished_image_builds": 0
+    },
+    "hetzner": {
+      "observedAt": "2026-09-07T13:21:17.093Z",
+      "resources": {
+        "servers": 0,
+        "primaryIps": 0,
+        "snapshots": 0,
+        "firewalls": 0,
+        "sshKeys": 0
+      },
+      "mutationsThisSlice": 0
+    }
+  },
+  "earlierFailures": [
+    {
+      "log": ".local/operator-recovery-typecheck.log",
+      "cause": "Passed operation.progress instead of the operation to the existing terminal predicate."
+    },
+    {
+      "log": ".local/operator-recovery-typecheck-2.log",
+      "cause": "Unused moved helper type import."
+    },
+    {
+      "log": ".local/operator-recovery-focused.log",
+      "result": "36/37",
+      "cause": "Strict Zod rejected unrelated variant keys even when their values were undefined; corrected fixture."
+    },
+    {
+      "log": ".local/operator-recovery-typecheck-4.log",
+      "cause": "Incorrect simulator IP fault property; corrected to primaryIpFault."
+    },
+    {
+      "log": ".local/operator-recovery-check.log",
+      "cause": "Lint stopped on an async test stub without await and an any-typed expectation."
+    },
+    {
+      "report": ".local/operator-recovery-review.md",
+      "result": "31/33 before correction; final 33/33",
+      "cause": "A fixture selected a source create instead of an intentionally aged deletion; the IP fixture used the wrong simulator fault input."
+    },
+    {
+      "log": ".local/operator-recovery-format.log",
+      "cause": "One moved import needed Prettier formatting; corrected without semantic change."
+    }
+  ],
+  "review": {
+    "model": "gpt-5.6-sol",
+    "status": "approved_no_production_blocker",
+    "report": "docs/research/m1-operator-recovery-review.md",
+    "transcripts": "No active transcript directory supplied; artifact and decision-trail review."
+  },
+  "limits": [
+    "Provider closure is a caller attestation backed by operator-maintained evidence. Software verifies scope, inventory consistency and provenance, not the truth of an out-of-band provider confirmation.",
+    "All new provider behavior verification uses isolated simulator data; no live-provider closure or customer Hetzner boot is claimed.",
+    "Retry exhaustion inserts deliberately aged fixture history. The existing cleanup case separately observes the real five-second backoff.",
+    "Customer SSH access, deployment, routes, backup/restore and the complete product remain unfinished."
+  ],
+  "ci": {
+    "status": "pending_private_push"
+  }
+}
