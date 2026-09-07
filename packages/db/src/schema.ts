@@ -75,6 +75,59 @@ export const imageBuilderWork = pgTable(
   ],
 );
 
+export const imageVerifierBootstraps = pgTable('image_verifier_bootstraps', {
+  buildId: text('build_id')
+    .primaryKey()
+    .references(() => imageBuilds.id),
+  snapshotId: text('snapshot_id').notNull(),
+  spec: jsonb('spec').notNull(),
+  tokenHash: text('token_hash').notNull(),
+  sealedToken: jsonb('sealed_token'),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  consumedAt: timestamp('consumed_at', { withTimezone: true }),
+  createdAt: createdAt(),
+});
+
+export const imageVerifierIdentities = pgTable(
+  'image_verifier_identities',
+  {
+    buildId: text('build_id')
+      .primaryKey()
+      .references(() => imageVerifierBootstraps.buildId),
+    effectId: text('effect_id').notNull(),
+    serverId: text('server_id').notNull(),
+    identity: jsonb('identity').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.buildId, t.effectId],
+      foreignColumns: [imageBuildEffects.buildId, imageBuildEffects.id],
+    }),
+  ],
+);
+
+export const imageVerifierSigningAttempts = pgTable(
+  'image_verifier_signing_attempts',
+  {
+    buildId: text('build_id')
+      .notNull()
+      .references(() => imageVerifierBootstraps.buildId),
+    purpose: text('purpose').notNull(),
+    sequence: integer('sequence').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.buildId, t.purpose, t.sequence] })],
+);
+
+export const imageVerifierResults = pgTable('image_verifier_results', {
+  buildId: text('build_id')
+    .primaryKey()
+    .references(() => imageVerifierIdentities.buildId),
+  result: jsonb('result').notNull(),
+  createdAt: createdAt(),
+});
+
 export const accounts = pgTable(
   'accounts',
   {

@@ -4,6 +4,7 @@ import {
   bootstrapSpecSchema,
   guestEnrollmentInputSchema,
   guestIdentitySchema,
+  guestSubject,
   issuedGuestIdentitySchema,
   providerCommandSchema,
   isServerCreateCommand,
@@ -187,7 +188,7 @@ export function createEnrollmentService(ports: EnrollmentPorts) {
         true,
       );
     await reserveSigning(db, context, 'probe');
-    const issued = await ports.signer.issueProbeCredential(context.spec.allocationId);
+    const issued = await ports.signer.issueProbeCredential(guestSubject(context.spec));
     credentials.set(context.spec.allocationId, issued);
     return issued;
   }
@@ -268,16 +269,17 @@ export function createEnrollmentService(ports: EnrollmentPorts) {
           );
         const { address } = await observeGuest(db, ports.provider, context);
         await ports.signer.validateTlsRequest({
-          allocationId: context.spec.allocationId,
+          subject: guestSubject(context.spec),
           csr: input.tlsCsr,
         });
         const proof = await ports.probe.readIdentity({
-          allocationId: context.spec.allocationId,
+          subject: guestSubject(context.spec),
           address,
           trust: { kind: 'pinned_key', publicKey: input.sshHostPublicKey },
           credential: await credential(db, context),
         });
         if (
+          proof.version !== 1 ||
           proof.allocationId !== context.spec.allocationId ||
           proof.sshHostPublicKey !== input.sshHostPublicKey ||
           proof.tlsCsr !== input.tlsCsr ||
@@ -303,11 +305,11 @@ export function createEnrollmentService(ports: EnrollmentPorts) {
           });
         await reserveSigning(db, context, 'identity');
         const sshHostCertificate = await ports.signer.signHost({
-          allocationId: context.spec.allocationId,
+          subject: guestSubject(context.spec),
           publicKey: input.sshHostPublicKey,
         });
         const tlsCertificate = await ports.signer.signTls({
-          allocationId: context.spec.allocationId,
+          subject: guestSubject(context.spec),
           csr: input.tlsCsr,
         });
         const issued = issuedGuestIdentitySchema.parse({

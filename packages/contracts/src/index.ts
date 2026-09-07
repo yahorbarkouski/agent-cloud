@@ -7,6 +7,8 @@ export * from './provider.js';
 export * from './client.js';
 export * from './money.js';
 export * from './guest.js';
+export * from './guest-subject.js';
+export * from './image-verification.js';
 export * from './image-inputs.js';
 export * from './image-release.js';
 export * from './image-build.js';

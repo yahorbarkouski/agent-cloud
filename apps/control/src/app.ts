@@ -18,6 +18,7 @@ import {
   projectInputSchema,
   grantInputSchema,
   guestEnrollmentInputSchema,
+  imageVerifierEnrollmentInputSchema,
   newId,
   type Principal,
   type MachineProvider,
@@ -36,6 +37,7 @@ import { authenticate, authorize, issueGrant, loadPrincipal, revokeGrant } from 
 import { admit, lockAccount } from './lifecycle.js';
 import type { Config } from './config.js';
 import type { EnrollmentService } from './guest-enrollment.js';
+import type { ImageVerifierEnrollment } from './image-verifier-enrollment.js';
 
 export function createApp(input: {
   db: Database;
@@ -43,6 +45,7 @@ export function createApp(input: {
   catalog: CatalogSource;
   limits: Config['limits'];
   enrollment?: EnrollmentService;
+  imageEnrollment?: ImageVerifierEnrollment;
 }) {
   const app = new Hono<{ Variables: { principal: Principal; requestId: string } }>();
   app.use('*', async (c, next) => {
@@ -97,6 +100,15 @@ export function createApp(input: {
     app.post('/guest/enroll', async (c) =>
       c.json(
         await enrollment.enroll(guestEnrollmentInputSchema.parse(await c.req.json<unknown>())),
+      ),
+    );
+  const imageEnrollment = input.imageEnrollment;
+  if (imageEnrollment)
+    app.post('/image/enroll', async (c) =>
+      c.json(
+        await imageEnrollment.enroll(
+          imageVerifierEnrollmentInputSchema.parse(await c.req.json<unknown>()),
+        ),
       ),
     );
   app.use('/v1/*', async (c, next) => {

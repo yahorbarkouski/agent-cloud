@@ -23,6 +23,7 @@ import {
   type Database,
 } from '@agent-cloud/db';
 import { verifyImageInputs } from '@agent-cloud/images';
+import { readImageVerification } from './image-verifier-records.js';
 import {
   checkImageAdmission,
   checkImageLimits,
@@ -109,6 +110,7 @@ export async function inspectImageBuild(db: Database, buildId: ImageBuildId) {
     return {
       admission: imageBuildAdmissionSchema.parse(row.admission),
       state: imageBuildStateSchema.parse(row.state),
+      verification: await readImageVerification(tx, buildId),
       builderWork: imageBuilderWorkSchema.parse(
         builder
           ? {

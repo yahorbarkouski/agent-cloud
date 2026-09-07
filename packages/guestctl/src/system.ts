@@ -1,3 +1,4 @@
+import { guestSubject, sameGuestSubject } from '@agent-cloud/contracts';
 import type { Dirent } from 'node:fs';
 import { chmod, chown, copyFile, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -27,7 +28,7 @@ export function guestSystem(configuration: GuestConfiguration): EnrollmentSystem
       );
       await atomicWrite(
         join(configuration.state, 'probe-principals'),
-        probePrincipal(proof.allocationId) + '\n' + runtimePrincipal(proof.allocationId) + '\n',
+        probePrincipal(guestSubject(proof)) + '\n' + runtimePrincipal(guestSubject(proof)) + '\n',
         0o644,
       );
       // Stopping Ubuntu's socket unit may remove its sshd runtime directory.
@@ -69,7 +70,9 @@ export function guestSystem(configuration: GuestConfiguration): EnrollmentSystem
                       {
                         handler: 'static_response',
                         body: JSON.stringify({
-                          allocationId: proof.allocationId,
+                          ...(proof.version === 1
+                            ? { allocationId: proof.allocationId }
+                            : { subject: proof.subject }),
                           imageVersion: proof.imageVersion,
                         }),
                       },
@@ -97,8 +100,8 @@ export function guestSystem(configuration: GuestConfiguration): EnrollmentSystem
           },
         },
       };
-      if (spec.allocationId !== proof.allocationId)
-        throw new Error('Guest activation allocation disagrees.');
+      if (!sameGuestSubject(guestSubject(spec), guestSubject(proof)))
+        throw new Error('Guest activation subject disagrees.');
       const gid = z.coerce
         .number()
         .int()

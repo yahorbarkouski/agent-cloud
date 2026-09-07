@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import { eq } from 'drizzle-orm';
 import {
   guestImageSchema,
+  guestSubject,
   guestManifestSchema,
   issuedGuestIdentitySchema,
 } from '../packages/contracts/dist/index.js';
@@ -67,7 +68,8 @@ try {
         enrollmentUrl: 'https://enrollment.example.test/guest/enroll',
       });
     const allocationId = bootstrap.spec.allocationId;
-    const name = guestName(allocationId);
+    const subject = guestSubject(bootstrap.spec);
+    const name = guestName(subject);
     await writeFile(join(configuration.state, 'bootstrap.json'), JSON.stringify(bootstrap), {
       mode: 0o600,
     });
@@ -78,7 +80,7 @@ try {
       join(fixture, 'host_key'),
     );
     await writeFile(join(fixture, 'user_ca.pub'), signer.trust.sshUserCa + '\n', { mode: 0o644 });
-    await writeFile(join(fixture, 'principals'), probePrincipal(allocationId) + '\n', {
+    await writeFile(join(fixture, 'principals'), probePrincipal(subject) + '\n', {
       mode: 0o644,
     });
     await writeFile(join(fixture, 'proof.json'), JSON.stringify(proof), { mode: 0o644 });
@@ -187,10 +189,10 @@ try {
     );
     assert.deepEqual(
       await nativeProbe.readIdentity({
-        allocationId,
+        subject,
         address: '127.0.0.1',
         port,
-        credential: await signer.issueProbeCredential(allocationId),
+        credential: await signer.issueProbeCredential(subject),
         trust: { kind: 'host_ca', publicKey: signer.trust.sshHostCa },
       }),
       proof,

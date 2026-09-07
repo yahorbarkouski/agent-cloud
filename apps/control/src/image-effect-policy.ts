@@ -11,6 +11,7 @@ import {
 } from '@agent-cloud/contracts';
 import { matchesLabels } from './resource-journal.js';
 import type { ImageBuild } from './image-builds.js';
+import { verifierSnapshot } from './image-verifier.js';
 
 export function checkImageBuilderIntent(
   admission: ImageBuildAdmission,
@@ -26,10 +27,39 @@ export function checkImageBuilderIntent(
     command.serverType !== admission.offer.serverType ||
     command.region !== admission.offer.region ||
     command.imageId !== admission.baseImageId ||
+    command.bootData.kind !== 'image_build_secret' ||
     command.bootData.id !== admission.access.secretId ||
     command.bootData.digest !== admission.source.manifestDigest
   )
     throw new CloudError('invalid_input', 'Image builder differs from its admission.');
+}
+
+export function checkImageServerIntent(
+  build: ImageBuild,
+  command: Extract<ImageProviderCommand, { kind: 'create_server' }>,
+) {
+  if (command.labels.role === 'builder') {
+    checkImageBuilderIntent(build.admission, command);
+    return;
+  }
+  const snapshot = verifierSnapshot(build);
+  if (
+    command.labels.role !== 'verifier' ||
+    build.verification.kind !== 'prepared' ||
+    Date.parse(build.verification.spec.expiresAt) <= Date.now() ||
+    command.bootData.kind !== 'image_verifier_secret' ||
+    command.bootData.id !== build.admission.id ||
+    command.bootData.digest !== build.admission.source.manifestDigest ||
+    command.imageId !== snapshot.ref.id ||
+    command.imageId !== build.verification.spec.image.providerImage ||
+    command.serverType !== build.admission.offer.serverType ||
+    command.region !== build.admission.offer.region ||
+    !matchesLabels(command.labels, imageBuildLabels(build.admission.id, 'verifier'))
+  )
+    throw new CloudError(
+      'permission_denied',
+      'Image verifier differs from its prepared snapshot admission.',
+    );
 }
 
 export function imageEffectKey(command: ImageProviderCommand) {
@@ -115,10 +145,33 @@ export async function checkImageCommand(
         throw new CloudError('invalid_input', 'Image address location differs from admission.');
       return;
     case 'create_server': {
-      checkImageBuilderIntent(admission, command);
-      const ip = await owned('builder_ip', command.primaryIpId);
+      checkImageServerIntent(build, command);
+      const verifier = command.labels.role === 'verifier';
+      const ip = await owned(verifier ? 'verifier_ip' : 'builder_ip', command.primaryIpId);
       const key = await owned('access_key', command.sshKeyId);
       const firewall = await owned('access_firewall', command.firewallId);
+      let builderId: string | null = null;
+      if (verifier) {
+        const snapshot = verifierSnapshot(build);
+        const source = await owned('snapshot', snapshot.ref.id);
+        if (
+          source.kind !== 'snapshot' ||
+          source.status !== 'available' ||
+          build.builderWork.kind !== 'recorded' ||
+          source.sourceServerId !== build.builderWork.serverId
+        )
+          throw new CloudError(
+            'provider_outcome_unknown',
+            'Image verifier snapshot source changed.',
+          );
+        const builder = await owned('builder', build.builderWork.serverId);
+        if (builder.kind !== 'server' || builder.power !== 'off')
+          throw new CloudError(
+            'provider_outcome_unknown',
+            'Image verifier requires its stopped builder.',
+          );
+        builderId = builder.id;
+      }
       if (
         ip.kind !== 'primary_ip' ||
         ip.autoDelete ||
@@ -127,7 +180,10 @@ export async function checkImageCommand(
         key.kind !== 'ssh_key' ||
         key.publicKey !== admission.access.publicKey ||
         firewall.kind !== 'firewall' ||
-        firewall.attachments.length !== 0 ||
+        firewall.attachments.some(
+          (attachment) => attachment.kind !== 'server' || attachment.id !== builderId,
+        ) ||
+        firewall.attachments.length > (verifier ? 1 : 0) ||
         firewall.rules.length !== 1 ||
         !firewall.rules.every(
           (rule) =>

@@ -3,6 +3,13 @@ import { z } from 'zod';
 
 const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 
+export const imageBuildIdSchema = z.uuid().brand<'ImageBuildId'>();
+export type ImageBuildId = z.infer<typeof imageBuildIdSchema>;
+export const imageProviderIdSchema = z
+  .string()
+  .max(20)
+  .regex(/^[1-9][0-9]*$/);
+
 export const accountIdSchema = z
   .string()
   .regex(new RegExp(`^acc_${uuid}$`))

@@ -1,7 +1,13 @@
 import { readFile, statfs } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { guestProofSchema, guestRuntimeSchema, type GuestRuntime } from '@agent-cloud/contracts';
+import {
+  guestBootProofSchema,
+  guestRuntimeSchema,
+  imageVerifierRuntimeSchema,
+  type GuestRuntime,
+  type GuestBootRuntime,
+} from '@agent-cloud/contracts';
 import { loadManifest, type GuestConfiguration } from './identity.js';
 import { readOwnedFile } from './files.js';
 import { runTool } from './tools.js';
@@ -10,6 +16,7 @@ type Checks = GuestRuntime['checks'];
 export type RuntimeSystem = {
   architecture: () => GuestRuntime['architecture'];
   bootId: () => Promise<string>;
+  machineId: () => Promise<string>;
   version: (component: 'docker' | 'compose' | 'caddy' | 'step') => Promise<string>;
   disk: () => Promise<Omit<Extract<Checks['disk'], { kind: 'ok' }>, 'kind'>>;
   proxy: () => Promise<unknown>;
@@ -24,6 +31,7 @@ export function runtimeSystem(configuration: GuestConfiguration): RuntimeSystem 
       throw new Error('Unsupported guest architecture.');
     },
     bootId: async () => (await readFile('/proc/sys/kernel/random/boot_id', 'utf8')).trim(),
+    machineId: async () => (await readFile('/etc/machine-id', 'utf8')).trim(),
     version: async (component) => {
       switch (component) {
         case 'docker':
@@ -99,16 +107,17 @@ export function runtimeSystem(configuration: GuestConfiguration): RuntimeSystem 
 export async function inspectRuntime(
   configuration: GuestConfiguration,
   system = runtimeSystem(configuration),
-): Promise<GuestRuntime> {
+): Promise<GuestBootRuntime> {
   const { manifest, digest } = await loadManifest(configuration);
-  const proof = guestProofSchema.parse(
+  const proof = guestBootProofSchema.parse(
     JSON.parse(await readOwnedFile(join(configuration.state, 'proof.json'), 'public')),
   );
   if (proof.manifestDigest !== digest || proof.imageVersion !== manifest.version)
     throw new Error('Guest proof and installed image disagree.');
+  const schema = proof.version === 1 ? guestRuntimeSchema : imageVerifierRuntimeSchema;
   async function measured(name: keyof Checks, measure: () => Promise<unknown>) {
     try {
-      return guestRuntimeSchema.shape.checks.shape[name].parse(await measure());
+      return schema.shape.checks.shape[name].parse(await measure());
     } catch {
       return { kind: 'unavailable' };
     }
@@ -120,17 +129,17 @@ export async function inspectRuntime(
     measured('step', async () => ({ kind: 'ok', version: await system.version('step') })),
     measured('disk', async () => ({ kind: 'ok', ...(await system.disk()) })),
     measured('proxy', async () => {
-      const value = z
-        .strictObject({
-          allocationId: guestProofSchema.shape.allocationId,
-          imageVersion: guestProofSchema.shape.imageVersion,
-        })
-        .parse(await system.proxy());
+      const proxySchema =
+        proof.version === 1
+          ? guestRuntimeSchema.shape.checks.shape.proxy.options[0].omit({ kind: true })
+          : imageVerifierRuntimeSchema.shape.checks.shape.proxy.options[0].omit({ kind: true });
+      const value = proxySchema.parse(await system.proxy());
       return { kind: 'ok', ...value };
     }),
   ]);
-  return guestRuntimeSchema.parse({
-    version: 1,
+  return schema.parse({
+    version: proof.version,
+    ...(proof.version === 2 ? { machineId: await system.machineId() } : {}),
     proof,
     manifest,
     architecture: system.architecture(),

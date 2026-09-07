@@ -10,11 +10,17 @@ import {
 import { imageBuildEffects, type Database } from '@agent-cloud/db';
 import type { ImageBootRenderer } from '@agent-cloud/hetzner';
 import { inspectImageBuild } from './image-builds.js';
-import { checkImageBuilderIntent } from './image-effect-policy.js';
+import { checkImageServerIntent } from './image-effect-policy.js';
 import type { ImageAccessStore } from './image-access.js';
+import type { BootstrapSeal } from './bootstrap-seal.js';
+import { recoverImageVerifierBootstrap } from './image-verifier.js';
 
 /** Called by the transport only for the original, committed create effect. */
-export function createImageRenderer(db: Database, store: ImageAccessStore): ImageBootRenderer {
+export function createImageRenderer(
+  db: Database,
+  store: ImageAccessStore,
+  verifierSeal?: BootstrapSeal,
+): ImageBootRenderer {
   return async (input) => {
     const id = z.uuid().parse(input.effectId);
     const command = imageProviderCommandSchema.parse(input.command);
@@ -37,9 +43,12 @@ export function createImageRenderer(db: Database, store: ImageAccessStore): Imag
         'permission_denied',
         'Image boot data requires its exact active prepared effect.',
       );
-    checkImageBuilderIntent(build.admission, command);
+    checkImageServerIntent(build, command);
     for (const dependency of [
-      { role: 'builder_ip', id: command.primaryIpId },
+      {
+        role: command.labels.role === 'verifier' ? 'verifier_ip' : 'builder_ip',
+        id: command.primaryIpId,
+      },
       { role: 'access_key', id: command.sshKeyId },
       { role: 'access_firewall', id: command.firewallId },
     ]) {
@@ -59,6 +68,39 @@ export function createImageRenderer(db: Database, store: ImageAccessStore): Imag
           'permission_denied',
           'Image boot data requires confirmed owned dependencies.',
         );
+    }
+    if (command.bootData.kind === 'image_verifier_secret') {
+      if (!verifierSeal)
+        throw new CloudError(
+          'provider_unavailable',
+          'Image verifier boot rendering is not configured.',
+        );
+      const bootstrap = await recoverImageVerifierBootstrap(db, {
+        buildId: build.admission.id,
+        seal: verifierSeal,
+      });
+      return (
+        '#cloud-config\n' +
+        JSON.stringify({
+          users: [],
+          disable_root: true,
+          ssh_pwauth: false,
+          allow_public_ssh_keys: false,
+          ssh_deletekeys: true,
+          ssh_keys: {},
+          ssh_publish_hostkeys: { enabled: false },
+          write_files: [
+            {
+              path: '/var/lib/agent-cloud/bootstrap.json',
+              owner: 'root:root',
+              permissions: '0600',
+              content: JSON.stringify(bootstrap) + '\n',
+            },
+          ],
+          runcmd: [['systemctl', 'start', '--no-block', 'agent-cloud-enroll.service']],
+        }) +
+        '\n'
+      );
     }
     const material = await store.recover(build.admission);
     // JSON is YAML. Fixed paths/argv keep all key material out of shell interpolation.

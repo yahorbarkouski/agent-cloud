@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import {
   guestImageSchema,
+  guestSubject,
   guestManifestSchema,
   guestProofSchema,
   operationResponseSchema,
@@ -118,7 +119,7 @@ try {
   await vm([
     '/bin/sh',
     '-c',
-    'test ! -e /var/lib/agent-cloud/keys && test ! -e /var/lib/agent-cloud/bootstrap.json && test ! -e /var/lib/agent-cloud/allocation.json',
+    'test ! -e /var/lib/agent-cloud/keys && test ! -e /var/lib/agent-cloud/bootstrap.json && test ! -e /var/lib/agent-cloud/guest.json',
   ]);
   if (clone) {
     progress('booting clone of recorded sanitized image');
@@ -312,9 +313,9 @@ try {
   assert.equal(proof.manifestDigest, image.manifestDigest);
   assert.deepEqual(
     await probe.readIdentity({
-      allocationId: proof.allocationId,
+      subject: guestSubject(proof),
       address: info.ip4,
-      credential: await signer.issueProbeCredential(proof.allocationId),
+      credential: await signer.issueProbeCredential(guestSubject(proof)),
       trust: { kind: 'host_ca', publicKey: signer.trust.sshHostCa },
     }),
     proof,
@@ -356,10 +357,10 @@ try {
       '--json',
     ]),
   );
-  const runtimeCredential = await signer.issueRuntimeCredential(proof.allocationId);
+  const runtimeCredential = await signer.issueRuntimeCredential(guestSubject(proof));
   const readRuntime = () =>
     probe.readRuntime({
-      allocationId: proof.allocationId,
+      subject: guestSubject(proof),
       address: info.ip4,
       credential: runtimeCredential,
       trust: { kind: 'host_ca', publicKey: signer.trust.sshHostCa },
@@ -426,7 +427,7 @@ try {
         {
           host: info.ip4,
           port: 8443,
-          servername: guestName(proof.allocationId),
+          servername: guestName(guestSubject(proof)),
           ca: signer.trust.tlsRoot,
           timeout: 5000,
         },
@@ -532,9 +533,9 @@ try {
   );
   assert.deepEqual(
     await probe.readIdentity({
-      allocationId: proof.allocationId,
+      subject: guestSubject(proof),
       address: info.ip4,
-      credential: await signer.issueProbeCredential(proof.allocationId),
+      credential: await signer.issueProbeCredential(guestSubject(proof)),
       trust: { kind: 'host_ca', publicKey: signer.trust.sshHostCa },
     }),
     proof,

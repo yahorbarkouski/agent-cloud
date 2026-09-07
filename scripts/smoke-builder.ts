@@ -1,3 +1,4 @@
+import { verifyImageClone } from './support/image-verifier-clone.js';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -407,9 +408,8 @@ try {
     keyof z.infer<typeof resultSchema>
   >)
     assert.equal(new Set(identities.map((identity) => identity[field])).size, 2);
-  progress(
-    'aborting the verification-only build and observing all resources absent before key removal',
-  );
+  await verifyImageClone({ controller, protocol });
+  progress('confirming verification-only build cleanup and local key removal');
   await requestImageCleanup(database.connection.db, id);
   let cleaned = false;
   for (let pass = 0; pass < 12; pass++) {

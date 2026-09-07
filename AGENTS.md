@@ -1,46 +1,63 @@
 # Working on agent-cloud
 
-Build an open-source cloud operated by customers' existing coding agents. We do not build a coding agent. Read `README.md`, then `docs/CONTEXT.md` for the current state and next work. `docs/PROGRESS.md` owns milestone status; `docs/architecture/overview.md` will own the implemented design. Historical plans under `docs/archive/` are reference material, not claims that features exist.
+Build an open-source cloud operated by customers' existing coding agents. We do not build a coding agent. Read `README.md`, then `docs/CONTEXT.md` for current work. `docs/PROGRESS.md` owns milestone status. Architecture docs describe implemented boundaries and remaining work. Historical plans under `docs/archive/` are reference material, not feature claims.
 
-## Current constraints
+## Scope and cost
 
-- TypeScript, ordinary Linux VMs, Docker Compose, SSH, and Hetzner. Stripe and payment integration are deferred until the product works.
-- Keep costs low. Use local services and a simulated provider first. Hetzner verification and credential setup are complete. Rent a server only when a bounded inexpensive test and cleanup path are ready. No expensive plans, warm pool, or load generation against shared provider infrastructure.
-- All external resources must have recorded ownership, a cleanup path, and explicit spending limits. Never put provider credentials in a customer guest.
-- Keep all work inside this repository. The parent workspace contains unrelated projects.
+- Work only in this repository. The parent workspace contains unrelated projects.
+- Use TypeScript, ordinary Linux VMs, Docker Compose, SSH and Hetzner. Stripe is deferred until the product works.
+- Hetzner verification and credentials are ready. Prefer local services and protocol fixtures. Rent capacity only for a bounded inexpensive test with recorded ownership, explicit spending limits and complete cleanup. No expensive plans, warm pool, benchmarks or automatic type/region fallback.
+- Never put provider credentials in a guest. Do not log secrets, customer commands or application data. Use dedicated development credentials and scoped CI secrets.
+- Do not report a live integration as verified from a simulated provider or local VM. The live CLI remains gated until its complete bounded lifecycle is ready.
 
-## Code and verification
+## Code boundaries
 
-- `packages/contracts` owns schemas; `packages/db` owns schema/migrations; `apps/control` owns auth, admission and worker behavior; `packages/sdk` and `apps/cli` expose it. `packages/hetzner` is transport only until live activation checks are complete.
-- Run `pnpm check` and `pnpm format:check` for a checkpoint. With local API/worker running, `pnpm smoke:local` exercises the real CLI and must finish cleanup. Tests create and remove isolated databases; never point cleanup code at unrelated databases.
+- `packages/contracts` owns schemas; `packages/db` owns schema/migrations; `apps/control` owns authentication, admission and controllers. `packages/sdk` and `apps/cli` expose implemented behavior. `packages/hetzner` handles transport, not business policy.
+- Derive transport types from validated schemas. Use branded IDs and discriminated unions, not optional state bags. Validate external input at boundaries. Do not use `any`, non-null assertions or unchecked casts.
+- Prefer explicit modules to speculative frameworks. Keep tenant authorization, idempotency, concurrency, revocation and restore checks as real behavior. Tests should exercise failures rather than mirror implementation.
+- Applied migrations are immutable. Add a follow-up migration for corrections. Verify migration hashes before claiming a deployment matches the schema.
 
-- Model states with discriminated unions. Derive transport types from validated schemas. Validate external input at boundaries; do not use `any`, non-null assertions, or unchecked casts.
-- Money carries an explicit currency. Reserve gross provider prices including IPv4 using integer micro-units. Pin the admitted offer; recheck before a fresh effect and never substitute types automatically. Catalog network refresh runs outside admission transactions.
-- The operation controller selects effects; `effect-journal.ts` owns submission/reconciliation and `resource-journal.ts` owns provider identity records. VM and Primary IP cleanup must both be observed before releasing a reservation. Never compensate an IP while a VM submission is uncertain.
-- `packages/pki` wraps pinned Smallstep signing and checks certificate identities and lifetimes. `packages/remote` performs bounded native SSH identity reads with explicit credentials, fixed commands and isolated trust files. Keep certificate issuance separate from retryable reads. Never inherit a user's SSH config or agent.
-- Guest bootstrap secrets stay encrypted and bound to allocation/image/endpoint metadata. Provider journals carry references. Claim guest keys only after direct SSH proof to the owned provider address. Fresh live submissions use `create_guest` with a bootstrap reference; legacy `create` remains readable for reconciliation. Only a matching prepared attempt may render boot data. Enrollment signing budgets survive restarts, and certificate persistence, token erasure and the runtime handoff commit together. See `docs/architecture/guest-bootstrap.md` for the remaining integration boundaries.
-- `packages/guestctl` owns root-run first boot and local identity inspection. `images/` owns public image inputs and Linux service configuration. Publish keys and certificate bundles atomically, preserve keys on retry, and explicitly set file modes under the systemd umask. Keep guest state separate from fleet credentials. See `docs/architecture/guest-image.md` for the current Linux proof and remaining snapshot work.
-- Runtime SSH credentials force only `sudo -n -- /usr/local/bin/guestctl inspect --json`. Keep identity reads unprivileged; never add the probe user to Docker or grant general sudo. The worker rechecks owned provider addresses, pinned image/keys, component health, disk headroom and boot ID. Signing attempts persist per operation. Recheck the readiness deadline in the completion transaction; pending provider effects still require reconciliation after expiry. See `docs/architecture/guest-runtime.md`.
-- `pnpm smoke:guest` owns one local OrbStack VM through `.local/guest-image-machine.json`. On failure inspect only that recorded VM, then delete it and its record before a fresh run. Do not treat OrbStack networking or local protocol fixtures as Hetzner boot verification.
-- Image installation requires the caller's builder UUID. `guestctl prepare-image --json` is only for a freshly created exclusive builder with no allocation or Docker data. It never starts Docker to inspect it. A sanitation receipt authorizes stopping that recorded builder before cloning; it does not authorize snapshotting a running or partially prepared machine. See `docs/architecture/image-sanitation.md` for interruption limits.
-- `pnpm smoke:image` owns a builder through `.local/guest-image-builder.json`, a negative-test clone through `.local/guest-image-refusal.json`, and sequential guest clones through the guest record above. Failures preserve those records. Inspect and delete only recorded machines before retrying. Never modify a selected `.local/guest-builds/<manifest-digest>` input tree during a VM smoke or use `orb stop` without an explicit owned machine name.
-- While a VM smoke is active, use its output for progress and leave VM commands to that process. Even a diagnostic `orb run` can start a deliberately stopped sanitized builder and invalidate its identity. Inspect VM contents only after the smoke has exited.
-- `pnpm smoke:builder` shares the image builder record and guest clone records. It exercises real cloud-init, pinned SSH/SFTP, installation recovery and sanitation. Its owner-only access files live in `.local/image-builder-access/<builderId>` and are retained on failure; delete only that exact directory after its recorded VMs are deleted. Never run image or guest smokes concurrently. Validate real cloud-init schema before boot; OrbStack networking/disk-resize overrides belong only to fixtures.
-- Operator builder keys live in `.local/image-access/<buildId>` by default, outside SQL. `image:build prepare` preserves the first identity for an exact build intent. Keep access until provider cleanup is authoritative. The dedicated builder account may use fixed privileged installation commands; the runtime probe remains read-only. An install-start marker prevents re-execution after a lost response; partial installation requires disposal or explicit recovery, not a second installer run.
-- `packages/images` owns full input provenance and authenticated release metadata. Published inputs are read-only and named by manifest digest; capture `.local/guest-build.json` once and verify that directory before use. Execute the controller-owned `imageInstallCommand` to check the independently pinned transfer digest with base OS tools before any uploaded code. A signature authenticates recorded evidence; production snapshot ownership and actual boot-source proof still require the provider runner and verifier integration.
-- Operator image builds use sibling SQL journals, never customer allocations. `pnpm image:build` prepares access, admits, inspects and cancels; it has no live advancement command yet. Reserve both VM/IP pairs with per-resource hourly rounding and separate gross snapshot storage caps. Keep all unfinished builds in the aggregate operator allowance. Unknown creates never retry; known duplicate IDs remain recorded even during cleanup. Exact-ID stop/delete retries retain the original receipt and point to a prepared replacement. Cancel is a full build abort, including its unpublished snapshot. See `docs/architecture/image-release.md`.
-- `image-release-plan.ts` selects one step from a consistent snapshot; `advance-image-build.ts` dispatches to separately locked executors. Never hold an outer build lock while calling `runImageEffect`, `runImageBuilderWork` or `planImageCleanup`. Persist builder phase intent before SSH. Unknown sanitation cannot authorize stopping or snapshotting; it requests full cleanup. Stop/snapshot effects require SQL-persisted sanitation. Terminal key removal follows authoritative provider cleanup and is independently retryable. The controller currently stops at `verification_required`; it has no live CLI advancement or retained-release promotion yet.
-- The image transport requires the persisted effect UUID for boot rendering. Use `imageEffectLabels` for discovery, observations and current dependency/deletion checks; build and role alone do not prove which effect created a resource. Fresh creates check the exact pinned Ubuntu base image before spending. A missing provider action is distinct from failure or running: observe the owned target, then only exact-ID stop/delete may retry. Keep accepted receipts immutable and never infer create absence from an expired action record. Snapshot actions target their source server, while the receipt owns the image ID.
-- Keep business decisions separate from provider I/O. Persist intent before external mutation. An unknown provider outcome must be reconciled before another create attempt.
-- Tenant authorization, idempotency, concurrency, revocation, and actual restore checks are required behavior. Tests must exercise failure modes rather than mirror implementation.
-- Prefer a small number of explicit modules to speculative frameworks. Runtime capabilities and documentation must reflect implemented behavior.
-- Document runnable verification commands in `README.md` as they become available. Never report a live integration as verified when it only passed with a fake provider.
-- Do not log credentials, customer commands, or application secrets. Use dedicated development credentials and scoped CI secrets.
+## Durable cloud operations
 
-## Preserve working context
+- Persist intent before external mutation. Controllers select effects; journals own submission/reconciliation and resource identity. Unknown creates never retry, including a crash between preparation and submission. Preserve every known duplicate ID. Exact-ID stop/delete retries retain the original receipt.
+- Money carries currency and integer micro-units. Reserve gross VM and IPv4 prices with per-resource hourly rounding and separate snapshot storage caps. Pin the admitted offer and recheck before fresh effects. Refresh catalogs outside admission transactions. Open operations retain reservations until authoritative cleanup.
+- Bind ownership to persisted effect IDs and current provider labels. Build/role labels alone are insufficient. VM and IP absence must both be observed before releasing reservations. Never delete an IP while its VM submission is uncertain.
+- Do not hold an outer build lock while calling separately locked provider, builder, verifier or cleanup executors. Recheck cancellation and deadlines in completion transactions. Expired work still needs uncertain-effect reconciliation and cleanup.
 
-- After each substantive checkpoint, update `docs/PROGRESS.md` with evidence and remaining work.
-- Before a handoff or context compaction, update `docs/CONTEXT.md` with current branch, commands, results, blockers, and the next concrete step. Keep it short and current.
-- Record durable decisions and lessons in the architecture docs and `docs/DECISIONS.tsv`. Prefer an enforced invariant or regression check over repeating a warning.
-- Update this file when the workflow or repository map changes. Keep the customer skill under `skills/` consistent with the CLI; it must never claim to grant authorization.
-- Commit coherent verified milestones on `yahor/agent-cloud`. Commit messages and PR descriptions describe product behavior and verification plainly.
+## Guest identity and images
+
+- Shared guestctl, PKI and SSH APIs use `GuestSubject`. Customer wire version1 is allocation-owned; verifier version2 names its image build. Never fabricate customer allocations for platform verification. Guest metadata lives at `/var/lib/agent-cloud/guest.json`.
+- Bootstrap secrets are encrypted and bound to immutable owner/image/endpoint/expiry metadata. Provider journals carry references only; only an exact active prepared effect may render boot data. Claim keys after pinned SSH proof to the currently owned provider address. Signing budgets survive restarts. Certificate persistence and bootstrap token erasure commit together.
+- `packages/pki` wraps pinned Smallstep signing and validates identity/lifetimes. `packages/remote` uses fixed SSH commands, explicit credentials and isolated trust files. Never inherit a user's SSH configuration or agent. Keep certificate issuance separate from retryable reads.
+- Runtime credentials in both namespaces force only `sudo -n -- /usr/local/bin/guestctl inspect --json`. Identity reads remain unprivileged. Never grant the probe user Docker access or general sudo. Readiness checks image/keys, component versions, disk headroom and boot ID; reboot/power-on require a changed boot ID. See `docs/architecture/guest-runtime.md`.
+- `packages/guestctl` owns root-run first boot and atomic key/certificate publication. Preserve keys on retry and explicitly set modes under systemd's umask. `images/` contains public image inputs and Linux configuration. `packages/images` owns complete input provenance and authenticated release metadata. Published input directories are immutable and named by manifest digest.
+- Installation requires the caller's builder UUID. Execute controller-owned `imageInstallCommand` to validate the pinned transfer checksum with base OS tools before uploaded code. The install-start marker prevents a second installer after a lost response. Partial installation requires disposal or explicit recovery.
+- `guestctl prepare-image --json` accepts only an exclusive fresh builder without guest or Docker data. It must not start Docker to inspect it. Persist installation and sanitation intent before SSH. Unknown sanitation requests full cleanup. Only a saved sanitation receipt and confirmed stopped source authorize a snapshot. See `docs/architecture/image-sanitation.md`.
+- Image builds use sibling SQL journals with no customer ownership. Verify a snapshot using a build-owned bootstrap, exact provider boot source and restricted runtime evidence. Compare its machine ID with the sanitized builder. A successful enrollment alone cannot publish a release. Retained publication and full abort are different intents. See `docs/architecture/image-verifier.md` and `image-release.md`.
+- Operator builder keys default to `.local/image-access/<buildId>`, outside SQL. Preparation preserves the first identity for an exact admission. Retain keys while provider outcomes are uncertain. Remove them only after authoritative cleanup; removal must be retryable. See `docs/architecture/guest-bootstrap.md` and `guest-image.md` for remaining production integration.
+
+## Local verification
+
+Run `pnpm check` and `pnpm format:check` at a checkpoint. With the local API/worker running, `pnpm smoke:local` exercises the actual CLI and must finish cleanup. Tests create and remove isolated databases; never aim cleanup at unrelated databases. Document runnable verification commands and their limits in `README.md`.
+
+VM smokes must run sequentially. While one is active, use its output and leave VM commands to that process. Even diagnostic `orb run` can restart a deliberately stopped sanitized builder. Capture `.local/guest-build.json` once, verify its selected input tree and leave that tree unchanged until the smoke finishes. Never use `orb stop` without an explicit owned machine name.
+
+Ownership records and private fixtures:
+
+| Smoke resource           | Record or directory                       |
+| ------------------------ | ----------------------------------------- |
+| Guest clone              | `.local/guest-image-machine.json`         |
+| Image/builder source     | `.local/guest-image-builder.json`         |
+| Sanitation refusal clone | `.local/guest-image-refusal.json`         |
+| Platform verifier clone  | `.local/guest-image-verifier.json`        |
+| Builder access fixture   | `.local/image-builder-access/<builderId>` |
+| Verifier HTTPS fixture   | `.local/image-verifier-access/<buildId>`  |
+
+On failure inspect only recorded machines after the smoke exits. Delete those machines and their records before a fresh run, then remove only their exact private fixture directories. The builder smoke exercises native SSH/SFTP/cloud-init, installation recovery, sanitation, two customer clones and a build-owned verifier, then full abort. OrbStack network/disk overrides belong only to fixtures. Its verifier starts before NoCloud seed installation: check the unseeded guest has no identity, principals or SSH/application listeners. The seeded reboot is local proof, not Hetzner initial-boot or snapshot proof.
+
+## Preserve context
+
+- After a substantive checkpoint, update PROGRESS with evidence and remaining work. Before compaction/handoff, update CONTEXT with branch, commands, results, active process handles, blockers and the next concrete step. Keep it short and current.
+- Record durable decisions and lessons in architecture docs and append-only `docs/DECISIONS.tsv`. Prefer an enforced invariant or regression check over another warning.
+- Keep this file and the customer skill under `skills/` consistent with implemented behavior. A skill never grants authorization.
+- Commit coherent verified milestones on `yahor/agent-cloud`. Commit and PR descriptions explain product behavior and verification plainly.

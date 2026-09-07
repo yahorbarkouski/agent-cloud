@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { architectureSchema } from './catalog.js';
 import { accountIdSchema, allocationIdSchema, machineIdSchema, operationIdSchema } from './ids.js';
 import { imageDigestSchema } from './image-inputs.js';
+import { imageProviderIdSchema } from './ids.js';
+import { imageVerifierSubjectSchema, type GuestSubject } from './guest-subject.js';
 
 const publicKey = z
   .string()
@@ -139,3 +141,66 @@ export const guestRuntimeSchema = z.strictObject({
   }),
 });
 export type GuestRuntime = z.infer<typeof guestRuntimeSchema>;
+
+export const imageVerifierSpecSchema = z.strictObject({
+  version: z.literal(2),
+  subject: imageVerifierSubjectSchema,
+  ...bootstrapSpecSchema.pick({ expiresAt: true, enrollmentUrl: true }).shape,
+  image: guestImageSchema.extend({ providerImage: imageProviderIdSchema }),
+});
+export type ImageVerifierSpec = z.infer<typeof imageVerifierSpecSchema>;
+export const imageVerifierReferenceSchema = imageVerifierSpecSchema.pick({
+  version: true,
+  subject: true,
+});
+export const imageVerifierEnrollmentInputSchema = guestEnrollmentInputSchema.extend({
+  bootstrap: imageVerifierReferenceSchema,
+});
+export type ImageVerifierEnrollmentInput = z.infer<typeof imageVerifierEnrollmentInputSchema>;
+export const imageVerifierProofSchema = z.strictObject({
+  version: z.literal(2),
+  subject: imageVerifierSubjectSchema,
+  ...guestProofSchema.omit({ version: true, allocationId: true }).shape,
+});
+export const imageVerifierRuntimeSchema = guestRuntimeSchema.extend({
+  version: z.literal(2),
+  proof: imageVerifierProofSchema,
+  machineId: z.string().regex(/^[0-9a-f]{32}$/),
+  checks: guestRuntimeSchema.shape.checks.extend({
+    proxy: z.discriminatedUnion('kind', [
+      z.strictObject({
+        kind: z.literal('ok'),
+        subject: imageVerifierSubjectSchema,
+        imageVersion: guestImageSchema.shape.version,
+      }),
+      z.strictObject({ kind: z.literal('unavailable') }),
+    ]),
+  }),
+});
+export type ImageVerifierRuntime = z.infer<typeof imageVerifierRuntimeSchema>;
+export const guestBootSpecSchema = z.discriminatedUnion('version', [
+  bootstrapSpecSchema,
+  imageVerifierSpecSchema,
+]);
+export const guestBootFileSchema = guestBootstrapFileSchema.extend({ spec: guestBootSpecSchema });
+export const guestBootProofSchema = z.discriminatedUnion('version', [
+  guestProofSchema,
+  imageVerifierProofSchema,
+]);
+export const guestBootRuntimeSchema = z.discriminatedUnion('version', [
+  guestRuntimeSchema,
+  imageVerifierRuntimeSchema,
+]);
+export type GuestBootSpec = z.infer<typeof guestBootSpecSchema>;
+export type GuestBootFile = z.infer<typeof guestBootFileSchema>;
+export type GuestBootProof = z.infer<typeof guestBootProofSchema>;
+export type GuestBootRuntime = z.infer<typeof guestBootRuntimeSchema>;
+
+/** Version 1 customer metadata stays allocation-owned; version 2 explicitly names its verifier. */
+export function guestSubject(
+  value:
+    | Pick<BootstrapSpec, 'version' | 'allocationId'>
+    | Pick<ImageVerifierSpec, 'version' | 'subject'>,
+): GuestSubject {
+  return value.version === 1 ? { kind: 'allocation', id: value.allocationId } : value.subject;
+}

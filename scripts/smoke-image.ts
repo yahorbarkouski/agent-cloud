@@ -144,17 +144,17 @@ try {
   await vm([
     '/bin/sh',
     '-c',
-    'test ! -e /var/lib/agent-cloud/keys && test ! -e /var/lib/agent-cloud/allocation.json',
+    'test ! -e /var/lib/agent-cloud/keys && test ! -e /var/lib/agent-cloud/guest.json',
   ]);
 } finally {
   await rm(refusalFile, { force: true });
   await vm(['rm', '-f', '/var/lib/agent-cloud/bootstrap.json']);
 }
 // Native refusal tests must preserve both the sentinel and builder access before any cleanup.
-await vm(['/bin/sh', '-c', 'printf "allocation-sentinel" > /var/lib/agent-cloud/allocation.json']);
+await vm(['/bin/sh', '-c', 'printf "guest-sentinel" > /var/lib/agent-cloud/guest.json']);
 await assert.rejects(vm(['/usr/local/bin/guestctl', 'prepare-image', '--json']));
-assert.equal(await vm(['cat', '/var/lib/agent-cloud/allocation.json']), 'allocation-sentinel');
-await vm(['rm', '/var/lib/agent-cloud/allocation.json']);
+assert.equal(await vm(['cat', '/var/lib/agent-cloud/guest.json']), 'guest-sentinel');
+await vm(['rm', '/var/lib/agent-cloud/guest.json']);
 await vm(['docker', 'volume', 'create', 'agent-cloud-refusal-sentinel']);
 await assert.rejects(vm(['/usr/local/bin/guestctl', 'prepare-image', '--json']));
 assert.ok(

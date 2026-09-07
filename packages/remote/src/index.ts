@@ -7,15 +7,18 @@ import {
   CloudError,
   guestImageSchema,
   guestProofSchema,
-  guestRuntimeSchema,
+  guestBootRuntimeSchema,
+  guestBootProofSchema,
+  guestSubject,
+  sameGuestSubject,
 } from '@agent-cloud/contracts';
-import type { AllocationId } from '@agent-cloud/contracts';
+import type { GuestSubject } from '@agent-cloud/contracts';
 import { guestName, type ProbeCredential } from '@agent-cloud/pki';
 import { withSshFiles } from './ssh-files.js';
 export { createImageBuilder } from './image-builder.js';
 
 type GuestTarget = {
-  allocationId: AllocationId;
+  subject: GuestSubject;
   address: string;
   port?: number;
   trust: { kind: 'pinned_key'; publicKey: string } | { kind: 'host_ca'; publicKey: string };
@@ -47,7 +50,7 @@ export function createGuestProbe(config: { sshBinary?: string } = {}) {
         'permission_denied',
         'Guest read needs its matching credential purpose and trust.',
       );
-    const alias = guestName(input.allocationId);
+    const alias = guestName(input.subject);
     const address = z
       .string()
       .refine((value) => isIP(value) !== 0)
@@ -63,10 +66,10 @@ export function createGuestProbe(config: { sshBinary?: string } = {}) {
         : guestProofSchema.shape.sshHostPublicKey
     ).parse(input.trust.publicKey);
     const expires = Date.parse(z.iso.datetime().parse(input.credential.expiresAt));
-    if (input.credential.allocationId !== input.allocationId || expires <= Date.now() + 5000)
+    if (!sameGuestSubject(input.credential.subject, input.subject) || expires <= Date.now() + 5000)
       throw new CloudError(
         'permission_denied',
-        'Probe credential is expired or belongs to another allocation.',
+        'Probe credential is expired or belongs to another guest subject.',
       );
     return withSshFiles({
       user: 'agent-probe',
@@ -108,7 +111,7 @@ export function createGuestProbe(config: { sshBinary?: string } = {}) {
 
   async function readIdentity(input: IdentityTarget) {
     const output = await read(input, 'probe');
-    const parsed = guestProofSchema.safeParse(readGuestJson(output));
+    const parsed = guestBootProofSchema.safeParse(readGuestJson(output));
     if (!parsed.success)
       throw new CloudError(
         'provider_unavailable',
@@ -117,19 +120,19 @@ export function createGuestProbe(config: { sshBinary?: string } = {}) {
       );
     const proof = parsed.data;
     if (
-      proof.allocationId !== input.allocationId ||
+      !sameGuestSubject(guestSubject(proof), input.subject) ||
       (input.trust.kind === 'pinned_key' && proof.sshHostPublicKey !== input.trust.publicKey)
     )
       throw new CloudError(
         'provider_unavailable',
-        'Guest identity evidence disagrees with the allocation.',
+        'Guest identity evidence disagrees with the guest subject.',
         true,
       );
     return proof;
   }
   async function readRuntime(input: RuntimeTarget) {
-    const parsed = guestRuntimeSchema.safeParse(readGuestJson(await read(input, 'runtime')));
-    if (!parsed.success || parsed.data.proof.allocationId !== input.allocationId)
+    const parsed = guestBootRuntimeSchema.safeParse(readGuestJson(await read(input, 'runtime')));
+    if (!parsed.success || !sameGuestSubject(guestSubject(parsed.data.proof), input.subject))
       throw new CloudError(
         'provider_unavailable',
         'Guest returned invalid runtime evidence.',

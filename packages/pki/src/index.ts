@@ -6,12 +6,13 @@ import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { z } from 'zod';
 import {
-  allocationIdSchema,
+  guestSubjectSchema,
+  guestSubjectKey,
   CloudError,
   guestEnrollmentInputSchema,
   guestImageSchema,
 } from '@agent-cloud/contracts';
-import type { AllocationId } from '@agent-cloud/contracts';
+import type { GuestSubject } from '@agent-cloud/contracts';
 import { inspectIssuedSsh } from './ssh-certificate.js';
 import { inspectIssuedTls } from './tls-certificate.js';
 
@@ -35,7 +36,7 @@ export async function readCsrKey(
   if (!details.success)
     throw new CloudError(
       'invalid_input',
-      'Guest CSR must request only its allocation name with an ECDSA key.',
+      'Guest CSR must request only its guest identity name with an ECDSA key.',
     );
   const key = createPublicKey({
     key: Buffer.from(details.data.RawSubjectPublicKeyInfo, 'base64'),
@@ -47,14 +48,14 @@ export async function readCsrKey(
   return key;
 }
 
-export function guestName(allocationId: AllocationId): string {
-  return `${allocationIdSchema.parse(allocationId).replace('alloc_', 'alloc-')}.guest.agent-cloud.internal`;
+export function guestName(subject: GuestSubject): string {
+  return `${guestSubjectKey(subject).replace('_', '-')}.guest.agent-cloud.internal`;
 }
-export function probePrincipal(allocationId: AllocationId): string {
-  return `probe-${allocationIdSchema.parse(allocationId)}`;
+export function probePrincipal(subject: GuestSubject): string {
+  return `probe-${guestSubjectKey(subject)}`;
 }
-export function runtimePrincipal(allocationId: AllocationId): string {
-  return `runtime-${allocationIdSchema.parse(allocationId)}`;
+export function runtimePrincipal(subject: GuestSubject): string {
+  return `runtime-${guestSubjectKey(subject)}`;
 }
 
 export interface SignerConfiguration {
@@ -69,7 +70,7 @@ export interface SignerConfiguration {
 }
 export interface ProbeCredential<K extends 'probe' | 'runtime' = 'probe'> {
   kind: K;
-  allocationId: AllocationId;
+  subject: GuestSubject;
   privateKey: string;
   certificate: string;
   expiresAt: string;
@@ -137,17 +138,17 @@ export function createSigner(configuration: SignerConfiguration) {
   }
 
   async function signSsh(input: {
-    allocationId: AllocationId;
+    subject: GuestSubject;
     publicKey: string;
     kind: 'host' | 'probe' | 'runtime';
   }) {
     const key = guestEnrollmentInputSchema.shape.sshHostPublicKey.parse(input.publicKey);
     const principal =
       input.kind === 'host'
-        ? guestName(input.allocationId)
+        ? guestName(input.subject)
         : input.kind === 'runtime'
-          ? runtimePrincipal(input.allocationId)
-          : probePrincipal(input.allocationId);
+          ? runtimePrincipal(input.subject)
+          : probePrincipal(input.subject);
     return inWorkspace(async (directory, run, flags) => {
       const keyPath = join(directory, 'identity.pub');
       await writeFile(keyPath, key + '\n', { flag: 'wx', mode: 0o600 });
@@ -186,11 +187,8 @@ export function createSigner(configuration: SignerConfiguration) {
     });
   }
 
-  async function validateTlsRequest(input: {
-    allocationId: AllocationId;
-    csr: string;
-  }): Promise<void> {
-    const name = guestName(input.allocationId);
+  async function validateTlsRequest(input: { subject: GuestSubject; csr: string }): Promise<void> {
+    const name = guestName(input.subject);
     const csr = guestEnrollmentInputSchema.shape.tlsCsr.parse(input.csr);
     await inWorkspace(async (directory, run) => {
       const request = join(directory, 'guest.csr');
@@ -199,8 +197,8 @@ export function createSigner(configuration: SignerConfiguration) {
     });
   }
 
-  async function signTls(input: { allocationId: AllocationId; csr: string }) {
-    const name = guestName(input.allocationId);
+  async function signTls(input: { subject: GuestSubject; csr: string }) {
+    const name = guestName(input.subject);
     const csr = guestEnrollmentInputSchema.shape.tlsCsr.parse(input.csr);
     return inWorkspace(async (directory, run, flags) => {
       const request = join(directory, 'guest.csr');
@@ -225,10 +223,10 @@ export function createSigner(configuration: SignerConfiguration) {
     });
   }
   async function issueCredential<K extends 'probe' | 'runtime'>(
-    allocationId: AllocationId,
+    value: GuestSubject,
     kind: K,
   ): Promise<ProbeCredential<K>> {
-    allocationIdSchema.parse(allocationId);
+    const subject = guestSubjectSchema.parse(value);
     return inWorkspace(async (directory) => {
       const path = join(directory, 'probe');
       try {
@@ -243,19 +241,18 @@ export function createSigner(configuration: SignerConfiguration) {
       }
       const signed = await signSsh({
         kind,
-        allocationId,
+        subject,
         publicKey: (await readFile(path + '.pub', 'utf8')).trim(),
       });
-      return { kind, allocationId, privateKey: await readFile(path, 'utf8'), ...signed };
+      return { kind, subject, privateKey: await readFile(path, 'utf8'), ...signed };
     });
   }
   return Object.freeze({
     trust: Object.freeze({ tlsRoot: root.toString(), sshHostCa: hostCa, sshUserCa: userCa }),
-    signHost: async (input: { allocationId: AllocationId; publicKey: string }) =>
+    signHost: async (input: { subject: GuestSubject; publicKey: string }) =>
       (await signSsh({ ...input, kind: 'host' })).certificate,
-    issueProbeCredential: (allocationId: AllocationId) => issueCredential(allocationId, 'probe'),
-    issueRuntimeCredential: (allocationId: AllocationId) =>
-      issueCredential(allocationId, 'runtime'),
+    issueProbeCredential: (subject: GuestSubject) => issueCredential(subject, 'probe'),
+    issueRuntimeCredential: (subject: GuestSubject) => issueCredential(subject, 'runtime'),
     validateTlsRequest,
     signTls,
   });

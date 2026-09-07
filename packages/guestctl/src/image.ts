@@ -1,7 +1,12 @@
 import { copyFile, lstat, readdir, rm, symlink } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { z } from 'zod';
-import { bootstrapSpecSchema, type BootstrapSpec } from '@agent-cloud/contracts';
+import {
+  guestBootSpecSchema,
+  guestSubject,
+  sameGuestSubject,
+  type GuestBootSpec,
+} from '@agent-cloud/contracts';
 import { atomicWrite, ensureDirectory, isMissing, readOwnedFile } from './files.js';
 import { loadManifest, type GuestConfiguration } from './identity.js';
 import { runTool } from './tools.js';
@@ -161,6 +166,18 @@ export async function prepareImage(configuration: GuestConfiguration) {
     await clearDirectory('/var/log', 0, 0o002);
     // Access removal is last. If interrupted here, the owner can retry out of band or rebuild this disposable VM.
     await run('/usr/bin/systemctl', ['disable', 'ssh.service', 'ssh.socket']);
+    // Cloud-init may enable Ubuntu SSH again. Unit conditions also prevent socket activation
+    // before guestctl has published this clone's identity, even when a unit is enabled.
+    for (const unit of ['ssh.service', 'ssh.socket']) {
+      const directory = `/etc/systemd/system/${unit}.d`;
+      await ensureDirectory(directory, 0o755);
+      await atomicWrite(
+        join(directory, '10-agent-cloud-identity.conf'),
+        '[Unit]\nConditionPathExists=/var/lib/agent-cloud/keys/ssh_host_ed25519_key\n',
+        0o644,
+      );
+    }
+    await run('/usr/bin/systemctl', ['daemon-reload']);
     await copyFile('/usr/lib/agent-cloud/sshd_config', '/etc/ssh/sshd_config');
     for (const path of [
       '/etc/sudoers.d/agent-cloud-builder',
@@ -200,21 +217,21 @@ export async function prepareImage(configuration: GuestConfiguration) {
   return { kind: 'sanitized', builderId: record.builderId, manifestDigest: digest };
 }
 
-/** Runs before allocation key generation. Existing allocation metadata permits a lost-response retry. */
-export async function validateImageBoot(configuration: GuestConfiguration, spec: BootstrapSpec) {
+/** Runs before guest key generation. Existing guest metadata permits a lost-response retry. */
+export async function validateImageBoot(configuration: GuestConfiguration, spec: GuestBootSpec) {
   let record;
   try {
     record = imageRecordSchema.parse(JSON.parse(await readOwnedFile(recordPath, 'private')));
   } catch (error) {
     if (!isMissing(error)) throw error;
-    const existing = bootstrapSpecSchema.parse(
-      JSON.parse(await readOwnedFile(join(configuration.state, 'allocation.json'), 'public')),
+    const existing = guestBootSpecSchema.parse(
+      JSON.parse(await readOwnedFile(join(configuration.state, 'guest.json'), 'public')),
     );
     if (
-      existing.allocationId !== spec.allocationId ||
+      !sameGuestSubject(guestSubject(existing), guestSubject(spec)) ||
       existing.image.manifestDigest !== spec.image.manifestDigest
     )
-      throw new Error('Image record is absent without this allocation retry.', { cause: error });
+      throw new Error('Image record is absent without this guest retry.', { cause: error });
     return;
   }
   const machineId = (await readOwnedFile('/etc/machine-id', 'public')).trim();

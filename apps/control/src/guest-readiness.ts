@@ -4,6 +4,7 @@ import {
   CloudError,
   bootstrapSpecSchema,
   guestIdentitySchema,
+  guestSubject,
   guestRuntimeSchema,
   type Operation,
   type Machine,
@@ -122,12 +123,12 @@ export function createGuestReadiness(ports: {
           if (reserved === 'exhausted')
             return { kind: 'blocked', reason: 'guest_signing_exhausted' };
           if (reserved === 'cooldown') return { kind: 'waiting' };
-          credential = await ports.signer.issueRuntimeCredential(spec.allocationId);
+          credential = await ports.signer.issueRuntimeCredential(guestSubject(spec));
           credentials.set(operation.id, credential);
         }
         const runtime = guestRuntimeSchema.parse(
           await ports.probe.readRuntime({
-            allocationId: spec.allocationId,
+            subject: guestSubject(spec),
             address: observed.address,
             credential,
             trust: { kind: 'host_ca', publicKey: spec.image.sshHostCa },

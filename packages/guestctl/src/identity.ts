@@ -2,13 +2,15 @@ import { createHash, createPrivateKey, createPublicKey, X509Certificate } from '
 import { lstat, mkdtemp, open, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
-  guestBootstrapFileSchema,
+  guestBootFileSchema,
+  guestSubject,
+  sameGuestSubject,
   guestManifestSchema,
-  guestProofSchema,
+  guestBootProofSchema,
   issuedGuestIdentitySchema,
-  type GuestBootstrapFile,
-  type GuestProof,
-  type BootstrapSpec,
+  type GuestBootFile,
+  type GuestBootProof,
+  type GuestBootSpec,
 } from '@agent-cloud/contracts';
 import { guestName, inspectIssuedSsh, inspectIssuedTls, readCsrKey } from '@agent-cloud/pki';
 import {
@@ -38,7 +40,7 @@ export async function loadManifest(configuration: GuestConfiguration) {
     throw new Error('Guest executable does not match the image manifest.');
   return { manifest, digest };
 }
-export async function verifyImage(configuration: GuestConfiguration, spec: BootstrapSpec) {
+export async function verifyImage(configuration: GuestConfiguration, spec: GuestBootSpec) {
   const { manifest, digest } = await loadManifest(configuration);
   if (
     spec.image.manifestDigest !== digest ||
@@ -50,27 +52,25 @@ export async function verifyImage(configuration: GuestConfiguration, spec: Boots
   )
     throw new Error('Guest bootstrap does not match the installed image.');
 }
-export async function loadBootstrap(
-  configuration: GuestConfiguration,
-): Promise<GuestBootstrapFile> {
-  const bootstrap = guestBootstrapFileSchema.parse(
+export async function loadBootstrap(configuration: GuestConfiguration): Promise<GuestBootFile> {
+  const bootstrap = guestBootFileSchema.parse(
     JSON.parse(await readOwnedFile(join(configuration.state, 'bootstrap.json'), 'private')),
   );
   await verifyImage(configuration, bootstrap.spec);
   return bootstrap;
 }
-async function storedIdentity(configuration: GuestConfiguration, spec: BootstrapSpec) {
+async function storedIdentity(configuration: GuestConfiguration, spec: GuestBootSpec) {
   const directory = join(configuration.state, 'keys');
   await ensureDirectory(directory, 0o700);
-  const proof = guestProofSchema.parse(
+  const proof = guestBootProofSchema.parse(
     JSON.parse(await readOwnedFile(join(directory, 'proof.json'), 'private')),
   );
   if (
-    proof.allocationId !== spec.allocationId ||
+    !sameGuestSubject(guestSubject(proof), guestSubject(spec)) ||
     proof.imageVersion !== spec.image.version ||
     proof.manifestDigest !== spec.image.manifestDigest
   )
-    throw new Error('Existing guest identity belongs to another allocation or image.');
+    throw new Error('Existing guest identity belongs to another guest subject or image.');
   const publicKey = (
     await runTool(
       configuration.keygen,
@@ -85,7 +85,7 @@ async function storedIdentity(configuration: GuestConfiguration, spec: Bootstrap
   const requestKey = await readCsrKey(
     (args) => runTool(configuration.step, args, directory),
     join(directory, 'guest.csr'),
-    guestName(spec.allocationId),
+    guestName(guestSubject(spec)),
   );
   const privateKey = createPrivateKey(await readOwnedFile(join(directory, 'guest.key'), 'private'));
   if (
@@ -100,8 +100,8 @@ async function storedIdentity(configuration: GuestConfiguration, spec: Bootstrap
 /** Publish the complete key directory once. Concurrent or restarted boot adopts the winner. */
 export async function ensureIdentity(
   configuration: GuestConfiguration,
-  spec: BootstrapSpec,
-): Promise<GuestProof> {
+  spec: GuestBootSpec,
+): Promise<GuestBootProof> {
   await ensureDirectory(configuration.state, 0o755);
   let existing = false;
   try {
@@ -114,7 +114,7 @@ export async function ensureIdentity(
   const temporary = await mkdtemp(join(configuration.state, '.keys-'));
   try {
     const hostKey = join(temporary, 'ssh_host_ed25519_key');
-    const name = guestName(spec.allocationId);
+    const name = guestName(guestSubject(spec));
     await runTool(
       configuration.keygen,
       ['-t', 'ed25519', '-N', '', '-C', '', '-f', hostKey],
@@ -140,9 +140,10 @@ export async function ensureIdentity(
       ],
       temporary,
     );
-    const proof = guestProofSchema.parse({
-      version: 1,
-      allocationId: spec.allocationId,
+    const proof = guestBootProofSchema.parse({
+      ...(spec.version === 1
+        ? { version: 1, allocationId: spec.allocationId }
+        : { version: 2, subject: spec.subject }),
       imageVersion: spec.image.version,
       manifestDigest: spec.image.manifestDigest,
       sshHostPublicKey: (await readOwnedFile(hostKey + '.pub', 'public')).trim(),
@@ -172,8 +173,8 @@ export async function ensureIdentity(
 /** Validate every returned identity field and certificate before atomically publishing a bundle. */
 export async function installIdentity(
   configuration: GuestConfiguration,
-  spec: BootstrapSpec,
-  proof: GuestProof,
+  spec: GuestBootSpec,
+  proof: GuestBootProof,
   value: unknown,
 ) {
   const identity = issuedGuestIdentitySchema.parse(value);
@@ -228,12 +229,12 @@ export async function installIdentity(
 
 async function validateCertificates(
   configuration: GuestConfiguration,
-  proof: GuestProof,
-  spec: BootstrapSpec,
+  proof: GuestBootProof,
+  spec: GuestBootSpec,
   identity: ReturnType<typeof issuedGuestIdentitySchema.parse>,
   directory: string,
 ) {
-  const name = guestName(proof.allocationId);
+  const name = guestName(guestSubject(proof));
   await runTool(
     configuration.step,
     [

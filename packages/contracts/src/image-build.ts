@@ -3,13 +3,9 @@ import { catalogItemSchema } from './catalog.js';
 import { currencySchema, microsSchema } from './money.js';
 import { guestManifestSchema } from './guest.js';
 import { imageArtifactsSchema, imageDigestSchema, imageInputsSchema } from './image-inputs.js';
+import { imageBuildIdSchema, imageProviderIdSchema, type ImageBuildId } from './ids.js';
 
-export const imageBuildIdSchema = z.uuid().brand<'ImageBuildId'>();
-export type ImageBuildId = z.infer<typeof imageBuildIdSchema>;
-export const imageProviderIdSchema = z
-  .string()
-  .max(20)
-  .regex(/^[1-9][0-9]*$/);
+export { imageBuildIdSchema, imageProviderIdSchema, type ImageBuildId } from './ids.js';
 export const imageResourceKindSchema = z.enum([
   'server',
   'primary_ip',
@@ -172,11 +168,18 @@ export const imageProviderCommandSchema = z.discriminatedUnion('kind', [
     primaryIpId: imageProviderIdSchema,
     sshKeyId: imageProviderIdSchema,
     firewallId: imageProviderIdSchema,
-    bootData: z.strictObject({
-      kind: z.literal('image_build_secret'),
-      id: z.uuid(),
-      digest: imageDigestSchema,
-    }),
+    bootData: z.discriminatedUnion('kind', [
+      z.strictObject({
+        kind: z.literal('image_build_secret'),
+        id: z.uuid(),
+        digest: imageDigestSchema,
+      }),
+      z.strictObject({
+        kind: z.literal('image_verifier_secret'),
+        id: imageBuildIdSchema,
+        digest: imageDigestSchema,
+      }),
+    ]),
   }),
   z.strictObject({
     kind: z.literal('power_off'),

@@ -119,10 +119,10 @@ async function scenario() {
   const signer = {
     issueRuntimeCredential: vi
       .fn<Signer['issueRuntimeCredential']>()
-      .mockImplementation((allocationId) =>
+      .mockImplementation((subject) =>
         Promise.resolve({
           kind: 'runtime',
-          allocationId,
+          subject,
           certificate: 'fixture-cert',
           privateKey: 'fixture-key',
           expiresAt: new Date(Date.now() + 300_000).toISOString(),

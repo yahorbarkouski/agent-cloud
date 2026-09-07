@@ -10,10 +10,17 @@ type Plan =
   | { kind: 'builder' }
   | { kind: 'cleanup'; reason: 'requested' | 'expired' | 'failed' }
   | { kind: 'cleaned' }
+  | { kind: 'verifier_prepare' }
+  | { kind: 'verifier_check' }
+  | { kind: 'verified' }
   | { kind: 'verification_required'; snapshotId: string };
 
 /** Plans from one consistent SQL snapshot. Executors revalidate under their own build lock. */
-export function planImageRelease(build: ImageBuild, now = Date.now()): Plan {
+export function planImageRelease(
+  build: ImageBuild,
+  now = Date.now(),
+  verificationEnabled = false,
+): Plan {
   const { admission } = build;
   if (build.state.kind === 'cleaned') return { kind: 'cleaned' };
   if (build.state.kind === 'cleaning') return { kind: 'cleanup', reason: build.state.reason };
@@ -115,5 +122,44 @@ export function planImageRelease(build: ImageBuild, now = Date.now()): Plan {
     };
   const snapshot = resource('snapshot');
   if (effect('snapshot')?.resolution.kind !== 'confirmed' || !snapshot) return failed();
-  return { kind: 'verification_required', snapshotId: snapshot.ref.id };
+  if (!verificationEnabled) return { kind: 'verification_required', snapshotId: snapshot.ref.id };
+  if (build.verification.kind === 'verified') return { kind: 'verified' };
+  if (build.verification.kind === 'waiting') return { kind: 'verifier_prepare' };
+  if (
+    Date.parse(build.verification.spec.expiresAt) <= now &&
+    build.verification.kind !== 'enrolled'
+  )
+    return failed();
+  if (!effect('verifier_ip'))
+    return {
+      kind: 'effect',
+      command: {
+        kind: 'create_primary_ip',
+        ...identity('verifier_ip'),
+        region: admission.offer.region,
+      },
+    };
+  const verifierIp = resource('verifier_ip');
+  if (effect('verifier_ip')?.resolution.kind !== 'confirmed' || !verifierIp) return failed();
+  if (!effect('verifier'))
+    return {
+      kind: 'effect',
+      command: {
+        kind: 'create_server',
+        ...identity('verifier'),
+        serverType: admission.offer.serverType,
+        region: admission.offer.region,
+        imageId: snapshot.ref.id,
+        primaryIpId: verifierIp.ref.id,
+        sshKeyId: key.ref.id,
+        firewallId: firewall.ref.id,
+        bootData: {
+          kind: 'image_verifier_secret',
+          id: admission.id,
+          digest: admission.source.manifestDigest,
+        },
+      },
+    };
+  if (effect('verifier')?.resolution.kind !== 'confirmed' || !resource('verifier')) return failed();
+  return { kind: 'verifier_check' };
 }

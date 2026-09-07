@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { guestProofSchema } from '@agent-cloud/contracts';
+import { guestBootProofSchema } from '@agent-cloud/contracts';
 import { enrollGuest } from './enrollment.js';
 import { readOwnedFile } from './files.js';
 import { guestSystem } from './system.js';
@@ -31,7 +31,7 @@ try {
   )
     throw new Error('Unsupported guest command.');
   if (command === 'identity') {
-    const proof = guestProofSchema.parse(
+    const proof = guestBootProofSchema.parse(
       JSON.parse(await readOwnedFile('/var/lib/agent-cloud/proof.json', 'public', 65_536, 0)),
     );
     process.stdout.write(JSON.stringify(proof) + '\n');

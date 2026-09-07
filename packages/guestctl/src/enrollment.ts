@@ -1,9 +1,9 @@
 import { join } from 'node:path';
 import {
-  bootstrapSpecSchema,
+  guestBootSpecSchema,
   issuedGuestIdentitySchema,
-  type BootstrapSpec,
-  type GuestProof,
+  type GuestBootSpec,
+  type GuestBootProof,
   type IssuedGuestIdentity,
 } from '@agent-cloud/contracts';
 import { atomicWrite, isMissing, readOwnedFile } from './files.js';
@@ -16,11 +16,11 @@ import {
 } from './identity.js';
 
 export type EnrollmentSystem = {
-  prepareIdentity: (spec: BootstrapSpec) => Promise<void>;
-  prepareSsh: (input: { proof: GuestProof; spec: BootstrapSpec }) => Promise<void>;
+  prepareIdentity: (spec: GuestBootSpec) => Promise<void>;
+  prepareSsh: (input: { proof: GuestBootProof; spec: GuestBootSpec }) => Promise<void>;
   activate: (input: {
-    proof: GuestProof;
-    spec: BootstrapSpec;
+    proof: GuestBootProof;
+    spec: GuestBootSpec;
     identity: IssuedGuestIdentity;
   }) => Promise<void>;
   eraseBootstrap: () => Promise<void>;
@@ -69,8 +69,8 @@ export async function enrollGuest(input: {
     if (!isMissing(error)) throw error;
   }
   if (installed) {
-    const spec = bootstrapSpecSchema.parse(
-      JSON.parse(await readOwnedFile(join(configuration.state, 'allocation.json'), 'public')),
+    const spec = guestBootSpecSchema.parse(
+      JSON.parse(await readOwnedFile(join(configuration.state, 'guest.json'), 'public')),
     );
     await verifyImage(configuration, spec);
     const proof = await ensureIdentity(configuration, spec);
@@ -91,7 +91,7 @@ export async function enrollGuest(input: {
     await phase('identity');
     const proof = await ensureIdentity(configuration, bootstrap.spec);
     await atomicWrite(
-      join(configuration.state, 'allocation.json'),
+      join(configuration.state, 'guest.json'),
       JSON.stringify(bootstrap.spec) + '\n',
       0o644,
     );
@@ -103,7 +103,10 @@ export async function enrollGuest(input: {
       signal: AbortSignal.timeout(30_000),
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        bootstrap: { version: 1, allocationId: bootstrap.spec.allocationId },
+        bootstrap:
+          bootstrap.spec.version === 1
+            ? { version: 1, allocationId: bootstrap.spec.allocationId }
+            : { version: 2, subject: bootstrap.spec.subject },
         token: bootstrap.token,
         sshHostPublicKey: proof.sshHostPublicKey,
         tlsCsr: proof.tlsCsr,

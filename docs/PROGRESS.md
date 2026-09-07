@@ -39,7 +39,21 @@
 - [ ] Implement: public input provenance, snapshot publication/reconciliation/cleanup, release consumption and bounded provider proof.
 - [ ] Scrap audit: revisit the chosen shape only if implementation shows repeated friction.
 
+## Platform verifier integration
+
+- [x] Ground: traced customer bootstrap ownership, guest key/certificate installation, SSH proof and runtime identity; the allocation-specific identity boundary needs an explicit verifier subject.
+- [x] Sketch: continue the selected sibling image-journal design with separate verifier ownership and shared subject-bound guest/PKI/SSH functions. Concrete usage and module boundaries are in `architecture/image-verifier.md`.
+- [x] Agree: autonomous implementation remains authorized.
+- [ ] Implement: verifier subject and native guest path, build-owned bootstrap/enrollment, runtime proof, retained promotion and cleanup.
+- [ ] Scrap: revisit if integration repeatedly requires owner-specific workarounds inside shared mechanics.
+
 ## Verification ledger
+
+M1 platform verifier, in progress2026-09-07:
+
+- Shared subject-bound guest/PKI/SSH paths preserve customer wire1 and add explicit build-owned verifier wire2. Native PKI99134 and SSH81642 passed both namespaces with no cloud resources.
+- New verifier bootstrap, identity, signing and completion records bind one admitted build to its confirmed snapshot and fresh VM. Controller, renderer, `/image/enroll` and restricted runtime checks are implemented. Full abort includes verifier resources; retained promotion remains open. Migration0014 is applied; all15migration hashes match.
+- Full check8838 passed303tests in28files, typecheck and lint. Focused75949 passed13verifier tests after cancellation and expiry regressions. Independent gpt-5.6-sol review found no blocker and prompted the final-runtime cancellation case. Native builder78422 passed two customer clones and the new platform verifier with full cleanup. Full check96323 now passes306tests/28files after added boundary cases and the SSH startup fix. Native16223 exposed an unseeded SSH socket despite disabled units; sshd had no host key and could not authenticate. Added host-key conditions to both systemd SSH units, manually verified inactive units, cleaned the owned failed fixture and started fresh native45162. Final rebuilt isolation proof is pending.
 
 M1 durable builder controller, 2026-09-07:
 

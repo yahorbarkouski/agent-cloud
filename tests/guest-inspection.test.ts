@@ -3,7 +3,12 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { guestManifestSchema, newId } from '../packages/contracts/dist/index.js';
+import {
+  guestManifestSchema,
+  imageBuildIdSchema,
+  imageVerifierProofSchema,
+  newId,
+} from '../packages/contracts/dist/index.js';
 import { inspectRuntime, type RuntimeSystem } from '../packages/guestctl/src/inspect.js';
 
 let state: string;
@@ -56,6 +61,7 @@ async function fixture() {
   const bootId = randomUUID();
   const system: RuntimeSystem = {
     architecture: () => 'x86',
+    machineId: () => Promise.resolve('a'.repeat(32)),
     bootId: () => Promise.resolve(bootId),
     version: (name) => Promise.resolve(manifest.components[name]),
     disk: () => Promise.resolve({ availableBytes: 5 * 1024 ** 3, totalBytes: 20 * 1024 ** 3 }),
@@ -95,4 +101,33 @@ it('rejects changed executable or identity evidence rather than reporting readin
   await writeFile(join(state, 'proof.json'), JSON.stringify(guest.proof));
   await writeFile(guest.configuration.binary, 'changed executable');
   await expect(inspectRuntime(guest.configuration, guest.system)).rejects.toThrow('executable');
+});
+
+it('reports a platform verifier identity and current machine ID without customer allocation fields', async () => {
+  const guest = await fixture();
+  const fields = {
+    imageVersion: guest.proof.imageVersion,
+    manifestDigest: guest.proof.manifestDigest,
+    sshHostPublicKey: guest.proof.sshHostPublicKey,
+    tlsCsr: guest.proof.tlsCsr,
+  };
+  const proof = imageVerifierProofSchema.parse({
+    ...fields,
+    version: 2,
+    subject: { kind: 'image_verifier', id: imageBuildIdSchema.parse(randomUUID()) },
+  });
+  await writeFile(join(state, 'proof.json'), JSON.stringify(proof), { mode: 0o644 });
+  guest.system.proxy = () =>
+    Promise.resolve({ subject: proof.subject, imageVersion: proof.imageVersion });
+  const runtime = await inspectRuntime(guest.configuration, guest.system);
+  expect(runtime).toMatchObject({
+    version: 2,
+    proof,
+    machineId: 'a'.repeat(32),
+    bootId: guest.bootId,
+    checks: { proxy: { kind: 'ok', subject: proof.subject } },
+  });
+  expect(runtime.proof).not.toHaveProperty('allocationId');
+  guest.system.machineId = () => Promise.resolve('uninitialized');
+  await expect(inspectRuntime(guest.configuration, guest.system)).rejects.toThrow();
 });

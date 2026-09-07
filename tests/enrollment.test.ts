@@ -133,17 +133,15 @@ async function admittedGuest() {
   const signer = {
     trust: { tlsRoot: image.tlsRoot, sshHostCa: image.sshHostCa, sshUserCa: image.sshUserCa },
     validateTlsRequest: vi.fn<Signer['validateTlsRequest']>().mockResolvedValue(),
-    issueProbeCredential: vi
-      .fn<Signer['issueProbeCredential']>()
-      .mockImplementation((allocationId) =>
-        Promise.resolve({
-          kind: 'probe',
-          allocationId,
-          certificate: 'fixture-probe',
-          privateKey: 'fixture-private-key',
-          expiresAt: new Date(Date.now() + 300_000).toISOString(),
-        }),
-      ),
+    issueProbeCredential: vi.fn<Signer['issueProbeCredential']>().mockImplementation((subject) =>
+      Promise.resolve({
+        kind: 'probe',
+        subject,
+        certificate: 'fixture-probe',
+        privateKey: 'fixture-private-key',
+        expiresAt: new Date(Date.now() + 300_000).toISOString(),
+      }),
+    ),
     signHost: vi.fn<Signer['signHost']>().mockResolvedValue('fixture-host-cert'),
     signTls: vi.fn<Signer['signTls']>().mockResolvedValue('fixture-tls-cert'),
   } satisfies Pick<
