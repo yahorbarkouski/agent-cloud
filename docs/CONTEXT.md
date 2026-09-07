@@ -6,7 +6,7 @@ Updated 2026-09-07. Implement the full agent-operated cloud in `docs/archive/ori
 
 Customers bring their own coding agents. Build their CLI/API/skills, not an agent. TypeScript, Linux VMs, Docker Compose, SSH and Hetzner. Keep infrastructure cheap; no provider benchmarks, expensive fallback or warm pool. Maintain AGENTS.md, architecture, progress, append-only decisions and this concise summary. Continue authorized work without repeated approvals.
 
-Repo `/Users/yahorbarkouski/Documents/ChatGPT/learning/agent-cloud` is a standalone Git repository inside an unrelated workspace. Work only here. Branch `yahor/agent-cloud`; private origin `https://github.com/yahorbarkouski/agent-cloud.git`. Previous pushed HEAD47e315d documents guest implementation a43cc32; Linux CI34069508351 passed its 99-test check and all three native smokes. Current runtime checkpoint is verified locally but uncommitted; remote CI pending.
+Repo `/Users/yahorbarkouski/Documents/ChatGPT/learning/agent-cloud` is a standalone Git repository inside an unrelated workspace. Work only here. Branch `yahor/agent-cloud`; private origin `https://github.com/yahorbarkouski/agent-cloud.git`. Runtime implementation ca03da9ef6330357559d06d65eb83dc672a6a6a3 is committed and pushed. Linux CI34071617896 passed frozen install,121-test full check, formatting, fresh PKI setup, all three native smokes and cleanup. Previous guest implementation a43cc32/CI34069508351 also passed.
 
 ## Implemented control path
 
@@ -28,7 +28,7 @@ New guestctl inspect reports pinned versions, Docker daemon access, disk headroo
 
 Local evidence: full check121tests/18files, typecheck/lint passed session29425. Native runtime PKI policy passed71057. SSH and enrollment smokes passed97851. Fresh owned Ubuntu smoke46053 passed real cloud-init/systemd, restricted sudo denials, stopped Docker/socket, stopped proxy,32MiB temporary state filesystem, restored readiness, old-boot waiting and actual reboot completion. Token scan135files/18,358,624bytes/no matches. VM deleted; orb list[] and ownership record absent. Image dev-3e7f5c0ea7e8, digestb14b11bdb05883e7af0307a3817f31c047b0fcb10e3b9c382e1381dd0c2834c5. Provider observations simulated; no Hetzner boot claim.
 
-Migration0008 applied after stopping owned API/worker. Restarted CLI smoke73214 passed for vm_d527c4fb-11a0-4b5e-b0cf-dd6e7ebd75c2. DB counts:9migrations,0activeallocations,0simulatedVMs/IPs. Updated customer skill and shell syntax valid. Final docs formatting/review/commit/CI still pending.
+Migration0008 applied after stopping owned API/worker. Restarted CLI smoke73214 passed for vm_d527c4fb-11a0-4b5e-b0cf-dd6e7ebd75c2. DB counts:9migrations,0activeallocations,0simulatedVMs/IPs. Updated customer skill, shell syntax and formatting valid. Different-model artifact/trail review complete; no remaining concrete runtime finding. Implementation commit and CI are complete.
 
 ## Local runtime and secrets
 
@@ -48,8 +48,10 @@ Read-only `PROVIDER_CURRENCY=USD HCLOUD_SERVER_TYPE_SMALL=cpx12 pnpm hetzner:che
 
 ## Next work
 
-1. Finish runtime checkpoint docs/trail review, formatting, commit/push and Linux CI. Do not repeat completed local VM or control drills unless code changes justify it.
+1. Runtime checkpoint ca03da9/CI34071617896 is complete. Continue the next implementation slice; do not repeat completed local VM or control drills unless code changes justify it.
 2. Image sanitation/cloned fresh identity proof, snapshot ownership/cleanup, certificate renewal and operator recovery. Production createTasks/API/worker configuration still cannot enable GuestProvisioning; wire it when prerequisites exist. Then bounded cheap Hetzner build/boot/cleanup.
 3. M2 browser/device login, CLI grants and customer SSH/gateway/revocation; M3 transfers/durable commands/Compose/routes; M4 recipes/off-VM backups/isolated restore; M5 usage/traffic/alerts/costlimits; M6 self-hosting; M7 failure/end-to-end proof.
 
-Architect/how/arena work is already complete for guest architecture; don't repeat absent new friction. Applied show-me-your-work requires a different-model artifact/trail audit before handback. Existing guest_design_judge is gpt-5.6-sol; runtime review is docs/research/m1-guest-runtime-review.md. Final runtime trail audit pending. No transcript directory supplied; do not claim transcript audit. Keep goal active.
+Architect/how/arena work is already complete for guest architecture; don't repeat absent new friction. Applied show-me-your-work requires a different-model artifact/trail audit before handback. Existing guest_design_judge is gpt-5.6-sol; final runtime review/trail audit is docs/research/m1-guest-runtime-review.md. No transcript directory supplied; do not claim transcript audit. Keep goal active.
+
+Sanitation preparation is recorded in docs/architecture/guest-image.md with fresh official cloud-init/Hetzner references. Local orbctl clone supports stopped clones with independent state; its help was read, but no clone drill or sanitation implementation has run. Never use orb stop without an explicit owned machine name because omission stops all OrbStack services.

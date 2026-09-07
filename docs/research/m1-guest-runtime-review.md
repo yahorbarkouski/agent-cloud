@@ -1,6 +1,6 @@
 # M1 guest runtime readiness review
 
-Reviewer: configured `gpt-5.6-sol`. This is a read-only review of the uncommitted runtime readiness slice, including the controller, migration 0008, purpose-specific PKI/SSH transport, guest inspection, sudo policy, tests, architecture, and final decision trail. I did not operate the VM. The run evidence below was supplied through the active task and preserved in repository artifacts; no transcript directory was supplied.
+Reviewer: configured `gpt-5.6-sol`. This is a read-only review of the runtime readiness checkpoint, including the controller, migration 0008, purpose-specific PKI/SSH transport, guest inspection, sudo policy, tests, architecture, commit, CI, and final decision trail. I did not operate the VM. The local run evidence below was supplied through the active task and preserved in repository artifacts; no transcript directory was supplied.
 
 ## Findings
 
@@ -34,8 +34,10 @@ Migration 0008 was applied to the development database. Restarted API/worker/CLI
 
 ## Trail audit
 
-The five appended `M1-runtime` rows have the required six TSV fields. Each decision maps to the cited code, migration, tests, smoke runner, architecture, or progress ledger. The rows preserve the review-discovered deadline race and its fix, describe the purpose-specific privilege boundary, record durable signing and boot evidence, and state the local VM and migrated-service outcomes. They correctly mark remote CI pending and make no Hetzner boot or paid-resource claim. The run/session outputs were not independently replayed by this reviewer, and no transcript directory exists; this is an artifact and trail audit.
+The six appended runtime rows have the required six TSV fields. Each decision maps to the cited code, migration, tests, smoke runner, architecture, progress ledger, commit, or CI run. The rows preserve the review-discovered deadline race and its fix, describe the purpose-specific privilege boundary, record durable signing and boot evidence, and state the local VM and migrated-service outcomes. They make no Hetzner boot or paid-resource claim. The local run/session outputs were not independently replayed by this reviewer, and no transcript directory exists; this is an artifact and trail audit.
 
-The current architecture, progress, and context consistently leave production worker/live configuration, snapshot sanitation, certificate renewal, blocked-operation recovery, and the bounded Hetzner boot/cleanup drill open. Commit and remote CI are also pending this checkpoint.
+Implementation commit `ca03da9ef6330357559d06d65eb83dc672a6a6a3` is pushed. I independently queried GitHub Actions run `34071617896`: workflow `Check` completed successfully at that exact head SHA. Its recorded steps include frozen installation, the full check, formatting, fresh Smallstep/PKI setup, all three native PKI/SSH/enrollment smokes, and cleanup. This CI does not run the OrbStack VM smoke.
+
+The current architecture, progress, and context consistently leave production worker/live configuration, snapshot sanitation, certificate renewal, blocked-operation recovery, and the bounded Hetzner boot/cleanup drill open. The new “Next sanitation proof” section is explicitly preparatory: it cites the intended cloud-init/provider boundaries and observed clone tooling, without claiming implementation, clone execution, or VM evidence.
 
 **Attention:** the reviewed runtime slice has no remaining high-confidence correctness or privilege-boundary defect. Scrutinize the still-closed production worker wiring and the unimplemented sanitation, renewal, operator recovery, and real Hetzner proof before enabling live operations.

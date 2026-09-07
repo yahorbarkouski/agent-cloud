@@ -30,4 +30,12 @@ A real Ubuntu boot exposed `/run/cloud-init/combined-cloud-config.json` as anoth
 
 A local VM pass does not complete M1. Image sanitation, snapshot ownership/cleanup, runtime readiness in the operation worker, ongoing renewal, explicit operator recovery and the bounded live drill remain. Application deployment, customer access, routes, backups and restore belong to later milestones.
 
+## Next sanitation proof
+
+This is preparation for the next implementation slice. Sanitation must target a recorded builder with no customer allocation, then stop it before cloning or snapshot publication. It must remove builder access and machine-specific state while retaining only public image inputs. The proof must boot distinct clones with distinct allocation bootstrap data and verify different machine IDs, SSH host keys and TLS keys, followed by enrollment/runtime checks and owned-resource cleanup.
+
+Cloud-init documents `clean --logs --machine-id --seed` for clearing cached initialization and obtaining a new systemd machine ID on the next boot. Generated network/config cleanup requires deliberate selection for each datasource; the local OrbStack network override must remain fixture-owned. See the [cloud-init CLI reference](https://docs.cloud-init.io/en/latest/reference/cli.html#clean). Local `orbctl clone --help` confirms that clones start stopped and copy the source state. No clone drill has run yet.
+
+Hetzner snapshots persist until explicitly deleted and exclude attached volumes. A builder VM cleanup alone therefore cannot finish a snapshot test. Track image ownership and deletion separately, and keep later database/volume restoration tests distinct. See [Hetzner snapshot documentation](https://docs.hetzner.com/cloud/servers/backups-snapshots/overview/). These are planning constraints; snapshot creation and billing have not been exercised.
+
 Pinned artifacts come from [Node's official distribution](https://nodejs.org/dist/v24.20.0/SHASUMS256.txt), [Smallstep releases](https://github.com/smallstep/cli/releases/tag/v0.30.6), [Caddy releases](https://github.com/caddyserver/caddy/releases/tag/v2.11.4) and [Docker's Ubuntu repository](https://download.docker.com/linux/ubuntu/dists/noble/stable/binary-amd64/Packages). Caddy's JSON client-authentication configuration follows its [Go module documentation](https://pkg.go.dev/github.com/caddyserver/caddy/v2/modules/caddytls).

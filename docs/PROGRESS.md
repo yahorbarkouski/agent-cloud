@@ -36,7 +36,9 @@ M1 runtime readiness checkpoint, 2026-09-07:
 - `pnpm check` passed 121 tests in 18 files, TypeScript checks and strict lint in session29425. Native PKI runtime policy passed in71057; existing SSH and enrollment smokes passed in97851. The full fresh Ubuntu VM smoke passed in46053, including restricted sudo denials, stopped Docker/socket, stopped proxy, a 32 MiB temporary guest state filesystem, recovery, old-boot waiting and actual reboot completion. Token scan: 135 files, 18,358,624 bytes, no matches. VM deleted; local VM inventory empty and ownership record absent. Image version/digest are recorded in `architecture/guest-runtime.md`.
 - Migration 0008 applied to development after stopping the owned API/worker. Restarted services passed the actual CLI/API/worker smoke for `vm_d527c4fb-11a0-4b5e-b0cf-dd6e7ebd75c2`, including deletion and cleanup. No cloud resources were created.
 
-Production worker configuration still does not enable live provisioning. Image snapshot sanitation, certificate renewal, explicit operator recovery, bounded Hetzner boot/cleanup and M2–M7 remain. These local results do not establish end-to-end customer application deployment. Remote CI for this checkpoint is pending.
+Runtime implementation `ca03da9ef6330357559d06d65eb83dc672a6a6a3` is committed and pushed. [Linux CI34071617896](https://github.com/yahorbarkouski/agent-cloud/actions/runs/34071617896) passed frozen installation, the 121-test full check, formatting, fresh PKI setup, all three native smokes and cleanup. The final different-model artifact/trail audit is `research/m1-guest-runtime-review.md`.
+
+Production worker configuration still does not enable live provisioning. Image snapshot sanitation, certificate renewal, explicit operator recovery, bounded Hetzner boot/cleanup and M2–M7 remain. These results do not establish end-to-end customer application deployment.
 
 2026-09-06 local checkpoint:
 
