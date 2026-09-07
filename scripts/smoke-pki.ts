@@ -128,11 +128,19 @@ try {
   const expectedKey = createPublicKey(await readFile(join(scratch, 'guest.key')));
   const wrongKey = createPublicKey(await readFile(join(scratch, 'extra.key')));
   assert.throws(() => {
-    inspectIssuedTls(leaf, { name, key: wrongKey, startedAt: Date.now() });
+    inspectIssuedTls(leaf, {
+      name,
+      key: wrongKey,
+      timing: { kind: 'signing', startedAt: Date.now() },
+    });
   }, /incompatible guest certificate/);
   assert.throws(() => {
-    inspectIssuedTls(leaf, { name, key: expectedKey, startedAt: Date.now() - 3_600_000 });
-  }, /incompatible guest certificate/);
+    inspectIssuedTls(leaf, {
+      name,
+      key: expectedKey,
+      timing: { kind: 'signing', startedAt: Date.now() - 3_600_000 },
+    });
+  }, /incompatible certificate validity/);
   const server = createServer(
     { cert, key: await readFile(join(scratch, 'guest.key')) },
     (_request, response) => {

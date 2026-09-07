@@ -112,6 +112,9 @@ importers:
       '@eslint/js':
         specifier: 10.0.1
         version: 10.0.1(eslint@10.10.0(supports-color@7.2.0))
+      '@hono/node-server':
+        specifier: 2.1.1
+        version: 2.1.1(hono@4.13.7)
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
@@ -124,9 +127,15 @@ importers:
       drizzle-orm:
         specifier: 0.45.2
         version: 0.45.2(@types/pg@8.23.1)(pg@8.23.0)
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
       eslint:
         specifier: 10.10.0
         version: 10.10.0(supports-color@7.2.0)
+      hono:
+        specifier: 4.13.7
+        version: 4.13.7
       pg:
         specifier: 8.23.0
         version: 8.23.0
@@ -231,6 +240,18 @@ importers:
       '@types/pg':
         specifier: 8.23.1
         version: 8.23.1
+
+  packages/guestctl:
+    dependencies:
+      '@agent-cloud/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-cloud/pki':
+        specifier: workspace:*
+        version: link:../pki
+      zod:
+        specifier: 4.5.4
+        version: 4.5.4
 
   packages/hetzner:
     dependencies:

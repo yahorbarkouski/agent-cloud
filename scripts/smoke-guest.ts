@@ -1,0 +1,367 @@
+import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import { createHash, randomUUID } from 'node:crypto';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createServer, request } from 'node:https';
+import { join, resolve } from 'node:path';
+import { promisify } from 'node:util';
+import { setTimeout } from 'node:timers/promises';
+import { getRequestListener } from '@hono/node-server';
+import { z } from 'zod';
+import {
+  guestImageSchema,
+  guestManifestSchema,
+  guestProofSchema,
+} from '../packages/contracts/dist/index.js';
+import { createSigner, guestName } from '../packages/pki/dist/index.js';
+import { createGuestProbe } from '../packages/remote/dist/index.js';
+import { createApp } from '../apps/control/src/app.js';
+import { createEnrollmentService } from '../apps/control/src/guest-enrollment.js';
+import { readPrivateFile } from '../apps/control/src/private-file.js';
+import { testDatabase } from '../tests/database.js';
+import { prepareEnrollmentFixture } from './support/enrollment-fixture.js';
+
+const ownershipPath = resolve('.local/guest-image-machine.json');
+const ownerSchema = z.object({
+  purpose: z.literal('agent-cloud-local-image-validation'),
+  name: z.string().regex(/^agent-cloud-image-[0-9a-f]{8}$/),
+  architecture: z.literal('amd64'),
+  distribution: z.literal('ubuntu:noble'),
+});
+const infoSchema = z.object({
+  record: z.object({
+    id: z.string(),
+    name: z.string(),
+    builtin: z.literal(false),
+    image: z.object({
+      distro: z.literal('ubuntu'),
+      version: z.literal('noble'),
+      arch: z.literal('amd64'),
+    }),
+  }),
+  ip4: z.ipv4(),
+});
+const progress = (phase: string) =>
+  process.stdout.write(JSON.stringify({ phase, cloudResourcesCreated: 0 }) + '\n');
+async function command(binary: string, args: string[], timeout = 30_000) {
+  try {
+    return (
+      await promisify(execFile)(binary, args, { timeout, killSignal: 'SIGKILL', maxBuffer: 65_536 })
+    ).stdout;
+  } catch {
+    throw new Error(`Local VM tooling failed: ${binary}. Inspect the owned VM status files.`);
+  }
+}
+await mkdir('.local', { recursive: true, mode: 0o700 });
+let owner;
+try {
+  owner = ownerSchema.parse(JSON.parse(await readPrivateFile(ownershipPath)));
+} catch (error) {
+  if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+  owner = ownerSchema.parse({
+    purpose: 'agent-cloud-local-image-validation',
+    name: `agent-cloud-image-${randomUUID().slice(0, 8)}`,
+    architecture: 'amd64',
+    distribution: 'ubuntu:noble',
+  });
+  // Record intent before creation so an interrupted run remains discoverable.
+  await writeFile(ownershipPath, JSON.stringify(owner) + '\n', { mode: 0o600, flag: 'wx' });
+  await command(
+    'orb',
+    ['create', '--arch', 'amd64', '--user', 'agent-cloud-build', 'ubuntu:noble', owner.name],
+    180_000,
+  );
+}
+const info = infoSchema.parse(
+  JSON.parse(await command('orb', ['info', owner.name, '--format', 'json'])),
+);
+assert.equal(info.record.name, owner.name);
+const vm = (args: string[], timeout?: number) =>
+  command('orb', ['run', '-m', owner.name, '-u', 'root', '-w', '/tmp', ...args], timeout);
+const scratch = await mkdtemp(resolve('.local/guest-smoke-'));
+const database = await testDatabase();
+let server: ReturnType<typeof createServer> | undefined;
+try {
+  // Refuse to overwrite an allocation, even in the owned fixture VM.
+  await vm([
+    '/bin/sh',
+    '-c',
+    'test ! -e /var/lib/agent-cloud/keys && test ! -e /var/lib/agent-cloud/bootstrap.json && test ! -e /var/lib/agent-cloud/allocation.json',
+  ]);
+  progress('installing owned local Ubuntu VM');
+  await vm(['rm', '-rf', '/tmp/agent-cloud-input']);
+  await vm(['cp', '-R', '/mnt/mac' + resolve('.local/guest-build'), '/tmp/agent-cloud-input']);
+  await vm(
+    [
+      '/bin/sh',
+      '-c',
+      '/bin/sh /tmp/agent-cloud-input/install.sh /tmp/agent-cloud-input > /tmp/agent-cloud-install.log 2>&1',
+    ],
+    600_000,
+  );
+  const step = resolve('.local/tools/step-0.30.6');
+  await command('env', [
+    'STEPPATH=' + scratch,
+    step,
+    'ca',
+    'certificate',
+    'host.orb.internal',
+    join(scratch, 'api.crt'),
+    join(scratch, 'api.key'),
+    '--ca-url',
+    'https://localhost:9449',
+    '--root',
+    resolve('.local/pki/public/root_ca.crt'),
+    '--provisioner',
+    'agent-cloud-control',
+    '--provisioner-password-file',
+    resolve('.local/pki/provisioner-password'),
+    '--kty',
+    'EC',
+    '--curve',
+    'P-256',
+    '--not-after',
+    '1h',
+  ]);
+  await chmod(join(scratch, 'api.key'), 0o600);
+  const signer = createSigner({
+    binary: step,
+    caUrl: 'https://localhost:9449',
+    tlsRoot: await readFile('.local/pki/public/root_ca.crt', 'utf8'),
+    sshHostCa: (await readFile('.local/pki/public/ssh_host_ca_key.pub', 'utf8')).trim(),
+    sshUserCa: (await readFile('.local/pki/public/ssh_user_ca_key.pub', 'utf8')).trim(),
+    provisioner: 'agent-cloud-control',
+    provisionerPassword: await readPrivateFile(resolve('.local/pki/provisioner-password')),
+  });
+  let handle: (input: Request) => Response | Promise<Response> = () =>
+    new Response(null, { status: 503 });
+  const listener = getRequestListener((input) => handle(input));
+  server = createServer(
+    {
+      key: await readFile(join(scratch, 'api.key')),
+      cert: await readFile(join(scratch, 'api.crt')),
+    },
+    (request, response) => {
+      void listener(request, response).catch(() => {
+        response.destroy();
+      });
+    },
+  );
+  await new Promise<void>((resolve) => server?.listen(0, '::', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Expected local HTTPS port.');
+  const manifest = guestManifestSchema.parse(
+    JSON.parse(await readFile('.local/guest-build/image.json', 'utf8')),
+  );
+  const image = guestImageSchema.parse({
+    providerImage: 'orbstack-local-ubuntu',
+    version: manifest.version,
+    architecture: manifest.architecture,
+    manifestDigest: createHash('sha256').update(JSON.stringify(manifest)).digest('hex'),
+    ...manifest.trust,
+  });
+  const fixture = await prepareEnrollmentFixture({
+    connection: database.connection,
+    image,
+    address: info.ip4,
+    enrollmentUrl: `https://host.orb.internal:${address.port}/guest/enroll`,
+  });
+  const probe = createGuestProbe();
+  const enrollment = createEnrollmentService({
+    connection: database.connection,
+    seal: fixture.seal,
+    signer,
+    probe,
+    provider: fixture.provider,
+  });
+  const app = createApp({
+    db: database.connection.db,
+    provider: fixture.provider.kind,
+    limits: fixture.limits,
+    catalog: fixture.catalog,
+    enrollment,
+  });
+  handle = (input) =>
+    new URL(input.url).pathname === '/guest/enroll'
+      ? app.fetch(input)
+      : new Response(null, { status: 404 });
+  await writeFile(join(scratch, 'user-data'), fixture.userData, { mode: 0o600 });
+  await writeFile(
+    join(scratch, 'meta-data'),
+    JSON.stringify({
+      'instance-id': fixture.bootstrap.spec.allocationId,
+      'local-hostname': 'agent-cloud-guest-fixture',
+    }),
+    { mode: 0o600 },
+  );
+  await vm(['install', '-d', '-m', '0700', '/var/lib/cloud/seed/nocloud']);
+  for (const file of ['user-data', 'meta-data'])
+    await vm([
+      'install',
+      '-m',
+      '0600',
+      '/mnt/mac' + join(scratch, file),
+      '/var/lib/cloud/seed/nocloud/' + file,
+    ]);
+  // OrbStack owns the fixture's network. Hetzner guests retain normal cloud-init networking.
+  await writeFile(
+    join(scratch, 'datasource.cfg'),
+    'datasource_list: [NoCloud]\nnetwork:\n  config: disabled\n',
+    { mode: 0o600 },
+  );
+  await vm([
+    'install',
+    '-m',
+    '0600',
+    '/mnt/mac' + join(scratch, 'datasource.cfg'),
+    '/etc/cloud/cloud.cfg.d/91-agent-cloud-smoke.cfg',
+  ]);
+  progress('booting actual cloud-init and systemd enrollment');
+  await command('orb', ['restart', owner.name], 120_000);
+  const deadline = Date.now() + 180_000;
+  let enrolled = false;
+  while (Date.now() < deadline) {
+    const status = await vm([
+      '/bin/sh',
+      '-c',
+      'if test -f /var/lib/agent-cloud/enrollment-status.json; then cat /var/lib/agent-cloud/enrollment-status.json; else printf "{}"; fi',
+    ]);
+    if (z.object({ phase: z.literal('enrolled') }).safeParse(JSON.parse(status)).success) {
+      enrolled = true;
+      break;
+    }
+    await setTimeout(2000);
+  }
+  assert.ok(enrolled, 'Guest did not complete enrollment before the local deadline.');
+  progress('verifying real SSH, Caddy and bootstrap cleanup');
+  const proof = guestProofSchema.parse(
+    JSON.parse(await vm(['/usr/local/bin/guestctl', 'identity', '--json'])),
+  );
+  assert.equal(proof.allocationId, fixture.bootstrap.spec.allocationId);
+  assert.equal(proof.manifestDigest, image.manifestDigest);
+  assert.deepEqual(
+    await probe.readIdentity({
+      allocationId: proof.allocationId,
+      address: info.ip4,
+      credential: await signer.issueProbeCredential(proof.allocationId),
+      trust: { kind: 'host_ca', publicKey: signer.trust.sshHostCa },
+    }),
+    proof,
+  );
+  assert.equal(
+    (await vm(['systemctl', 'is-active', 'agent-cloud-proxy.service'])).trim(),
+    'active',
+  );
+  assert.equal(
+    (await vm(['docker', 'version', '--format', '{{.Server.Version}}'])).trim(),
+    manifest.components.docker,
+  );
+  const health = z.object({
+    allocationId: z.literal(proof.allocationId),
+    imageVersion: z.literal(image.version),
+  });
+  health.parse(JSON.parse(await vm(['curl', '--fail', '--silent', 'http://127.0.0.1:8081/ready'])));
+  // The server leaf is trusted, but a client without a certificate must fail the handshake.
+  await assert.rejects(
+    new Promise<void>((resolve, reject) => {
+      const check = request(
+        {
+          host: info.ip4,
+          port: 8443,
+          servername: guestName(proof.allocationId),
+          ca: signer.trust.tlsRoot,
+          timeout: 5000,
+        },
+        (response) => {
+          response.resume();
+          resolve();
+        },
+      );
+      check.once('error', reject);
+      check.once('timeout', () => check.destroy(new Error('Guest TLS timeout.')));
+      check.end();
+    }),
+  );
+  await vm([
+    '/bin/sh',
+    '-c',
+    'test -f /etc/cloud/cloud-init.disabled && test ! -e /var/lib/agent-cloud/bootstrap.json && test ! -e /var/lib/cloud/seed',
+  ]);
+  // Never put the token in argv/output; remove the diagnostic copies even if scanning fails.
+  let scan;
+  try {
+    await writeFile(join(scratch, 'needle'), fixture.bootstrap.token, { mode: 0o600 });
+    await vm([
+      'install',
+      '-m',
+      '0600',
+      '/mnt/mac' + join(scratch, 'needle'),
+      '/tmp/agent-cloud-token-needle',
+    ]);
+    await vm([
+      'install',
+      '-m',
+      '0600',
+      '/mnt/mac' + resolve('tests/fixtures/guest/scan-bootstrap.mjs'),
+      '/tmp/agent-cloud-scan.mjs',
+    ]);
+    await vm([
+      '/bin/sh',
+      '-c',
+      'umask 077; journalctl --no-pager --output cat > /tmp/agent-cloud-journal',
+    ]);
+    scan = z
+      .object({
+        files: z.number().positive(),
+        bytes: z.number().positive(),
+        matches: z.array(z.string()),
+      })
+      .parse(JSON.parse(await vm(['/usr/local/bin/node', '/tmp/agent-cloud-scan.mjs'])));
+  } finally {
+    await vm([
+      'rm',
+      '-f',
+      '/tmp/agent-cloud-token-needle',
+      '/tmp/agent-cloud-journal',
+      '/tmp/agent-cloud-scan.mjs',
+    ]);
+  }
+  process.stdout.write(JSON.stringify({ bootstrapScan: scan }) + '\n');
+  assert.deepEqual(scan.matches, [], 'Bootstrap token remains in guest state.');
+  // Cloud-init stays disabled and installed identity survives a normal reboot.
+  await command('orb', ['restart', owner.name], 120_000);
+  assert.deepEqual(
+    guestProofSchema.parse(JSON.parse(await vm(['/usr/local/bin/guestctl', 'identity', '--json']))),
+    proof,
+  );
+  assert.equal(
+    (await vm(['systemctl', 'is-active', 'agent-cloud-proxy.service'])).trim(),
+    'active',
+  );
+  assert.deepEqual(
+    await probe.readIdentity({
+      allocationId: proof.allocationId,
+      address: info.ip4,
+      credential: await signer.issueProbeCredential(proof.allocationId),
+      trust: { kind: 'host_ca', publicKey: signer.trust.sshHostCa },
+    }),
+    proof,
+  );
+  progress('passed real Ubuntu first boot and restart; provider remains simulated');
+  await command('orb', ['delete', '--force', owner.name], 60_000);
+  await rm(ownershipPath);
+} finally {
+  if (server) {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) =>
+      server?.close((error) => {
+        if (error) reject(error);
+        else resolve();
+      }),
+    );
+  }
+  await database.close();
+  await rm(scratch, { recursive: true, force: true });
+  // A failed run deliberately preserves its recorded VM for targeted inspection and explicit cleanup.
+  // Successful cleanup is performed only after all checks above; see the ownership file for recovery.
+}

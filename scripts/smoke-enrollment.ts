@@ -1,37 +1,28 @@
 import assert from 'node:assert/strict';
-import { randomBytes, randomUUID } from 'node:crypto';
-import { readFile, writeFile } from 'node:fs/promises';
+import { createHash, randomBytes } from 'node:crypto';
+import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer, request } from 'node:https';
 import { join, resolve } from 'node:path';
 import { eq } from 'drizzle-orm';
 import {
-  allocationIdSchema,
   guestImageSchema,
-  guestProofSchema,
+  guestManifestSchema,
   issuedGuestIdentitySchema,
-  operationResponseSchema,
-  operationProgressSchema,
-  simulatedCatalog,
-  type MachineProvider,
 } from '../packages/contracts/dist/index.js';
 import {
-  allocations,
   guestBootstraps,
   guestIdentities,
   operations,
   guestSigningAttempts,
 } from '../packages/db/src/index.js';
 import { createSigner, guestName, probePrincipal } from '../packages/pki/dist/index.js';
+import { enrollGuest, ensureIdentity } from '../packages/guestctl/dist/index.js';
 import { createGuestProbe } from '../packages/remote/dist/index.js';
 import { createApp } from '../apps/control/src/app.js';
-import { advanceOperation } from '../apps/control/src/advance-operation.js';
-import { BootstrapSeal } from '../apps/control/src/bootstrap-seal.js';
-import { recoverGuestBootstrap } from '../apps/control/src/guest-bootstrap.js';
 import { createEnrollmentService } from '../apps/control/src/guest-enrollment.js';
-import { createGuestRenderer } from '../apps/control/src/guest-renderer.js';
 import { readPrivateFile } from '../apps/control/src/private-file.js';
-import { SimulatedProvider } from '../apps/control/src/simulated-provider.js';
-import { seedAccount, testDatabase } from '../tests/database.js';
+import { testDatabase } from '../tests/database.js';
+import { prepareEnrollmentFixture } from './support/enrollment-fixture.js';
 import { withSshFixture } from './support/ssh-fixture.js';
 
 const database = await testDatabase();
@@ -48,125 +39,45 @@ try {
       provisioner: 'agent-cloud-control',
       provisionerPassword: await readPrivateFile(resolve('.local/pki/provisioner-password')),
     });
+    const configuration = {
+      state: join(scratch, 'guest-state'),
+      manifest: resolve('.local/guest-build/image.json'),
+      binary: resolve('.local/guest-build/guestctl.mjs'),
+      step,
+      keygen: '/usr/bin/ssh-keygen',
+    };
+    await mkdir(configuration.state, { mode: 0o755 });
+    const manifest = guestManifestSchema.parse(
+      JSON.parse(await readFile(configuration.manifest, 'utf8')),
+    );
     const image = guestImageSchema.parse({
       providerImage: 'local-ssh-fixture',
-      architecture: 'x86',
-      version: 'fixture-v1',
-      manifestDigest: 'a'.repeat(64),
-      ...signer.trust,
+      architecture: manifest.architecture,
+      version: manifest.version,
+      manifestDigest: createHash('sha256').update(JSON.stringify(manifest)).digest('hex'),
+      ...manifest.trust,
     });
-    const account = await seedAccount(db);
-    const seal = new BootstrapSeal(randomBytes(32).toString('base64'));
-    const render = createGuestRenderer(db, seal);
-    const limits = { currency: 'EUR', maxMachines: 1, maxHourlyMicros: 20_000 };
-    const simulation = new SimulatedProvider({
-      db,
-      catalog: () => ({ ...simulatedCatalog(), provider: 'hetzner' }),
-    });
-    // Local provider observations name the disposable loopback SSH fixture. No cloud API is used.
-    const provider: MachineProvider = {
-      kind: 'hetzner',
-      getCatalog: () => simulation.getCatalog(),
-      submit: async (input) => {
-        if (input.command.kind === 'create_guest')
-          await render({ attemptId: input.attemptId, command: input.command });
-        return simulation.submit(input);
-      },
-      getAction: (input) => simulation.getAction(input),
-      findServers: (input) => simulation.findServers(input),
-      findPrimaryIps: (input) => simulation.findPrimaryIps(input),
-      getServer: async (input) => {
-        const server = await simulation.getServer(input);
-        return server && { ...server, ipv4: '127.0.0.1' };
-      },
-      getPrimaryIp: async (input) => {
-        const ip = await simulation.getPrimaryIp(input);
-        return ip && { ...ip, ipv4: '127.0.0.1' };
-      },
-    };
-    const admission = createApp({
-      db,
-      provider: provider.kind,
-      limits,
-      catalog: simulation.catalog,
-    });
-    const response = await admission.request(`/v1/projects/${account.projectId}/machines`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${account.token}`,
-        'Idempotency-Key': randomUUID(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ name: 'native-enrollment', size: 'small', region: 'nbg1' }),
-    });
-    assert.equal(response.status, 202);
-    const { operation } = operationResponseSchema.parse(await response.json());
-    for (let tick = 0; tick < 6; tick++)
-      await advanceOperation({
+    const { provider, seal, limits, catalog, operation, allocation, bootstrap } =
+      await prepareEnrollmentFixture({
         connection: database.connection,
-        operationId: operation.id,
-        provider,
-        limits,
-        guest: {
-          kind: 'enabled',
-          image,
-          seal,
-          enrollmentUrl: 'https://enrollment.example.test/guest/enroll',
-        },
+        image,
+        address: '127.0.0.1',
+        enrollmentUrl: 'https://enrollment.example.test/guest/enroll',
       });
-    const [allocation] = await db
-      .select()
-      .from(allocations)
-      .where(eq(allocations.machineId, operation.machineId));
-    if (!allocation) throw new Error('Expected fixture allocation.');
-    const state = operationProgressSchema.parse(
-      (await db.select().from(operations).where(eq(operations.id, operation.id)))[0]?.progress,
-    );
-    assert.equal(state.kind, 'waiting_guest');
-    const bootstrap = await recoverGuestBootstrap(db, {
-      reference: { version: 1, allocationId: allocationIdSchema.parse(allocation.id) },
-      seal,
-    });
     const allocationId = bootstrap.spec.allocationId;
     const name = guestName(allocationId);
-    await run('/usr/bin/ssh-keygen', [
-      '-t',
-      'ed25519',
-      '-N',
-      '',
-      '-C',
-      '',
-      '-f',
+    await writeFile(join(configuration.state, 'bootstrap.json'), JSON.stringify(bootstrap), {
+      mode: 0o600,
+    });
+    const proof = await ensureIdentity(configuration, bootstrap.spec);
+    const publicKey = proof.sshHostPublicKey;
+    await copyFile(
+      join(configuration.state, 'keys', 'ssh_host_ed25519_key'),
       join(fixture, 'host_key'),
-    ]);
-    const publicKey = (await readFile(join(fixture, 'host_key.pub'), 'utf8')).trim();
+    );
     await writeFile(join(fixture, 'user_ca.pub'), signer.trust.sshUserCa + '\n', { mode: 0o644 });
     await writeFile(join(fixture, 'principals'), probePrincipal(allocationId) + '\n', {
       mode: 0o644,
-    });
-    await run(step, [
-      'certificate',
-      'create',
-      name,
-      join(scratch, 'guest.csr'),
-      join(scratch, 'guest.key'),
-      '--csr',
-      '--kty',
-      'EC',
-      '--curve',
-      'P-256',
-      '--no-password',
-      '--insecure',
-      '--san',
-      name,
-    ]);
-    const proof = guestProofSchema.parse({
-      version: 1,
-      allocationId,
-      imageVersion: image.version,
-      manifestDigest: image.manifestDigest,
-      sshHostPublicKey: publicKey,
-      tlsCsr: await readFile(join(scratch, 'guest.csr'), 'utf8'),
     });
     await writeFile(join(fixture, 'proof.json'), JSON.stringify(proof), { mode: 0o644 });
     const port = await start();
@@ -188,7 +99,7 @@ try {
       db,
       provider: provider.kind,
       limits,
-      catalog: simulation.catalog,
+      catalog,
       enrollment,
     });
     const proposal = {
@@ -221,9 +132,46 @@ try {
     const foreignKey = (await readFile(join(scratch, 'foreign_key.pub'), 'utf8')).trim();
     assert.equal((await post({ ...proposal, sshHostPublicKey: foreignKey })).status, 503);
     assert.equal((await db.select().from(guestIdentities)).length, 0);
-    const enrolled = await post(proposal);
-    assert.equal(enrolled.status, 200);
-    const identity = issuedGuestIdentitySchema.parse(await enrolled.json());
+    const system = {
+      prepareSsh: async (input: { proof: typeof proof }) => {
+        assert.deepEqual(input.proof, proof);
+        await Promise.resolve();
+      },
+      activate: async () => {
+        await copyFile(
+          join(configuration.state, 'certificates', 'host-cert.pub'),
+          join(fixture, 'host_key-cert.pub'),
+        );
+        await installHostCertificate();
+      },
+      eraseBootstrap: () => rm(join(configuration.state, 'bootstrap.json'), { force: true }),
+    };
+    let loseResponse = true;
+    const transport: typeof fetch = async (input, init) => {
+      const response = await app.request(new Request(input, init));
+      if (response.ok && loseResponse) {
+        loseResponse = false;
+        throw new Error('Lost enrollment response.');
+      }
+      return response;
+    };
+    await assert.rejects(
+      enrollGuest({ configuration, system, transport }),
+      /Lost enrollment response/,
+    );
+    assert.deepEqual(await ensureIdentity(configuration, bootstrap.spec), proof);
+    await enrollGuest({ configuration, system, transport });
+    // Restart after local bootstrap removal must activate the installed identity without networking.
+    await enrollGuest({
+      configuration,
+      system,
+      transport: () => Promise.reject(new Error('Unexpected enrollment retry.')),
+    });
+    const identity = issuedGuestIdentitySchema.parse(
+      JSON.parse(
+        await readFile(join(configuration.state, 'certificates', 'identity.json'), 'utf8'),
+      ),
+    );
     assert.deepEqual(await (await post(proposal)).json(), identity);
     assert.equal((await db.select().from(guestBootstraps))[0]?.sealedToken, null);
     assert.deepEqual(
@@ -234,10 +182,6 @@ try {
       (await db.select().from(operations).where(eq(operations.id, operation.id)))[0]?.progress,
       { kind: 'waiting_guest', stage: 'runtime', serverId: allocation.serverId },
     );
-    await writeFile(join(fixture, 'host_key-cert.pub'), identity.sshHostCertificate + '\n', {
-      mode: 0o644,
-    });
-    await installHostCertificate();
     assert.deepEqual(
       await nativeProbe.readIdentity({
         allocationId,
@@ -249,7 +193,10 @@ try {
       proof,
     );
     const tls = createServer(
-      { key: await readFile(join(scratch, 'guest.key')), cert: identity.tlsCertificate },
+      {
+        key: await readFile(join(configuration.state, 'keys', 'guest.key')),
+        cert: identity.tlsCertificate,
+      },
       (_request, response) => response.end('verified'),
     );
     try {
@@ -285,7 +232,9 @@ try {
     process.stdout.write(
       JSON.stringify({
         ok: true,
-        enrollment: 'real Smallstep and pinned OpenSSH',
+        enrollment: 'guest library with real Smallstep and pinned OpenSSH',
+        guestRetry: 'keys survive lost response and bootstrap removal',
+        guestActivation: 'local fixture hooks, not systemd',
         replay: 'same certificates without extra enrollment signing',
         wrongHostKey: 'rejected before key claim',
         issuedHostCertificate: 'verified native SSH connection',

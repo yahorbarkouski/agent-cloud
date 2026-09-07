@@ -1,0 +1,33 @@
+[Unit]
+Description=Private Agent Cloud guest proxy
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/var/lib/agent-cloud/caddy.json
+
+[Service]
+Type=notify
+User=agent-proxy
+Group=agent-proxy
+StateDirectory=agent-cloud-proxy
+StateDirectoryMode=0750
+Environment=HOME=/var/lib/agent-cloud-proxy
+Environment=XDG_DATA_HOME=/var/lib/agent-cloud-proxy
+ExecStart=/usr/local/bin/caddy run --config /var/lib/agent-cloud/caddy.json
+ExecReload=/usr/local/bin/caddy reload --config /var/lib/agent-cloud/caddy.json
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+AmbientCapabilities=
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target

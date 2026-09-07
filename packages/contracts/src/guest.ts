@@ -80,3 +80,24 @@ export const guestProofSchema = z.strictObject({
   tlsCsr: guestEnrollmentInputSchema.shape.tlsCsr,
 });
 export type GuestProof = z.infer<typeof guestProofSchema>;
+
+export const guestManifestSchema = z.strictObject({
+  format: z.literal(1),
+  version: guestImageSchema.shape.version,
+  architecture: architectureSchema,
+  components: z.strictObject({
+    node: z.string().min(1),
+    docker: z.string().min(1),
+    compose: z.string().min(1),
+    caddy: z.string().min(1),
+    step: z.string().min(1),
+    guestctlSha256: guestImageSchema.shape.manifestDigest,
+  }),
+  trust: guestImageSchema.pick({ sshUserCa: true, sshHostCa: true, tlsRoot: true }),
+});
+export type GuestManifest = z.infer<typeof guestManifestSchema>;
+export const guestBootstrapFileSchema = z.strictObject({
+  spec: bootstrapSpecSchema,
+  token: guestEnrollmentInputSchema.shape.token,
+});
+export type GuestBootstrapFile = z.infer<typeof guestBootstrapFileSchema>;

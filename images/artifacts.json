@@ -1,0 +1,60 @@
+{
+  "architecture": "x86",
+  "node": {
+    "version": "24.20.0",
+    "file": "node.tar.xz",
+    "url": "https://nodejs.org/dist/v24.20.0/node-v24.20.0-linux-x64.tar.xz",
+    "sha256": "2f2c0da162318f0de47665410c7c8c2ed3d36c8f3105de4bbc61176c70a7cbf2"
+  },
+  "step": {
+    "version": "0.30.6",
+    "file": "step.tar.gz",
+    "url": "https://github.com/smallstep/cli/releases/download/v0.30.6/step_linux_0.30.6_amd64.tar.gz",
+    "sha256": "e44a5dc5f880a694b24a0f2941a69a81b0bc6ee053170fdfde18453d4d5816de"
+  },
+  "caddy": {
+    "version": "2.11.4",
+    "file": "caddy.tar.gz",
+    "url": "https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_linux_amd64.tar.gz",
+    "sha256": "527fbf917c39189a1e3b31d34fa955601680b2d5c8055d2a87b8b9588dec7bb9"
+  },
+  "dockerVersion": "29.8.0",
+  "composeVersion": "5.5.1",
+  "debs": [
+    {
+      "name": "docker-ce",
+      "version": "5:29.8.0-1~ubuntu.24.04~noble",
+      "file": "docker-ce_29.8.0-1~ubuntu.24.04~noble_amd64.deb",
+      "url": "https://download.docker.com/linux/ubuntu/dists/noble/pool/stable/amd64/docker-ce_29.8.0-1~ubuntu.24.04~noble_amd64.deb",
+      "sha256": "0cd9936d80aade3f6a12c811b83f0f8e626d98821ae7f51418eec4c320632780"
+    },
+    {
+      "name": "docker-ce-cli",
+      "version": "5:29.8.0-1~ubuntu.24.04~noble",
+      "file": "docker-ce-cli_29.8.0-1~ubuntu.24.04~noble_amd64.deb",
+      "url": "https://download.docker.com/linux/ubuntu/dists/noble/pool/stable/amd64/docker-ce-cli_29.8.0-1~ubuntu.24.04~noble_amd64.deb",
+      "sha256": "2b7468415014fecb1aef1250f5f493293d999593d6862af93e66412e891c7ac7"
+    },
+    {
+      "name": "docker-compose-plugin",
+      "version": "5.5.1-1~ubuntu.24.04~noble",
+      "file": "docker-compose-plugin_5.5.1-1~ubuntu.24.04~noble_amd64.deb",
+      "url": "https://download.docker.com/linux/ubuntu/dists/noble/pool/stable/amd64/docker-compose-plugin_5.5.1-1~ubuntu.24.04~noble_amd64.deb",
+      "sha256": "82ff966149ca2c62e1a4e1fdebdf65fda8c3a8bea80b32deda6903b40afc2347"
+    },
+    {
+      "name": "docker-buildx-plugin",
+      "version": "0.37.0-1~ubuntu.24.04~noble",
+      "file": "docker-buildx-plugin_0.37.0-1~ubuntu.24.04~noble_amd64.deb",
+      "url": "https://download.docker.com/linux/ubuntu/dists/noble/pool/stable/amd64/docker-buildx-plugin_0.37.0-1~ubuntu.24.04~noble_amd64.deb",
+      "sha256": "3e8923c8ad5b93650a28358e3f092aef3b812e83dd54c5d470e61399ac11714b"
+    },
+    {
+      "name": "containerd.io",
+      "version": "2.3.4-2~ubuntu.24.04~noble",
+      "file": "containerd.io_2.3.4-2~ubuntu.24.04~noble_amd64.deb",
+      "url": "https://download.docker.com/linux/ubuntu/dists/noble/pool/stable/amd64/containerd.io_2.3.4-2~ubuntu.24.04~noble_amd64.deb",
+      "sha256": "827e6809232311db8ae05fb8e0af7418148edeadc4c88c5a4360ca583f6e55ec"
+    }
+  ]
+}

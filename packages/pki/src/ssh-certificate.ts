@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { CloudError } from '@agent-cloud/contracts';
+import { inspectValidity, type CertificateTiming } from './validity.js';
 
 function fingerprint(publicKey: string) {
   const encoded = publicKey.split(' ')[1];
@@ -18,7 +19,7 @@ export function inspectIssuedSsh(
     key: string;
     ca: string;
     principal: string;
-    startedAt: number;
+    timing: CertificateTiming;
   },
 ) {
   const schema = z.object({
@@ -42,15 +43,6 @@ export function inspectIssuedSsh(
   const after = Date.parse(result.data.ValidAfter);
   const before = Date.parse(result.data.ValidBefore);
   const maximum = expected.kind === 'host' ? 3_600_000 : 300_000;
-  if (
-    after > Date.now() ||
-    after < expected.startedAt - 65_000 ||
-    before <= Date.now() + 30_000 ||
-    before > expected.startedAt + maximum + 1000
-  )
-    throw new CloudError(
-      'provider_unavailable',
-      'CA returned an incompatible SSH validity period.',
-    );
+  inspectValidity({ after, before, maximum, timing: expected.timing });
   return { expiresAt: new Date(before).toISOString() };
 }

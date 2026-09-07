@@ -77,6 +77,15 @@ The CA listens only on `127.0.0.1:9449`. Its state lives in ignored, owner-only 
 
 The PKI smoke makes an actual TLS connection and checks allocation/hostname rejection. The SSH smoke starts one disposable local OpenSSH container and checks pinned host keys, CA trust, allocation-scoped user certificates and guest evidence. It removes the container and generated keys afterward. It does not boot a guest VM or deploy an application. The enrollment smoke composes admission, the provider journal, encrypted bootstrap, HTTP enrollment, real Smallstep and OpenSSH. It verifies the issued host certificate over SSH and TLS certificate over HTTPS, replay and wrong-key rejection. Its provider observations are local fixtures, so it still does not prove a cloud VM boot. CI runs all three smokes without cloud credentials.
 
+For an actual local Ubuntu first-boot check on macOS with OrbStack installed, keep the development PostgreSQL and CA services running:
+
+```sh
+pnpm build:guest
+pnpm smoke:guest
+```
+
+The image build stages checksum-verified public inputs in `.local/guest-build`. The VM smoke records one owned local machine in `.local/guest-image-machine.json` and deletes it after successful enrollment, secret scanning and reboot checks. A failure preserves that machine for inspection. Read its recorded name, inspect it with `orb info`, then delete exactly that VM with `orb delete --force <recorded-name>` and remove the record before starting fresh. No Hetzner resource is created. See [guest image architecture](docs/architecture/guest-image.md) for the proof boundaries and unfinished snapshot/renewal work.
+
 ## What is enforced
 
 - Tenant keys and composite foreign keys keep records within their account and project.
@@ -106,19 +115,21 @@ Stop the API and worker while applying migrations from an earlier checkpoint, th
 
 ## Repository
 
-| Path                     | Responsibility                                                   |
-| ------------------------ | ---------------------------------------------------------------- |
-| `packages/contracts`     | Public schemas, IDs, lifecycle states, provider contract         |
-| `packages/db`            | Drizzle schema, migrations, connections, job insertion           |
-| `packages/hetzner`       | Hetzner transport; live activation remains gated                 |
-| `packages/pki`           | Smallstep signing and certificate identity checks                |
-| `packages/remote`        | Native SSH identity proof using explicit credentials             |
-| `packages/sdk`           | Typed HTTP client and operation waiting                          |
-| `apps/control`           | Auth, admission, API, simulator, worker, bootstrap               |
-| `apps/cli`               | JSON CLI and local credential storage                            |
-| `tests`                  | Isolated PostgreSQL integration tests                            |
-| `scripts/smoke-local.ts` | CLI-to-worker verification and cleanup                           |
-| `skills/agent-cloud`     | Customer agent instructions matching implemented commands        |
-| `docs`                   | Architecture, progress, decisions, research, and handoff context |
+| Path                     | Responsibility                                                        |
+| ------------------------ | --------------------------------------------------------------------- |
+| `packages/contracts`     | Public schemas, IDs, lifecycle states, provider contract              |
+| `packages/db`            | Drizzle schema, migrations, connections, job insertion                |
+| `packages/hetzner`       | Hetzner transport; live activation remains gated                      |
+| `packages/pki`           | Smallstep signing and certificate identity checks                     |
+| `packages/guestctl`      | TypeScript guest first boot, certificate installation and identity    |
+| `images`                 | Public image inputs, pinned artifacts and Linux service configuration |
+| `packages/remote`        | Native SSH identity proof using explicit credentials                  |
+| `packages/sdk`           | Typed HTTP client and operation waiting                               |
+| `apps/control`           | Auth, admission, API, simulator, worker, bootstrap                    |
+| `apps/cli`               | JSON CLI and local credential storage                                 |
+| `tests`                  | Isolated PostgreSQL integration tests                                 |
+| `scripts/smoke-local.ts` | CLI-to-worker verification and cleanup                                |
+| `skills/agent-cloud`     | Customer agent instructions matching implemented commands             |
+| `docs`                   | Architecture, progress, decisions, research, and handoff context      |
 
 Read [AGENTS.md](AGENTS.md) before contributing and [docs/PROGRESS.md](docs/PROGRESS.md) for verification status. The [original plan](docs/archive/original-plan.md) is historical context. Code is licensed under [Apache 2.0](LICENSE).

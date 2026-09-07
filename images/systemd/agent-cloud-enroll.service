@@ -1,0 +1,24 @@
+[Unit]
+Description=Enroll this Agent Cloud guest
+After=cloud-final.service network-online.target
+Wants=network-online.target
+ConditionPathExists=/var/lib/agent-cloud/bootstrap.json
+StartLimitIntervalSec=1800
+StartLimitBurst=50
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=root
+Group=root
+UMask=0077
+Environment=NODE_EXTRA_CA_CERTS=/usr/lib/agent-cloud/root_ca.crt
+ExecStart=/usr/bin/flock --nonblock /run/agent-cloud-enroll.lock /usr/local/bin/guestctl enroll --json
+Restart=on-failure
+RestartSec=35
+TimeoutStartSec=120
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -12,7 +12,7 @@ it('rejects certificates that expand a probe beyond its key, CA, allocation or f
     key: 'ssh-ed25519 AAAA',
     ca: 'ssh-ed25519 BBBB',
     principal: 'probe-allocation',
-    startedAt: now,
+    timing: { kind: 'signing', startedAt: now },
   } satisfies Parameters<typeof inspectIssuedSsh>[1];
   const valid = {
     Type: 'user',
@@ -42,5 +42,5 @@ it('rejects certificates that expand a probe beyond its key, CA, allocation or f
     { ValidBefore: new Date(now - 1).toISOString() },
     { ValidBefore: 'forever' },
   ])
-    expect(() => inspectIssuedSsh({ ...valid, ...mutation }, expected)).toThrow('incompatible SSH');
+    expect(() => inspectIssuedSsh({ ...valid, ...mutation }, expected)).toThrow('incompatible');
 });

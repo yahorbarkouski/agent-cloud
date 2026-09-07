@@ -15,7 +15,11 @@ import type { AllocationId } from '@agent-cloud/contracts';
 import { inspectIssuedSsh } from './ssh-certificate.js';
 import { inspectIssuedTls } from './tls-certificate.js';
 
-async function readCsrKey(run: (args: string[]) => Promise<string>, request: string, name: string) {
+export async function readCsrKey(
+  run: (args: string[]) => Promise<string>,
+  request: string,
+  name: string,
+) {
   const details = z
     .object({
       Subject: z.strictObject({ common_name: z.tuple([z.literal(name)]) }),
@@ -167,7 +171,7 @@ export function createSigner(configuration: SignerConfiguration) {
           key,
           ca: input.kind === 'host' ? hostCa : userCa,
           principal,
-          startedAt,
+          timing: { kind: 'signing', startedAt },
         },
       );
       return { certificate, ...validity };
@@ -208,7 +212,7 @@ export function createSigner(configuration: SignerConfiguration) {
       ]);
       const chain = await readFile(output, 'utf8');
       const leaf = new X509Certificate(chain);
-      inspectIssuedTls(leaf, { name, key, startedAt });
+      inspectIssuedTls(leaf, { name, key, timing: { kind: 'signing', startedAt } });
       return chain;
     });
   }
@@ -244,3 +248,6 @@ export function createSigner(configuration: SignerConfiguration) {
   });
 }
 export type Signer = ReturnType<typeof createSigner>;
+
+export { inspectIssuedSsh } from './ssh-certificate.js';
+export { inspectIssuedTls } from './tls-certificate.js';
