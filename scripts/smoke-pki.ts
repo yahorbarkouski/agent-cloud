@@ -22,6 +22,17 @@ const subjects = [
     subject: { kind: 'image_verifier', id: imageBuildIdSchema.parse(randomUUID()) },
   }),
 ];
+// Check the policy before signing and the actual service output afterwards. Never print CA logs.
+const caConfiguration: unknown = JSON.parse(
+  await readFile(resolve('.local/pki/issuer/config/ca.json'), 'utf8'),
+);
+assert.ok(
+  typeof caConfiguration === 'object' &&
+    caConfiguration !== null &&
+    !Object.hasOwn(caConfiguration, 'logger'),
+  'CA access logging must be disabled before signing.',
+);
+const logStart = new Date().toISOString();
 for (const subject of subjects) {
   const scratch = await mkdtemp(resolve('.local/pki-smoke-'));
   const step = resolve('.local/tools/step-0.30.6');
@@ -235,3 +246,26 @@ for (const subject of subjects) {
     await rm(scratch, { recursive: true, force: true });
   }
 }
+const logs = await promisify(execFile)(
+  'docker',
+  [
+    'compose',
+    '--env-file',
+    '.local/pki/compose.env',
+    '-f',
+    'infra/compose/pki-development.yaml',
+    'logs',
+    '--since',
+    logStart,
+    '--no-color',
+    'ca',
+  ],
+  { timeout: 10_000, maxBuffer: 256 * 1024 },
+).catch(() => {
+  throw new Error('CA logging verification could not read service output.');
+});
+assert.ok(
+  !/(?:ott[=:]|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)/.test(logs.stdout + logs.stderr),
+  'CA service output exposed a signing token.',
+);
+process.stdout.write(JSON.stringify({ caTokenLogging: 'absent during native signing' }) + '\n');

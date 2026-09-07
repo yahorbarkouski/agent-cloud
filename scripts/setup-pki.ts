@@ -37,7 +37,24 @@ try {
   const certificate = new X509Certificate(await readFile(join(destination, 'public/root_ca.crt')));
   if (certificate.fingerprint256 !== state.rootFingerprint)
     throw new Error('Existing PKI root disagrees with its recorded identity.');
-  let templatesChanged = false;
+  const configPath = join(destination, 'issuer/config/ca.json');
+  const config = z
+    .record(z.string(), z.unknown())
+    .parse(JSON.parse(await readFile(configPath, 'utf8')));
+  if (Object.hasOwn(config, 'logger')) {
+    // Step's text/JSON access logger includes signing tokens. Omission disables the middleware.
+    delete config['logger'];
+    const temporary = configPath + '.' + randomBytes(8).toString('hex') + '.next';
+    try {
+      await writeFile(temporary, JSON.stringify(config, null, 2) + '\n', {
+        mode: 0o600,
+        flag: 'wx',
+      });
+      await rename(temporary, configPath);
+    } finally {
+      await rm(temporary, { force: true });
+    }
+  }
   for (const name of ['guest-leaf.tpl', 'guest-ssh.tpl']) {
     const path = join(destination, 'issuer/config', name);
     const intended = await readFile(resolve('infra/pki', name));
@@ -49,12 +66,10 @@ try {
       } finally {
         await rm(temporary, { force: true });
       }
-      templatesChanged = true;
     }
   }
-  process.stdout.write(
-    JSON.stringify({ ...state, created: false, restartRequired: templatesChanged }) + '\n',
-  );
+  // Matching files cannot establish what an already-running CA loaded before a crash.
+  process.stdout.write(JSON.stringify({ ...state, created: false, restartRequired: true }) + '\n');
 } catch (error) {
   if (
     !(
@@ -161,6 +176,7 @@ async function initialize() {
       await readFile(resolve('infra/pki/guest-ssh.tpl')),
       { mode: 0o600 },
     );
+    delete config['logger'];
     config.authority['claims'] = {
       enableSSHCA: true,
       disableRenewal: true,

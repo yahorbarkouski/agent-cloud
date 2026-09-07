@@ -33,7 +33,7 @@
     "setup:pki": "node scripts/setup-pki.ts",
     "setup:runtime": "pnpm build && node scripts/setup-runtime.ts",
     "runtime:check": "pnpm build && node --env-file-if-exists=.env scripts/check-runtime.ts",
-    "pki:up": "docker compose --env-file .local/pki/compose.env -f infra/compose/pki-development.yaml up -d --wait",
+    "pki:up": "docker compose --env-file .local/pki/compose.env -f infra/compose/pki-development.yaml up -d --force-recreate --wait",
     "pki:down": "docker compose --env-file .local/pki/compose.env -f infra/compose/pki-development.yaml down",
     "smoke:pki": "pnpm build && tsx scripts/smoke-pki.ts",
     "smoke:ssh": "pnpm build && docker build -t agent-cloud-ssh-fixture:development tests/fixtures/ssh && tsx scripts/smoke-ssh.ts",

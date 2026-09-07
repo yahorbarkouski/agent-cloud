@@ -1,0 +1,25 @@
+{
+  "scope": "Local CA logging correction, no paid resources",
+  "finding": {
+    "disposableConsumedTokensExposed": 4,
+    "historicalMainContainerTokensCountedWithoutPrinting": 363,
+    "privateSigningKeysExposed": false
+  },
+  "fix": "Omit logger for new and existing CA configuration; always recreate on pki:up; preserve original keys",
+  "native": "SSH host/probe/runtime and TLS signing passed for allocation and image_verifier; service output contains no OTT during the observed interval",
+  "replay": "Matching existing files still report restart required; supported recreation and native signing passed",
+  "fullCheck": {
+    "passed": true,
+    "tests": 445,
+    "files": 38,
+    "seconds": 113.58
+  },
+  "limits": [
+    "No assertion about external log copies",
+    "No customer SSH login or deployed customer access endpoint proof"
+  ],
+  "sources": [
+    "https://raw.githubusercontent.com/smallstep/certificates/v0.30.2/ca/ca.go",
+    "https://raw.githubusercontent.com/smallstep/certificates/v0.30.2/logging/handler.go"
+  ]
+}
