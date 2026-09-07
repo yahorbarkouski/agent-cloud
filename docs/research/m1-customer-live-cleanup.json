@@ -1,0 +1,133 @@
+{
+  "id": "2224a90a-acad-42f4-9081-e8fc08822ff7",
+  "buildId": "653dd67f-c002-4796-b894-27865aed9ec2",
+  "startedAt": "2026-09-07T15:17:01.324Z",
+  "state": "all_provider_resources_absent",
+  "customerAbsence": {
+    "at": "2026-09-07T15:17:01.478Z",
+    "serverId": "164976022",
+    "primaryIpId": "148484586",
+    "state": {
+      "allocations": 0,
+      "resources": 0
+    }
+  },
+  "image": {
+    "cleanedAt": "2026-09-07T15:17:02.584Z",
+    "accessRemovedAt": "2026-09-07T13:43:03.937Z",
+    "resources": [
+      {
+        "ref": {
+          "kind": "firewall",
+          "id": "11587209"
+        },
+        "role": "access_firewall",
+        "effectId": "316a1321-12de-4339-ad43-6534c0d58f53",
+        "state": {
+          "kind": "absent",
+          "at": "2026-09-07T13:43:01.455Z"
+        }
+      },
+      {
+        "ref": {
+          "kind": "primary_ip",
+          "id": "148476735"
+        },
+        "role": "builder_ip",
+        "effectId": "d37452a9-cf48-484f-b7f2-5c491be6ddd5",
+        "state": {
+          "kind": "absent",
+          "at": "2026-09-07T13:42:58.565Z"
+        }
+      },
+      {
+        "ref": {
+          "kind": "primary_ip",
+          "id": "148477001"
+        },
+        "role": "verifier_ip",
+        "effectId": "434a5573-f96e-4451-9853-3f77d3f08492",
+        "state": {
+          "kind": "absent",
+          "at": "2026-09-07T13:43:00.046Z"
+        }
+      },
+      {
+        "ref": {
+          "kind": "server",
+          "id": "164967515"
+        },
+        "role": "builder",
+        "effectId": "e5e9d618-9eb5-4d35-9372-534b8156252d",
+        "state": {
+          "kind": "absent",
+          "at": "2026-09-07T13:42:35.616Z"
+        }
+      },
+      {
+        "ref": {
+          "kind": "server",
+          "id": "164967728"
+        },
+        "role": "verifier",
+        "effectId": "417a1d00-3ece-4459-a186-5bc1931c4b4f",
+        "state": {
+          "kind": "absent",
+          "at": "2026-09-07T13:42:41.909Z"
+        }
+      },
+      {
+        "ref": {
+          "kind": "snapshot",
+          "id": "429179158"
+        },
+        "role": "snapshot",
+        "effectId": "482de5ed-face-491f-a511-3110d00a42ed",
+        "state": {
+          "kind": "absent",
+          "at": "2026-09-07T15:17:01.805Z"
+        }
+      },
+      {
+        "ref": {
+          "kind": "ssh_key",
+          "id": "118468670"
+        },
+        "role": "access_key",
+        "effectId": "6389a807-5001-44e5-a02b-f6e755ad6313",
+        "state": {
+          "kind": "absent",
+          "at": "2026-09-07T13:43:02.797Z"
+        }
+      }
+    ]
+  },
+  "snapshotAbsentAt": "2026-09-07T15:17:05.979Z",
+  "firewallDelete": {
+    "id": "11587191",
+    "labels": {
+      "drill_id": "2224a90a-acad-42f4-9081-e8fc08822ff7",
+      "managed_by": "agent-cloud",
+      "role": "customer_access"
+    },
+    "requestedAt": "2026-09-07T15:17:06.030Z"
+  },
+  "firewallAbsentAt": "2026-09-07T15:17:06.208Z",
+  "inventory": {
+    "observedAt": "2026-09-07T15:17:06.440Z",
+    "resources": {
+      "servers": 0,
+      "primaryIps": 0,
+      "snapshots": 0,
+      "firewalls": 0,
+      "sshKeys": 0
+    }
+  },
+  "sqlState": {
+    "allocations": 0,
+    "customer_resources": 0,
+    "image_resources": 0,
+    "image_builds": 0
+  },
+  "completedAt": "2026-09-07T15:17:06.443Z"
+}

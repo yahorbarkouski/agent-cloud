@@ -2,7 +2,7 @@
 
 An open-source cloud that customers operate through their existing coding agents. The product supplies machines, credentials, lifecycle operations, and eventually application deployment and recovery. It does not contain an AI agent.
 
-**Current status:** the local control plane works with a persistent simulated provider. The CLI, HTTP API, PostgreSQL, and background worker have been exercised together through creation and deletion. Hetzner startup supports an operator image factory with persistent credentials and recovery cleanup. An explicit customer runtime now connects signed image selection, enrollment, renewal and lifecycle jobs. Its configuration and failure paths are verified locally; a customer Hetzner boot, guest access, application deployment, routes and backups are still in progress. Stripe is deferred.
+**Current status:** the CLI/API/worker can create and operate a real Hetzner machine from a verified signed image. The bounded live drill passed snapshot boot, enrollment, create replay, graceful power-off/on, reboot and automatic certificate renewal after35minutes. All test resources were removed. [Evidence](docs/research/m1-customer-live-verification.json) distinguishes that provider proof from local failure tests. Customer SSH, device login, application deployment, routes and backups remain in progress. Stripe is deferred.
 
 ## Run locally
 

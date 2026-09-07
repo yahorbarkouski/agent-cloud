@@ -1,0 +1,366 @@
+{
+  "id": "2224a90a-acad-42f4-9081-e8fc08822ff7",
+  "state": "verified_and_customer_cleaned",
+  "startedAt": "2026-09-07T14:39:30.802Z",
+  "deadlineAt": "2026-09-07T15:24:30.802Z",
+  "name": "customer-drill-2224a90a-3",
+  "steps": {
+    "create": {
+      "key": "3e751045-b9e2-423f-8bd9-58dbafa34d12",
+      "args": [
+        "machine",
+        "create",
+        "customer-drill-2224a90a-3",
+        "--project",
+        "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+        "--size",
+        "small",
+        "--region",
+        "nbg1"
+      ],
+      "requestedAt": "2026-09-07T14:39:31.207Z",
+      "operation": {
+        "id": "op_8779cb75-689b-45cf-b4ee-f8d4ed92459b",
+        "accountId": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+        "projectId": "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+        "machineId": "vm_1562f66a-5afe-42f4-9fcd-b8b2239b203f",
+        "grantId": "grant_b6e660a9-c35b-4689-9103-ae91f64fb6ba",
+        "kind": "machine.create",
+        "intent": {
+          "kind": "run"
+        },
+        "progress": {
+          "kind": "queued"
+        },
+        "createdAt": "2026-09-07T14:39:31.360Z"
+      }
+    },
+    "power-off": {
+      "key": "efdea644-a660-47f3-9a8e-fc615d1e927c",
+      "args": [
+        "machine",
+        "power-off",
+        "vm_1562f66a-5afe-42f4-9fcd-b8b2239b203f",
+        "--expected-version",
+        "2"
+      ],
+      "requestedAt": "2026-09-07T14:40:26.458Z",
+      "operation": {
+        "id": "op_b25767e6-6400-4e24-b10f-98b3308cc575",
+        "accountId": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+        "projectId": "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+        "machineId": "vm_1562f66a-5afe-42f4-9fcd-b8b2239b203f",
+        "grantId": "grant_b6e660a9-c35b-4689-9103-ae91f64fb6ba",
+        "kind": "machine.power_off",
+        "intent": {
+          "kind": "run"
+        },
+        "progress": {
+          "kind": "queued"
+        },
+        "createdAt": "2026-09-07T14:40:26.604Z"
+      }
+    },
+    "power-on": {
+      "key": "a3af1f72-ca97-4e3b-adb5-c82b73697b5c",
+      "args": [
+        "machine",
+        "power-on",
+        "vm_1562f66a-5afe-42f4-9fcd-b8b2239b203f",
+        "--expected-version",
+        "4"
+      ],
+      "requestedAt": "2026-09-07T14:40:43.774Z",
+      "operation": {
+        "id": "op_e13ca192-c6ed-4f79-a8b6-fa22f5217464",
+        "accountId": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+        "projectId": "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+        "machineId": "vm_1562f66a-5afe-42f4-9fcd-b8b2239b203f",
+        "grantId": "grant_b6e660a9-c35b-4689-9103-ae91f64fb6ba",
+        "kind": "machine.power_on",
+        "intent": {
+          "kind": "run"
+        },
+        "progress": {
+          "kind": "queued"
+        },
+        "createdAt": "2026-09-07T14:40:43.907Z"
+      }
+    },
+    "reboot": {
+      "key": "d4988307-6f95-4e26-bdeb-aa2bffebfa50",
+      "args": [
+        "machine",
+        "reboot",
+        "vm_1562f66a-5afe-42f4-9fcd-b8b2239b203f",
+        "--expected-version",
+        "6"
+      ],
+      "requestedAt": "2026-09-07T14:41:13.686Z",
+      "operation": {
+        "id": "op_dc66fc6d-ac36-4639-8cb5-ae3426a15c92",
+        "accountId": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+        "projectId": "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+        "machineId": "vm_1562f66a-5afe-42f4-9fcd-b8b2239b203f",
+        "grantId": "grant_b6e660a9-c35b-4689-9103-ae91f64fb6ba",
+        "kind": "machine.reboot",
+        "intent": {
+          "kind": "run"
+        },
+        "progress": {
+          "kind": "queued"
+        },
+        "createdAt": "2026-09-07T14:41:13.843Z"
+      }
+    },
+    "destroy": {
+      "key": "b9f7ae9f-d9fd-4275-9203-c3b7002de458",
+      "args": [
+        "machine",
+        "destroy",
+        "vm_1562f66a-5afe-42f4-9fcd-b8b2239b203f",
+        "--expected-version",
+        "8",
+        "--allow-data-loss"
+      ],
+      "requestedAt": "2026-09-07T15:15:31.475Z",
+      "operation": {
+        "id": "op_4bcadaef-97e4-4ff7-af4c-3254acaf4fae",
+        "accountId": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+        "projectId": "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+        "machineId": "vm_1562f66a-5afe-42f4-9fcd-b8b2239b203f",
+        "grantId": "grant_b6e660a9-c35b-4689-9103-ae91f64fb6ba",
+        "kind": "machine.destroy",
+        "intent": {
+          "kind": "cleanup",
+          "sourceOperationId": "op_8779cb75-689b-45cf-b4ee-f8d4ed92459b"
+        },
+        "progress": {
+          "kind": "cleaning_up"
+        },
+        "createdAt": "2026-09-07T15:15:31.633Z"
+      }
+    }
+  },
+  "observations": [
+    {
+      "phase": "created",
+      "observedAt": "2026-09-07T14:40:26.458Z",
+      "machine": {
+        "id": "vm_1562f66a-5afe-42f4-9fcd-b8b2239b203f",
+        "accountId": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+        "projectId": "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+        "spec": {
+          "name": "customer-drill-2224a90a-3",
+          "size": "small",
+          "region": "nbg1"
+        },
+        "provider": "hetzner",
+        "state": {
+          "kind": "allocated",
+          "allocationId": "alloc_c2f3e074-488c-49ba-912f-0ca9115884d1",
+          "serverId": "164976022",
+          "power": "running",
+          "guest": {
+            "kind": "ssh",
+            "verifiedAt": "2026-09-07T14:40:25.039Z",
+            "imageVersion": "dev-aec4ae5feb7aefb4e58e4519",
+            "manifestDigest": "739d94533985de55963de5486a656ce8ceff67cdd3b2ab7f0e593177f31bc010",
+            "bootId": "630c5fea-099a-4a25-aebe-f83aa0f06a67"
+          }
+        },
+        "version": 2,
+        "createdAt": "2026-09-07T14:39:31.358Z"
+      }
+    },
+    {
+      "phase": "power-off",
+      "observedAt": "2026-09-07T14:40:43.774Z",
+      "machine": {
+        "id": "vm_1562f66a-5afe-42f4-9fcd-b8b2239b203f",
+        "accountId": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+        "projectId": "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+        "spec": {
+          "name": "customer-drill-2224a90a-3",
+          "size": "small",
+          "region": "nbg1"
+        },
+        "provider": "hetzner",
+        "state": {
+          "kind": "allocated",
+          "allocationId": "alloc_c2f3e074-488c-49ba-912f-0ca9115884d1",
+          "serverId": "164976022",
+          "power": "off",
+          "guest": {
+            "kind": "ssh",
+            "verifiedAt": "2026-09-07T14:40:25.039Z",
+            "imageVersion": "dev-aec4ae5feb7aefb4e58e4519",
+            "manifestDigest": "739d94533985de55963de5486a656ce8ceff67cdd3b2ab7f0e593177f31bc010",
+            "bootId": "630c5fea-099a-4a25-aebe-f83aa0f06a67"
+          }
+        },
+        "version": 4,
+        "createdAt": "2026-09-07T14:39:31.358Z"
+      }
+    },
+    {
+      "phase": "power-on",
+      "observedAt": "2026-09-07T14:41:13.686Z",
+      "machine": {
+        "id": "vm_1562f66a-5afe-42f4-9fcd-b8b2239b203f",
+        "accountId": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+        "projectId": "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+        "spec": {
+          "name": "customer-drill-2224a90a-3",
+          "size": "small",
+          "region": "nbg1"
+        },
+        "provider": "hetzner",
+        "state": {
+          "kind": "allocated",
+          "allocationId": "alloc_c2f3e074-488c-49ba-912f-0ca9115884d1",
+          "serverId": "164976022",
+          "power": "running",
+          "guest": {
+            "kind": "ssh",
+            "verifiedAt": "2026-09-07T14:41:11.328Z",
+            "imageVersion": "dev-aec4ae5feb7aefb4e58e4519",
+            "manifestDigest": "739d94533985de55963de5486a656ce8ceff67cdd3b2ab7f0e593177f31bc010",
+            "bootId": "0fe9fbe5-bced-4e50-8ddd-f262de754875"
+          }
+        },
+        "version": 6,
+        "createdAt": "2026-09-07T14:39:31.358Z"
+      }
+    },
+    {
+      "phase": "reboot",
+      "observedAt": "2026-09-07T14:41:43.678Z",
+      "machine": {
+        "id": "vm_1562f66a-5afe-42f4-9fcd-b8b2239b203f",
+        "accountId": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+        "projectId": "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+        "spec": {
+          "name": "customer-drill-2224a90a-3",
+          "size": "small",
+          "region": "nbg1"
+        },
+        "provider": "hetzner",
+        "state": {
+          "kind": "allocated",
+          "allocationId": "alloc_c2f3e074-488c-49ba-912f-0ca9115884d1",
+          "serverId": "164976022",
+          "power": "running",
+          "guest": {
+            "kind": "ssh",
+            "verifiedAt": "2026-09-07T14:41:40.399Z",
+            "imageVersion": "dev-aec4ae5feb7aefb4e58e4519",
+            "manifestDigest": "739d94533985de55963de5486a656ce8ceff67cdd3b2ab7f0e593177f31bc010",
+            "bootId": "994c4cd7-ba21-4a76-9f1c-3686708e2763"
+          }
+        },
+        "version": 8,
+        "createdAt": "2026-09-07T14:39:31.358Z"
+      }
+    }
+  ],
+  "offer": {
+    "size": "small",
+    "serverType": "cpx12",
+    "region": "nbg1",
+    "architecture": "x86",
+    "vcpus": 1,
+    "memoryGb": 2,
+    "diskGb": 40,
+    "available": true,
+    "currency": "USD",
+    "priceBasis": "account_gross",
+    "serverHourlyMicros": 26568,
+    "ipv4HourlyMicros": 1230,
+    "hourlyMicros": 27798
+  },
+  "projectId": "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+  "machineId": "vm_1562f66a-5afe-42f4-9fcd-b8b2239b203f",
+  "createReplayVerified": true,
+  "allocationId": "alloc_c2f3e074-488c-49ba-912f-0ca9115884d1",
+  "certificateObservations": [
+    {
+      "observedAt": "2026-09-07T14:41:44.129Z",
+      "issuedAt": "2026-09-07T14:40:23.735Z",
+      "tls": {
+        "scope": "trusted_server_leaf_only",
+        "authenticatedApplicationRequest": false,
+        "fingerprint256": "08:04:72:D7:0F:26:0A:EF:2A:15:69:91:E2:04:CA:14:56:7F:7A:3C:17:1B:CF:1D:53:46:95:EF:55:5C:D0:AE",
+        "serialNumber": "A92A164B692031F63CE999CDB781F9F8"
+      },
+      "sshScan": "# 116.203.81.205:22 SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.19\nssh-ed25519-cert-v01@openssh.com AAAAIHNzaC1lZDI1NTE5LWNlcnQtdjAxQG9wZW5zc2guY29tAAAAIGRGd2I2dUEoVCp7citaI0FgXmdEQUAjPCNeWzQxQnhmAAAAIAiCKeJntzoqDniCnuNIrPXHM+N3CpnfCzsITahmg8HIaJSTV6tUaMgAAAACAAAARWFsbG9jLWMyZjNlMDc0LTQ4OGMtNDliYS05MTJmLTBjYTkxMTU4ODRkMS5ndWVzdC5hZ2VudC1jbG91ZC5pbnRlcm5hbAAAAEkAAABFYWxsb2MtYzJmM2UwNzQtNDg4Yy00OWJhLTkxMmYtMGNhOTExNTg4NGQxLmd1ZXN0LmFnZW50LWNsb3VkLmludGVybmFsAAAAAGqezJsAAAAAap7a5wAAAAAAAAAAAAAAAAAAAGgAAAATZWNkc2Etc2hhMi1uaXN0cDI1NgAAAAhuaXN0cDI1NgAAAEEEZmL9uwyeeb5anZdmtgiKZEedFGJkv42jOB5EQTiMB/oEb7vmsVlQEmSzxPkOS01TT8vz47aX4BcUvA46yHo0jQAAAGMAAAATZWNkc2Etc2hhMi1uaXN0cDI1NgAAAEgAAAAgZvnvmtEcdBvB0lMqsqQWrwidUQwi0OQ3bYW+Mw/M2xwAAAAgGky2c1wCkUfE9qi/XdGGM3uQkO849JgGnX13GuUCUM4=\n",
+      "expectedSshCertificate": "ssh-ed25519-cert-v01@openssh.com AAAAIHNzaC1lZDI1NTE5LWNlcnQtdjAxQG9wZW5zc2guY29tAAAAIGRGd2I2dUEoVCp7citaI0FgXmdEQUAjPCNeWzQxQnhmAAAAIAiCKeJntzoqDniCnuNIrPXHM+N3CpnfCzsITahmg8HIaJSTV6tUaMgAAAACAAAARWFsbG9jLWMyZjNlMDc0LTQ4OGMtNDliYS05MTJmLTBjYTkxMTU4ODRkMS5ndWVzdC5hZ2VudC1jbG91ZC5pbnRlcm5hbAAAAEkAAABFYWxsb2MtYzJmM2UwNzQtNDg4Yy00OWJhLTkxMmYtMGNhOTExNTg4NGQxLmd1ZXN0LmFnZW50LWNsb3VkLmludGVybmFsAAAAAGqezJsAAAAAap7a5wAAAAAAAAAAAAAAAAAAAGgAAAATZWNkc2Etc2hhMi1uaXN0cDI1NgAAAAhuaXN0cDI1NgAAAEEEZmL9uwyeeb5anZdmtgiKZEedFGJkv42jOB5EQTiMB/oEb7vmsVlQEmSzxPkOS01TT8vz47aX4BcUvA46yHo0jQAAAGMAAAATZWNkc2Etc2hhMi1uaXN0cDI1NgAAAEgAAAAgZvnvmtEcdBvB0lMqsqQWrwidUQwi0OQ3bYW+Mw/M2xwAAAAgGky2c1wCkUfE9qi/XdGGM3uQkO849JgGnX13GuUCUM4= alloc-c2f3e074-488c-49ba-912f-0ca9115884d1.guest.agent-cloud.internal"
+    },
+    {
+      "observedAt": "2026-09-07T15:15:31.155Z",
+      "issuedAt": "2026-09-07T15:15:25.006Z",
+      "tls": {
+        "scope": "trusted_server_leaf_only",
+        "authenticatedApplicationRequest": false,
+        "fingerprint256": "09:AD:4C:96:A3:32:77:1C:E4:23:23:2E:F1:0F:B6:CE:64:E1:A6:31:82:C1:75:0C:9F:3B:36:93:F7:4C:35:D4",
+        "serialNumber": "08AF8B516038B19417F45E890EE33B51"
+      },
+      "sshScan": "# 116.203.81.205:22 SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.19\nssh-ed25519-cert-v01@openssh.com AAAAIHNzaC1lZDI1NTE5LWNlcnQtdjAxQG9wZW5zc2guY29tAAAAIFlFPjorJ2ddWDNNPUY0d2BaJ0xubk1fNWpLPSlKfWA7AAAAIAiCKeJntzoqDniCnuNIrPXHM+N3CpnfCzsITahmg8HIRa8DqElp7UEAAAACAAAARWFsbG9jLWMyZjNlMDc0LTQ4OGMtNDliYS05MTJmLTBjYTkxMTU4ODRkMS5ndWVzdC5hZ2VudC1jbG91ZC5pbnRlcm5hbAAAAEkAAABFYWxsb2MtYzJmM2UwNzQtNDg4Yy00OWJhLTkxMmYtMGNhOTExNTg4NGQxLmd1ZXN0LmFnZW50LWNsb3VkLmludGVybmFsAAAAAGqe1NAAAAAAap7jHAAAAAAAAAAAAAAAAAAAAGgAAAATZWNkc2Etc2hhMi1uaXN0cDI1NgAAAAhuaXN0cDI1NgAAAEEEZmL9uwyeeb5anZdmtgiKZEedFGJkv42jOB5EQTiMB/oEb7vmsVlQEmSzxPkOS01TT8vz47aX4BcUvA46yHo0jQAAAGUAAAATZWNkc2Etc2hhMi1uaXN0cDI1NgAAAEoAAAAhAKBJgcpFfDVRaCYgMXuxecJwHIieLrXAaLCgIsGrql6/AAAAIQC+ppgwtSjrEGmZQ+SVoKjJvnq01pAliXFokbFqHW19jg==\n",
+      "expectedSshCertificate": "ssh-ed25519-cert-v01@openssh.com AAAAIHNzaC1lZDI1NTE5LWNlcnQtdjAxQG9wZW5zc2guY29tAAAAIFlFPjorJ2ddWDNNPUY0d2BaJ0xubk1fNWpLPSlKfWA7AAAAIAiCKeJntzoqDniCnuNIrPXHM+N3CpnfCzsITahmg8HIRa8DqElp7UEAAAACAAAARWFsbG9jLWMyZjNlMDc0LTQ4OGMtNDliYS05MTJmLTBjYTkxMTU4ODRkMS5ndWVzdC5hZ2VudC1jbG91ZC5pbnRlcm5hbAAAAEkAAABFYWxsb2MtYzJmM2UwNzQtNDg4Yy00OWJhLTkxMmYtMGNhOTExNTg4NGQxLmd1ZXN0LmFnZW50LWNsb3VkLmludGVybmFsAAAAAGqe1NAAAAAAap7jHAAAAAAAAAAAAAAAAAAAAGgAAAATZWNkc2Etc2hhMi1uaXN0cDI1NgAAAAhuaXN0cDI1NgAAAEEEZmL9uwyeeb5anZdmtgiKZEedFGJkv42jOB5EQTiMB/oEb7vmsVlQEmSzxPkOS01TT8vz47aX4BcUvA46yHo0jQAAAGUAAAATZWNkc2Etc2hhMi1uaXN0cDI1NgAAAEoAAAAhAKBJgcpFfDVRaCYgMXuxecJwHIieLrXAaLCgIsGrql6/AAAAIQC+ppgwtSjrEGmZQ+SVoKjJvnq01pAliXFokbFqHW19jg== alloc-c2f3e074-488c-49ba-912f-0ca9115884d1.guest.agent-cloud.internal"
+    }
+  ],
+  "initialCertificates": {
+    "observedAt": "2026-09-07T14:41:44.129Z",
+    "serverId": "164976022",
+    "tls": {
+      "scope": "trusted_server_leaf_only",
+      "authenticatedApplicationRequest": false,
+      "fingerprint256": "08:04:72:D7:0F:26:0A:EF:2A:15:69:91:E2:04:CA:14:56:7F:7A:3C:17:1B:CF:1D:53:46:95:EF:55:5C:D0:AE",
+      "serialNumber": "A92A164B692031F63CE999CDB781F9F8"
+    },
+    "sshCertificateMatches": true
+  },
+  "originalIssuedAt": "2026-09-07T14:40:23.735Z",
+  "initialBootId": "630c5fea-099a-4a25-aebe-f83aa0f06a67",
+  "renewal": {
+    "id": "772bb7f8-5e6a-4799-ac11-4f051c868dd4",
+    "issuedAt": "2026-09-07T15:15:25.006Z",
+    "elapsedSinceOriginalMs": 2101271,
+    "certificates": {
+      "observedAt": "2026-09-07T15:15:31.156Z",
+      "serverId": "164976022",
+      "tls": {
+        "scope": "trusted_server_leaf_only",
+        "authenticatedApplicationRequest": false,
+        "fingerprint256": "09:AD:4C:96:A3:32:77:1C:E4:23:23:2E:F1:0F:B6:CE:64:E1:A6:31:82:C1:75:0C:9F:3B:36:93:F7:4C:35:D4",
+        "serialNumber": "08AF8B516038B19417F45E890EE33B51"
+      },
+      "sshCertificateMatches": true
+    }
+  },
+  "cleanupOperationId": "op_4bcadaef-97e4-4ff7-af4c-3254acaf4fae",
+  "cleanup": {
+    "completedAt": "2026-09-07T15:16:30.843Z",
+    "machine": {
+      "id": "vm_1562f66a-5afe-42f4-9fcd-b8b2239b203f",
+      "accountId": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+      "projectId": "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+      "spec": {
+        "name": "customer-drill-2224a90a-3",
+        "size": "small",
+        "region": "nbg1"
+      },
+      "provider": "hetzner",
+      "state": {
+        "kind": "destroyed",
+        "destroyedAt": "2026-09-07T15:16:30.337Z"
+      },
+      "version": 10,
+      "createdAt": "2026-09-07T14:39:31.358Z"
+    },
+    "state": {
+      "active_allocations": 0,
+      "live_resources": 0
+    }
+  }
+}

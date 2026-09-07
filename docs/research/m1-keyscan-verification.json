@@ -369,6 +369,16 @@
     "contextCorrection": "Reviewer rechecked and marked the stale-context finding resolved."
   },
   "ci": {
-    "result": "pending_exact_commit"
+    "result": "passed_on_retry",
+    "commit": "224a56a09e1868b8acfa2b315e9da951560c65f4",
+    "runId": 34132861071,
+    "firstAttempt": {
+      "result": "failed",
+      "cause": "Pinned Smallstep asset download returned HTTP504; full checks, formatting and CLIcleanup passed before setup failure. Native CI steps did not run.",
+      "log": ".local/customer-keyscan-ci-failed.log"
+    },
+    "retry": "Rerun failed job on the same commit; no source change.",
+    "url": "https://github.com/yahorbarkouski/agent-cloud/actions/runs/34132861071",
+    "retryResult": "Full423tests/36files, formatting, CLIcleanup, fresh PKI, native SSH including new keyscan assertion, enrollment and disposal passed on same commit."
   }
 }

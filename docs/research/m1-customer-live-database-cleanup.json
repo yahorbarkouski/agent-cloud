@@ -1,0 +1,15 @@
+{
+  "id": "2224a90a-acad-42f4-9081-e8fc08822ff7",
+  "database": "agentcloud_live_2224a90aacad42f49081e8fc08822ff7",
+  "archive": {
+    "path": ".local/customer-drill-database.dump",
+    "bytes": 207426,
+    "sha256": "d6e4c65c2747d1af8ad78f3b6c28ef39e7bc4e0e16d70b559da18a715574ac03",
+    "mode": "0600",
+    "tableOfContentsVerified": true
+  },
+  "state": "archived_and_dropped",
+  "archivedAt": "2026-09-07T15:19:36.175Z",
+  "dropRequestedAt": "2026-09-07T15:19:36.187Z",
+  "completedAt": "2026-09-07T15:19:36.217Z"
+}

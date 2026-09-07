@@ -1,0 +1,21 @@
+{
+  "id": "2224a90a-acad-42f4-9081-e8fc08822ff7",
+  "allocationId": "alloc_c2f3e074-488c-49ba-912f-0ca9115884d1",
+  "renewalId": "772bb7f8-5e6a-4799-ac11-4f051c868dd4",
+  "observedAt": "2026-09-07T15:28:22.043Z",
+  "scope": "Read the retained initial/renewed public identities from the checksum-verified private archive; bind their certificates to the already recorded live observations. No private key was extracted.",
+  "archiveSha256": "d6e4c65c2747d1af8ad78f3b6c28ef39e7bc4e0e16d70b559da18a715574ac03",
+  "sshHostPublicKeyUnchanged": true,
+  "tlsCsrUnchanged": true,
+  "tlsCertificatePublicKeyUnchanged": true,
+  "publicHashes": {
+    "originalSshKey": "0396a50f9fb2e376eb185bee9a488539c2a67bcd7d9684032bce1a77fc06f012",
+    "renewedSshKey": "0396a50f9fb2e376eb185bee9a488539c2a67bcd7d9684032bce1a77fc06f012",
+    "originalTlsCsr": "306743e53cc52833f18e9c430bb2e143ac89feafd7624167c1c0014ae3f9b413",
+    "renewedTlsCsr": "306743e53cc52833f18e9c430bb2e143ac89feafd7624167c1c0014ae3f9b413"
+  },
+  "originalServedTlsMatches": true,
+  "renewedServedTlsMatches": true,
+  "originalServedSshMatches": true,
+  "renewedServedSshMatches": true
+}

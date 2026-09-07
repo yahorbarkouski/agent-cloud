@@ -1,0 +1,139 @@
+{
+  "checkpoint": "M1 real customer machine lifecycle and elapsed timer renewal",
+  "date": "2026-09-07",
+  "implementationCommit": "224a56a09e1868b8acfa2b315e9da951560c65f4",
+  "provider": "Hetzner",
+  "result": "passed and fully cleaned",
+  "instance": {
+    "type": "cpx12",
+    "region": "nbg1",
+    "vcpus": 1,
+    "memoryGiB": 2,
+    "diskGB": 40,
+    "serverId": "164976022",
+    "primaryIpId": "148484586",
+    "machineId": "vm_1562f66a-5afe-42f4-9fcd-b8b2239b203f",
+    "allocationId": "alloc_c2f3e074-488c-49ba-912f-0ca9115884d1"
+  },
+  "image": {
+    "buildId": "653dd67f-c002-4796-b894-27865aed9ec2",
+    "snapshotId": "429179158",
+    "manifestDigest": "739d94533985de55963de5486a656ce8ceff67cdd3b2ab7f0e593177f31bc010",
+    "version": "dev-aec4ae5feb7aefb4e58e4519",
+    "retainedPublicationAndSelectionVerifiedAt": "2026-09-07T13:43:06.340Z",
+    "finalSnapshotAbsentAt": "2026-09-07T15:17:05.979Z"
+  },
+  "lifecycle": {
+    "startedAt": "2026-09-07T14:39:30.802Z",
+    "createReplayVerified": true,
+    "phases": [
+      {
+        "phase": "created",
+        "at": "2026-09-07T14:40:26.458Z",
+        "version": 2,
+        "bootId": "630c5fea-099a-4a25-aebe-f83aa0f06a67"
+      },
+      {
+        "phase": "power-off",
+        "at": "2026-09-07T14:40:43.774Z",
+        "version": 4,
+        "bootId": "630c5fea-099a-4a25-aebe-f83aa0f06a67"
+      },
+      {
+        "phase": "power-on",
+        "at": "2026-09-07T14:41:13.686Z",
+        "version": 6,
+        "bootId": "0fe9fbe5-bced-4e50-8ddd-f262de754875"
+      },
+      {
+        "phase": "reboot",
+        "at": "2026-09-07T14:41:43.678Z",
+        "version": 8,
+        "bootId": "994c4cd7-ba21-4a76-9f1c-3686708e2763"
+      }
+    ],
+    "originalIssuedAt": "2026-09-07T14:40:23.735Z",
+    "renewal": {
+      "id": "772bb7f8-5e6a-4799-ac11-4f051c868dd4",
+      "issuedAt": "2026-09-07T15:15:25.006Z",
+      "elapsedSinceOriginalMs": 2101271,
+      "certificates": {
+        "observedAt": "2026-09-07T15:15:31.156Z",
+        "serverId": "164976022",
+        "tls": {
+          "scope": "trusted_server_leaf_only",
+          "authenticatedApplicationRequest": false,
+          "fingerprint256": "09:AD:4C:96:A3:32:77:1C:E4:23:23:2E:F1:0F:B6:CE:64:E1:A6:31:82:C1:75:0C:9F:3B:36:93:F7:4C:35:D4",
+          "serialNumber": "08AF8B516038B19417F45E890EE33B51"
+        },
+        "sshCertificateMatches": true
+      }
+    },
+    "customerCleanupCompletedAt": "2026-09-07T15:16:30.843Z",
+    "identityContinuity": {
+      "sshHostPublicKeyUnchanged": true,
+      "tlsCsrUnchanged": true,
+      "tlsCertificatePublicKeyUnchanged": true,
+      "source": "Checksum-verified archived initial/renewed public identities, matched to recorded served certificates."
+    }
+  },
+  "budget": {
+    "currency": "USD",
+    "basis": "account gross, per-resource rounded hour estimate; not an invoice",
+    "customerCapMicros": 60000,
+    "estimatedAllThreeCustomerAttemptsMicros": 56826,
+    "thirdAttemptPriceCeilingTotalMicros": 59028,
+    "imageVmAndIpCapMicros": 120000,
+    "snapshotMonthlyCapMicros": 1000000,
+    "customerConcurrentMachines": 1,
+    "noExtraCapacityForRenewal": true
+  },
+  "priorFailures": [
+    {
+      "attempt": 1,
+      "issue": "Provider returned assignee_type server with null assignee_id; initial parser refused it.",
+      "result": "No VM created; original IP was discovered and deleted after parser correction and worker restart.",
+      "evidence": "m1-primary-ip-compatibility-verification.json"
+    },
+    {
+      "attempt": 2,
+      "issue": "Private test incorrectly assumed ssh-keyscan -c prints a hostname column.",
+      "result": "Lifecycle passed; raw certificate observation was not retained, so no retrospective certificate-match claim. VM/IP fully cleaned.",
+      "evidence": "m1-keyscan-verification.json"
+    }
+  ],
+  "cleanup": {
+    "provider": {
+      "observedAt": "2026-09-07T15:17:06.440Z",
+      "resources": {
+        "servers": 0,
+        "primaryIps": 0,
+        "snapshots": 0,
+        "firewalls": 0,
+        "sshKeys": 0
+      }
+    },
+    "sql": {
+      "allocations": 0,
+      "customer_resources": 0,
+      "image_resources": 0,
+      "image_builds": 0
+    },
+    "temporaryProcesses": "m1-customer-live-process-cleanup.json",
+    "databaseArchiveAndDrop": "m1-customer-live-database-cleanup.json",
+    "review": "m1-customer-final-cleanup-review.md"
+  },
+  "evidence": {
+    "lifecycle": "m1-customer-live-lifecycle.json",
+    "release": "m1-customer-live-release.json",
+    "cleanup": "m1-customer-live-cleanup.json",
+    "keyContinuity": "m1-customer-live-key-continuity.json"
+  },
+  "limits": [
+    "TLS verification observed the trusted served leaf, not an authenticated application request.",
+    "The drill did not inject every failure or crash into the real provider; failure/restart/uncertainty cases also have separate local PostgreSQL/protocol tests.",
+    "Customer SSH, device login, application deployment, routing, backups and restores remain M2\u2013M7.",
+    "The private database archive was validated with pg_restore --list; this is not a restore drill.",
+    "Provider billing estimates are not final invoiced charges."
+  ]
+}

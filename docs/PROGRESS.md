@@ -1,16 +1,26 @@
 # Implementation progress
 
+## M1 complete; customer access underway
+
+The third bounded customer drill passed actual CLI create/replay, signed snapshot boot, enrollment, runtime readiness, graceful power-off/on and reboot. The ordinary guest timer renewed both SSH/TLS certificates at15:15:25Z,2101271ms after initial issuance. Public observations matched the new certificates and the original key/CSR remained unchanged. No artificial time change was used. Customer VM/IP cleanup completed15:16:30Z. Snapshot/firewall cleanup and independent provider inventory were complete15:17:06Z, with zero provider resources and SQL reservations. All six owned temporary processes stopped; the private live DB was archived with0600 permissions, its archive table of contents checked, then the exact DB dropped15:19:36Z.
+
+[Live verification](research/m1-customer-live-verification.json), [lifecycle](research/m1-customer-live-lifecycle.json), [cleanup](research/m1-customer-live-cleanup.json) and [independent cleanup review](research/m1-customer-final-cleanup-review.md) preserve the result. Earlier failures remain recorded separately. The estimated customer VM/IP charge across all three attempts is56826µUSD under the60000µUSDcap; that estimate is not an invoice. TLS evidence is a served-leaf check, not an authenticated application request. Database archive inspection is not a restore drill. M2–M7 remain open.
+
+M2 authority commit2ece39a4304f8c27ddba92e5bdf5207b32474cd7 is pushed on isolated `yahor/customer-ssh`. One bounded SQL ancestry snapshot, PostgreSQL expiry after traversal and the earliest parent horizon replace separate host-clock reads. Eleven targeted tests and429full tests pass. Review resolved its snapshot finding. Exact Linux CI34136058956 passed checks, formatting and fresh native smokes on retry after registryHTTP500 prevented the first PostgreSQL setup. New session contract/schema work is uncommitted and not yet a usable access service.
+
+The checkpoints below preserve their status at the time. This current summary and the product milestone list supersede their older statements about unfinished M1 work.
+
 ## M2 customer access workflow
 
 - [x] Ground: traced account/grant/CLI authentication and guest/SSH trust in `research/m2-customer-access-grounding.md`.
-- [ ] Sketch: compare bounded customer SSH access designs against traced ownership and revocation behavior. Device/browser login remains a later M2 slice.
+- [x] Sketch: compared bounded customer SSH access designs against traced ownership and revocation behavior. Device/browser login remains a later M2 slice.
   - [x] Frame: existing delegated grants, customer root semantics, isolated native SSH, short-lived issuance, gateway ownership and active revocation.
   - [x] Fan out: three isolated usage-first designs.
   - [x] Cross-judge: gpt-5.6-sol chose A21/25 over C18/B15; parent read all and agrees with corrections.
-  - [ ] Pick and graft: keep one coherent session model.
-  - [ ] Verify: trace scope, issuance crash recovery, network restrictions and revocation.
-- [ ] Agree: autonomous implementation is authorized; no human checkpoint requested.
-- [ ] Implement: fill the selected access contracts after the running M1 drill is safe.
+  - [x] Pick and graft: A with C state/closure checks, client-generated tickets and narrow gateway RPC.
+  - [x] Verify: independent review resolved nine concrete contracts; final addendum reports no material design contradiction.
+- [x] Agree: autonomous implementation is authorized; no human checkpoint requested.
+- [ ] Implement: shared grant authority2ece39a passed429tests and exact Linux CI34136058956 on retry. Session contracts and draft0020 are isolated work in progress; transition/race tests, issuance, gateway, guest and CLI remain.
 - [ ] Scrap audit: revisit the shape if implementation needs repeated exceptions.
 
 ## Second customer lifecycle passed; certificate test corrected
@@ -113,7 +123,7 @@ The runtime design, commands, private-material restart policy and recovery instr
 ## Product milestones
 
 - [x] M0: repository, contracts, local services, authenticated API, operation model, simulated provider.
-- [ ] M1: durable machine lifecycle, Hetzner adapter, first-boot image, cleanup and reconciliation.
+- [x] M1: durable machine lifecycle, Hetzner adapter, first-boot image, cleanup and reconciliation. Real provider lifecycle/elapsed renewal and complete cleanup passed; failure/restart cases also have local protocol/SQL proof.
 - [ ] M2: CLI and customer access, grants, device login, SSH access and revocation.
 - [ ] M3: file transfer, persistent command runs, Compose deployments, HTTPS routes and domains.
 - [ ] M4: PostgreSQL/analytics recipes, protected backups, isolated restore, platform recovery.

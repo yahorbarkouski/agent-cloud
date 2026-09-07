@@ -1,0 +1,33 @@
+{
+  "id": "2224a90a-acad-42f4-9081-e8fc08822ff7",
+  "requestedAt": "2026-09-07T15:18:52.134Z",
+  "processes": [
+    {
+      "pid": 49882,
+      "command": ".local/tools/cloudflared-2026.8.3 tunnel --config /dev/null --no-autoupdate --protocol http2 --url http://127.0.0.1:4321"
+    },
+    {
+      "pid": 49885,
+      "command": ".local/tools/cloudflared-2026.8.3 tunnel --config /dev/null --no-autoupdate --protocol http2 --url http://127.0.0.1:4320"
+    },
+    {
+      "pid": 50288,
+      "command": "node --env-file=.local/customer-drill-image.env apps/control/dist/worker.js"
+    },
+    {
+      "pid": 50289,
+      "command": "node --env-file=.local/customer-drill-image.env apps/control/dist/api.js"
+    },
+    {
+      "pid": 60504,
+      "command": "node --env-file=.local/customer-drill-customer.env apps/control/dist/api.js"
+    },
+    {
+      "pid": 60523,
+      "command": "node --env-file=.local/customer-drill-customer.env apps/control/dist/worker.js"
+    }
+  ],
+  "state": "all_owned_processes_stopped",
+  "remaining": [],
+  "completedAt": "2026-09-07T15:18:53.137Z"
+}
