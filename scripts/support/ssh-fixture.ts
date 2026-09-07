@@ -37,7 +37,7 @@ export async function withSshFixture<T>(
     scratch: string;
     fixture: string;
     run: (binary: string, args: string[]) => Promise<{ stdout: string; stderr: string }>;
-    start: () => Promise<number>;
+    start: (profile?: 'customer') => Promise<number>;
     installHostCertificate: () => Promise<void>;
   }) => Promise<T>,
 ) {
@@ -93,7 +93,7 @@ export async function withSshFixture<T>(
         ]);
         await setTimeout(100);
       },
-      start: async () => {
+      start: async (profile) => {
         await run('docker', [
           'run',
           '--detach',
@@ -102,6 +102,7 @@ export async function withSshFixture<T>(
           containerName,
           '--label',
           'agent-cloud.test=ssh-proof',
+          ...(profile ? ['--env', 'ACLD_SSH_FIXTURE_PROFILE=customer'] : []),
           '--publish',
           '127.0.0.1::2222',
           '--mount',

@@ -1,5 +1,8 @@
 #!/bin/sh
 set -eu
+if test "${ACLD_SSH_FIXTURE_PROFILE:-probe}" = customer; then
+  cp /etc/ssh/customer_sshd_config /etc/ssh/sshd_config
+fi
 # Bind mounts retain the developer/CI uid. sshd requires root-owned trust files.
 mkdir -p /run/agent-cloud
 chmod 755 /run/agent-cloud
@@ -8,6 +11,10 @@ for name in host_key user_ca.pub principals; do
 done
 chmod 600 /run/agent-cloud/host_key
 chmod 644 /run/agent-cloud/user_ca.pub /run/agent-cloud/principals
+if test "${ACLD_SSH_FIXTURE_PROFILE:-probe}" = customer; then
+  cp /fixture/customer-principals /run/agent-cloud/customer-principals
+  chmod 644 /run/agent-cloud/customer-principals
+fi
 if test -f /fixture/host_key-cert.pub; then
   cp /fixture/host_key-cert.pub /run/agent-cloud/host_key-cert.pub
   chmod 644 /run/agent-cloud/host_key-cert.pub

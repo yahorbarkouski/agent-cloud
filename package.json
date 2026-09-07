@@ -36,6 +36,7 @@
     "pki:up": "docker compose --env-file .local/pki/compose.env -f infra/compose/pki-development.yaml up -d --force-recreate --wait",
     "pki:down": "docker compose --env-file .local/pki/compose.env -f infra/compose/pki-development.yaml down",
     "smoke:pki": "pnpm build && tsx scripts/smoke-pki.ts",
+    "smoke:customer-pki": "pnpm build && docker build -t agent-cloud-ssh-fixture:development tests/fixtures/ssh && tsx scripts/smoke-customer-pki.ts",
     "smoke:ssh": "pnpm build && docker build -t agent-cloud-ssh-fixture:development tests/fixtures/ssh && tsx scripts/smoke-ssh.ts",
     "smoke:enrollment": "pnpm build:guest && docker build -t agent-cloud-ssh-fixture:development tests/fixtures/ssh && tsx scripts/smoke-enrollment.ts",
     "build:guest": "pnpm build && tsx scripts/build-guest.ts",

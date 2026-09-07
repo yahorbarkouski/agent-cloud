@@ -73,15 +73,18 @@ pnpm pki:up
 pnpm smoke:cleanup
 pnpm smoke:pki
 pnpm smoke:ssh
+pnpm smoke:customer-pki
 pnpm smoke:enrollment
 pnpm pki:down
 ```
 
-The CA listens only on `127.0.0.1:9449`. Its state lives in ignored, owner-only `.local/pki`; repeated setup preserves its identity and updates the managed certificate templates. When setup returns `restartRequired: true`, run `pnpm pki:down` followed by `pnpm pki:up` to load them. The encrypted root key stays outside the container mount. The control signer receives a provisioner credential and public trust, never the CA's private signing keys. These are development keys, not a production recovery setup.
+The CA listens only on `127.0.0.1:9449`. Its state lives in ignored, owner-only `.local/pki`; repeated setup preserves its identity and updates the managed certificate templates. `pnpm pki:up` recreates the CA container to load its current configuration, including after a lost setup response. Setup omits the vendor access logger because it includes signing tokens. The encrypted root key stays outside the container mount. The control signer receives a provisioner credential and public trust, never the CA's private signing keys. These are development keys, not a production recovery setup.
 
 The cleanup smoke runs the actual CLI against a local HTTP API, PostgreSQL and Graphile worker. It prepares a simulated lost create response, admits destroy while blocked, releases delayed inventory and verifies one source create plus complete VM/IP cleanup. Its database and credentials are disposable; it makes no cloud call.
 
 The PKI smoke makes an actual TLS connection and checks allocation/hostname rejection. The SSH smoke starts one disposable local OpenSSH container and checks pinned host keys, CA trust, allocation-scoped user certificates and guest evidence. It removes the container and generated keys afterward. It does not boot a guest VM or deploy an application. The enrollment smoke composes admission, the provider journal, encrypted bootstrap, HTTP enrollment, real Smallstep and OpenSSH. It verifies the issued host certificate over SSH and TLS certificate over HTTPS, replay and wrong-key rejection. Its provider observations are local fixtures, so it still does not prove a cloud VM boot. CI runs these local smokes without cloud credentials.
+
+The customer PKI smoke creates a separate temporary CA and OpenSSH container. It checks signed key binding, exact certificate permissions, native command/PTY authentication and rejected keys, sources, principals and signatures. A local TLS proxy drops a real signing response and checks that transport failures never trigger another POST. All fixture keys and containers are removed. This verifies the certificate protocol; customer API admission, gateway access and CLI integration remain in progress.
 
 For an actual local Ubuntu first-boot check on macOS with OrbStack installed, keep the development PostgreSQL and CA services running:
 

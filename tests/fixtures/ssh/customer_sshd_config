@@ -1,0 +1,27 @@
+Port 2222
+ListenAddress 0.0.0.0
+HostKey /run/agent-cloud/host_key
+HostCertificate /run/agent-cloud/host_key-cert.pub
+TrustedUserCAKeys /run/agent-cloud/user_ca.pub
+AuthorizedPrincipalsFile /run/agent-cloud/principals
+AuthorizedKeysFile none
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitEmptyPasswords no
+PermitRootLogin no
+AllowUsers agent-probe agent-customer
+AllowAgentForwarding no
+AllowTcpForwarding no
+X11Forwarding no
+PermitTunnel no
+PermitUserRC no
+PidFile /tmp/sshd.pid
+LogLevel ERROR
+# Repeated authentication failures are the purpose of this local protocol fixture.
+PerSourcePenalties no
+Match User agent-probe
+  PermitTTY no
+  ForceCommand /usr/local/bin/guestctl identity --json
+Match User agent-customer
+  AuthorizedPrincipalsFile /run/agent-cloud/customer-principals
+  PermitTTY yes

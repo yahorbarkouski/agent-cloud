@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { CloudError } from '@agent-cloud/contracts';
 import { inspectValidity, type CertificateTiming } from './validity.js';
 
-function fingerprint(publicKey: string) {
+export function sshFingerprint(publicKey: string) {
   const encoded = publicKey.split(' ')[1];
   if (!encoded) throw new Error('Expected an SSH public key.');
   return (
@@ -25,8 +25,8 @@ export function inspectIssuedSsh(
   const schema = z.object({
     Type: z.literal(expected.kind === 'host' ? 'host' : 'user'),
     KeyName: z.literal('ssh-ed25519-cert-v01@openssh.com'),
-    KeyFingerprint: z.literal(fingerprint(expected.key)),
-    SigningKeyFingerprint: z.literal(fingerprint(expected.ca)),
+    KeyFingerprint: z.literal(sshFingerprint(expected.key)),
+    SigningKeyFingerprint: z.literal(sshFingerprint(expected.ca)),
     KeyID: z.literal(expected.principal),
     Principals: z.tuple([z.literal(expected.principal)]),
     ValidAfter: z.iso.datetime({ offset: true }),
