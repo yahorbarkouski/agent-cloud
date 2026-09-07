@@ -14,6 +14,50 @@ import {
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 
+export const imageBuilds = pgTable('image_builds', {
+  id: text('id').primaryKey(),
+  admission: jsonb('admission').notNull(),
+  state: jsonb('state').notNull().default({ kind: 'running' }),
+  createdAt: createdAt(),
+});
+
+export const imageBuildEffects = pgTable(
+  'image_build_effects',
+  {
+    id: text('id').primaryKey(),
+    buildId: text('build_id')
+      .notNull()
+      .references(() => imageBuilds.id),
+    effectKey: text('effect_key').notNull(),
+    command: jsonb('command').notNull(),
+    outcome: jsonb('outcome').notNull().default({ kind: 'prepared' }),
+    resolution: jsonb('resolution').notNull().default({ kind: 'pending' }),
+    createdAt: createdAt(),
+  },
+  (t) => [unique().on(t.buildId, t.effectKey), unique().on(t.buildId, t.id)],
+);
+
+export const imageBuildResources = pgTable(
+  'image_build_resources',
+  {
+    provider: text('provider').notNull(),
+    kind: text('kind').notNull(),
+    providerId: text('provider_id').notNull(),
+    buildId: text('build_id').notNull(),
+    effectId: text('effect_id').notNull(),
+    role: text('role').notNull(),
+    state: jsonb('state').notNull().default({ kind: 'unverified' }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.provider, t.kind, t.providerId] }),
+    foreignKey({
+      columns: [t.buildId, t.effectId],
+      foreignColumns: [imageBuildEffects.buildId, imageBuildEffects.id],
+    }),
+  ],
+);
+
 export const accounts = pgTable(
   'accounts',
   {

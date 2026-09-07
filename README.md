@@ -89,6 +89,19 @@ The image build stages checksum-verified public inputs in `.local/guest-builds/<
 
 The image smoke sanitizes a separate disposable builder, checks refusal of allocation and Docker data, and boots two clones through the guest checks. It compares their machine IDs and SSH/TLS public keys. Builder ownership is in `.local/guest-image-builder.json`; a temporary refusal clone uses `.local/guest-image-refusal.json`. Failures preserve these records for the same targeted inspection and deletion procedure. Run VM smokes sequentially, and leave their selected input directories unchanged until they finish. The [sanitation design](docs/architecture/image-sanitation.md) describes retry limits and the remaining Hetzner snapshot proof.
 
+## Operator image builds
+
+After `pnpm db:migrate`, operators can inspect and cancel a recorded image build without provider credentials:
+
+```sh
+pnpm image:build inspect <build-id>
+pnpm image:build cancel <build-id>
+```
+
+`pnpm image:build admit <config.json>` verifies the selected local image inputs, reads Hetzner pricing and reserves an operator allowance without creating resources. The configuration supplies a stable build UUID, input directory/digest, pinned base-image ID, exact offer mapping, public access keys plus their secret reference, gross spending caps and deadline. Its schema is in `scripts/image-build.ts`. Reusing the same configuration returns its recorded admission; changed intent needs a new build ID. `cancel` records a full abort request; it does not claim cloud deletion has run.
+
+The SQL journal and cleanup planner have PostgreSQL/protocol tests. Provider advancement, management-key generation, authenticated builder SSH, platform verifier enrollment and release promotion are still being connected. There is no live image build command yet. See [image publication](docs/architecture/image-release.md).
+
 ## What is enforced
 
 - Tenant keys and composite foreign keys keep records within their account and project.

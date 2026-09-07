@@ -1,0 +1,54 @@
+{
+  "capturedAt": "2026-09-07T03:48:38.801151+00:00",
+  "scope": "Operator image admission, journal and cleanup with PostgreSQL and protocol fixtures",
+  "fullCheck": {
+    "command": "pnpm check",
+    "result": "passed",
+    "tests": 194,
+    "files": 21,
+    "session": "31120",
+    "includes": [
+      "typecheck",
+      "strict lint",
+      "all tests"
+    ],
+    "note": "The following format check in that shell pipeline failed on one test file; formatting was corrected and passed separately in session29387."
+  },
+  "format": {
+    "command": "pnpm format:check",
+    "result": "passed",
+    "session": "29387"
+  },
+  "migration": {
+    "applied": [
+      "0009_image_builds",
+      "0010_image_scope_updates"
+    ],
+    "count": 11,
+    "fileHashesMatchApplied": true,
+    "session": "29387"
+  },
+  "developmentDatabase": {
+    "activeAllocations": 0,
+    "imageBuilds": 0,
+    "simulatedServers": 0,
+    "simulatedPrimaryIps": 0
+  },
+  "localCliSmoke": {
+    "command": "pnpm smoke:local",
+    "session": "47670",
+    "result": "passed",
+    "provider": "simulated",
+    "machineId": "vm_e1ec62a2-9165-477c-befd-97f8fb223b42",
+    "cleanup": "completed",
+    "note": "After0009 and service restart;0010 subsequently adds the cross-scope identity UPDATE guard, covered in the full suite."
+  },
+  "paidResourcesCreated": 0,
+  "proofLimits": [
+    "Image provider behavior in tests is a local protocol fixture.",
+    "No Hetzner image/access mutation or actual snapshot boot is claimed.",
+    "Guest VM smokes were not rerun locally because guest code did not change.",
+    "Retained release promotion and successful-release cleanup are unfinished.",
+    "An uncertain create can keep its allowance reserved even after known duplicate resources are deleted."
+  ]
+}

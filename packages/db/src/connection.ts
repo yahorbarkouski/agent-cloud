@@ -32,12 +32,28 @@ export async function withMachineLock<T>(input: {
   machineId: string;
   work: (db: Database) => Promise<T>;
 }): Promise<{ kind: 'acquired'; value: T } | { kind: 'busy' }> {
+  return withResourceLock({ ...input, key: `machine:${input.machineId}` });
+}
+
+export async function withImageBuildLock<T>(input: {
+  pool: pg.Pool;
+  buildId: string;
+  work: (db: Database) => Promise<T>;
+}): Promise<{ kind: 'acquired'; value: T } | { kind: 'busy' }> {
+  return withResourceLock({ ...input, key: `image-build:${input.buildId}` });
+}
+
+async function withResourceLock<T>(input: {
+  pool: pg.Pool;
+  key: string;
+  work: (db: Database) => Promise<T>;
+}): Promise<{ kind: 'acquired'; value: T } | { kind: 'busy' }> {
   const client = await input.pool.connect();
   let acquired = false;
   try {
     const result = await client.query<{ acquired: boolean }>(
       'SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS acquired',
-      [`machine:${input.machineId}`],
+      [input.key],
     );
     acquired = result.rows[0]?.acquired === true;
     if (!acquired) return { kind: 'busy' };
@@ -46,9 +62,7 @@ export async function withMachineLock<T>(input: {
     let discard = false;
     if (acquired) {
       try {
-        await client.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [
-          `machine:${input.machineId}`,
-        ]);
+        await client.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [input.key]);
       } catch {
         // A connection with uncertain lock state must never return to the pool.
         discard = true;

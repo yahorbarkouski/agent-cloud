@@ -37,7 +37,8 @@
     "smoke:enrollment": "pnpm build:guest && docker build -t agent-cloud-ssh-fixture:development tests/fixtures/ssh && tsx scripts/smoke-enrollment.ts",
     "build:guest": "pnpm build && tsx scripts/build-guest.ts",
     "smoke:guest": "pnpm build:guest && tsx scripts/smoke-guest.ts",
-    "smoke:image": "pnpm build:guest && tsx scripts/smoke-image.ts"
+    "smoke:image": "pnpm build:guest && tsx scripts/smoke-image.ts",
+    "image:build": "pnpm build && tsx --env-file-if-exists=.env scripts/image-build.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

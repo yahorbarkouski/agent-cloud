@@ -64,6 +64,20 @@
       "when": 1788741228239,
       "tag": "0008_guest_runtime",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788751024670,
+      "tag": "0009_image_builds",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788752607761,
+      "tag": "0010_image_scope_updates",
+      "breakpoints": true
     }
   ]
 }

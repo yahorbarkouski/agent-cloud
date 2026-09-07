@@ -41,6 +41,18 @@
 
 ## Verification ledger
 
+M1 operator image journal, 2026-09-07:
+
+- Migrations 0009–0010 add platform-owned builds, effects and resource records. It preserves immutable admission/commands/receipts/resolutions, prevents early reservation release, and uses a shared resource identity lock to exclude simultaneous customer/operator claims.
+- Admission verifies actual public input bytes, pins the exact gross offer, reserves both VM/IP pairs with separate hourly rounding, and reserves snapshot storage independently. Aggregate operator admission is transactional. Fresh creates recheck exact capacity, each price component, currency and current allowance.
+- Create intents never resubmit, including a process crash before submission. Lookup records every duplicate and preserves that history after cleanup removes one. Known duplicates can be deleted; uncertainty retains the reservation. Stop/delete retries point from the immutable original outcome to a prepared identical replacement. This transition is forbidden for creates.
+- Cleanup observes provider ownership and absence, orders server deletion before its dependencies, and runs without fresh pricing or spending allowance. It is currently a full build-abort path, including an unpublished snapshot. Successful retained-release cleanup and promotion remain unfinished.
+- `pnpm image:build` now admits, inspects and cancels. Inspection/cancellation and admission replay passed actual subprocess tests against PostgreSQL without provider credentials. Fresh admission reads provider pricing without creating resources. Live advancement and key generation are not exposed yet.
+- Final full check session 31120 passed 194 tests in 21 files, typecheck and strict lint. Formatting passed separately in session29387 after correcting one test file. The image suite adds 27 tests, including a complete builder/snapshot/all-resource teardown through a protocol fixture, interrupted stop/delete, duplicate cleanup, price changes, concurrent admission/ownership, SQL immutability and CLI replay. These are local protocol tests, not a Hetzner image boot. Guest VM checks were not repeated because the guest implementation did not change.
+- Migrations 0009–0010 are applied to the development database; both stored migration hashes match the files. SQL reports11migrations and zero active allocations/image builds/simulated VMs/IPs. Restarted CLI/API/worker smoke47670 passed for `vm_e1ec62a2-9165-477c-befd-97f8fb223b42` with cleanup after0009. The subsequent0010 identity-update guard passed the full suite. Exact evidence is in `research/m1-image-journal-verification.json`. Final different-model artifact/trail review found no remaining code blocker in this journal milestone. Review report: `research/m1-image-journal-review.md`.
+
+No paid resources were created. Provider image/access transport, authenticated builder management, platform verifier enrollment, release promotion, renewal/recovery, production worker wiring and M2–M7 remain. The full product goal stays active.
+
 M1 full image input provenance and authenticated release, 2026-09-07:
 
 - Added format 2 manifests and the `packages/images` package. Image identity now includes the installer, service and SSH/sudo configuration, guest bundle, pinned artifacts, canonical artifact metadata and public trust. Sorted inventories exclude their derived metadata to avoid self-referential hashes. Complete-tree validation rejects omissions, extras, unsafe paths, symlinks and changed bytes.

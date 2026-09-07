@@ -90,6 +90,7 @@ export async function verifyImageInputs(directory: string, expectedManifestDiges
   return {
     manifest,
     inputs,
+    artifacts: pins,
     manifestDigest: expectedManifestDigest,
     checksumDigest: createHash('sha256')
       .update(checksums.join('\n') + '\n')
