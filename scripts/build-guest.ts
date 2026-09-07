@@ -106,6 +106,7 @@ await writeFile(join(destination, 'image.json'), JSON.stringify(manifest) + '\n'
 const files = [
   'install.sh',
   'sshd_config',
+  'guest-inspect.sudoers',
   'systemd/agent-cloud-enroll.service',
   'systemd/agent-cloud-proxy.service',
 ];

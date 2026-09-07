@@ -27,6 +27,17 @@
 
 ## Verification ledger
 
+M1 runtime readiness checkpoint, 2026-09-07:
+
+- Added `guestctl inspect --json` and a separate runtime certificate that forces exactly its sudo command. The probe user has no general sudo, Docker group membership or interactive certificate extensions. Inspection reports pinned component versions, daemon access, disk headroom, allocation-specific proxy health and Linux boot ID.
+- The controller rechecks provider VM/IP ownership, persisted image and keys before reading runtime evidence. Migration 0008 stores immutable per-operation signing attempts, with a 12-attempt ceiling. Credentials are cached for reuse and a database-backed cooldown survives worker restarts.
+- Create, reboot and power-on require fresh runtime evidence. Reboot/power-on wait for a new Linux boot ID. A 30-minute deadline starts at admission; fresh effects check it before submission, and completion checks database time again inside its transaction after SSH returns. Existing unknown effects remain reconcilable. Expiry preserves owned resources or cleans a definitively unused IP.
+- The different-model review found the deadline race; the fix has a regression that expires the operation during its SSH read. Queued-expiry tests cover both an empty allocation and an already-owned IP. Concurrent completion, unavailable components, ownership changes, identity mismatch, signing limits/restarts and reboot/power-on tests pass.
+- `pnpm check` passed 121 tests in 18 files, TypeScript checks and strict lint in session29425. Native PKI runtime policy passed in71057; existing SSH and enrollment smokes passed in97851. The full fresh Ubuntu VM smoke passed in46053, including restricted sudo denials, stopped Docker/socket, stopped proxy, a 32 MiB temporary guest state filesystem, recovery, old-boot waiting and actual reboot completion. Token scan: 135 files, 18,358,624 bytes, no matches. VM deleted; local VM inventory empty and ownership record absent. Image version/digest are recorded in `architecture/guest-runtime.md`.
+- Migration 0008 applied to development after stopping the owned API/worker. Restarted services passed the actual CLI/API/worker smoke for `vm_d527c4fb-11a0-4b5e-b0cf-dd6e7ebd75c2`, including deletion and cleanup. No cloud resources were created.
+
+Production worker configuration still does not enable live provisioning. Image snapshot sanitation, certificate renewal, explicit operator recovery, bounded Hetzner boot/cleanup and M2–M7 remain. These local results do not establish end-to-end customer application deployment. Remote CI for this checkpoint is pending.
+
 2026-09-06 local checkpoint:
 
 - TypeScript build and tooling/test typecheck pass. Strict typed ESLint passes.

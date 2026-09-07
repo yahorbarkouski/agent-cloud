@@ -110,6 +110,22 @@ export async function journalEffect(input: {
     const [stored] = await tx.select().from(operations).where(eq(operations.id, operation.id));
     if (!stored) throw new CloudError('internal_error', 'Operation disappeared before submission.');
     if (input.authorization === 'fresh') {
+      if (
+        provider.kind === 'hetzner' &&
+        ['machine.create', 'machine.reboot', 'machine.power_on'].includes(operation.kind)
+      ) {
+        const [deadline] = await tx
+          .select({
+            expired: sql<boolean>`${operations.createdAt} + interval '30 minutes' <= now()`,
+          })
+          .from(operations)
+          .where(eq(operations.id, operation.id));
+        if (!deadline || deadline.expired)
+          throw new CloudError(
+            'provider_rejected',
+            'The boot operation deadline expired before submission; submit a new operation.',
+          );
+      }
       const principal = await loadPrincipal(tx, operation.grantId);
       authorizeCommand(
         principal,

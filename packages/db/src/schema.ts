@@ -314,3 +314,26 @@ export const guestSigningAttempts = pgTable(
     ),
   ],
 );
+
+export const runtimeSigningAttempts = pgTable(
+  'runtime_signing_attempts',
+  {
+    accountId: text('account_id').notNull(),
+    allocationId: text('allocation_id').notNull(),
+    operationId: text('operation_id').notNull(),
+    sequence: integer('sequence').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.operationId, t.sequence] }),
+    foreignKey({
+      columns: [t.accountId, t.allocationId],
+      foreignColumns: [allocations.accountId, allocations.id],
+    }),
+    foreignKey({
+      columns: [t.accountId, t.operationId],
+      foreignColumns: [operations.accountId, operations.id],
+    }),
+    check('runtime_signing_attempt_budget', sql`${t.sequence} BETWEEN 1 AND 12`),
+  ],
+);

@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
-import { eq, isNull } from 'drizzle-orm';
+import { eq, isNull, sql } from 'drizzle-orm';
 import {
   guestImageSchema,
   newId,
@@ -91,6 +91,7 @@ async function scenario(fault: SimulationFault = { kind: 'none' }) {
   const { operation } = operationResponseSchema.parse(await response.json());
   const guest = {
     kind: 'enabled',
+    runtime: { check: () => Promise.resolve({ kind: 'waiting' }) },
     image,
     seal,
     enrollmentUrl: 'https://enrollment.example.test/guest/enroll',
@@ -222,3 +223,28 @@ it('compensates the owned IP after a definitive guest-create rejection', async (
   ).toHaveLength(0);
   expect(await fixture.connection.db.select().from(simulatedPrimaryIps)).toHaveLength(0);
 });
+
+it.each([false, true])(
+  'expires a queued create without renting a VM, with owned IP: %s',
+  async (withIp) => {
+    const test = await scenario();
+    if (withIp) {
+      await test.tick();
+      await test.tick();
+    }
+    await fixture.connection.db
+      .update(operations)
+      .set({ createdAt: sql`now() - interval '31 minutes'` })
+      .where(eq(operations.id, test.operation.id));
+    for (let i = 0; i < 6; i++) await test.tick();
+    expect(await test.state()).toMatchObject({ kind: 'failed' });
+    expect(test.render).not.toHaveBeenCalled();
+    expect(
+      (await test.history()).map((row) => providerCommandSchema.parse(row.command).kind),
+    ).toEqual(withIp ? ['create_primary_ip', 'delete_primary_ip'] : []);
+    expect(
+      await fixture.connection.db.select().from(allocations).where(isNull(allocations.retiredAt)),
+    ).toHaveLength(0);
+    expect(await fixture.connection.db.select().from(simulatedPrimaryIps)).toHaveLength(0);
+  },
+);

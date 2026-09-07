@@ -8,15 +8,21 @@ import { promisify } from 'node:util';
 import { setTimeout } from 'node:timers/promises';
 import { getRequestListener } from '@hono/node-server';
 import { z } from 'zod';
+import { eq } from 'drizzle-orm';
 import {
   guestImageSchema,
   guestManifestSchema,
   guestProofSchema,
+  operationResponseSchema,
+  type OperationId,
 } from '../packages/contracts/dist/index.js';
+import { machines, operations, machineRecord } from '../packages/db/src/index.js';
 import { createSigner, guestName } from '../packages/pki/dist/index.js';
 import { createGuestProbe } from '../packages/remote/dist/index.js';
 import { createApp } from '../apps/control/src/app.js';
 import { createEnrollmentService } from '../apps/control/src/guest-enrollment.js';
+import { createGuestReadiness } from '../apps/control/src/guest-readiness.js';
+import { advanceOperation } from '../apps/control/src/advance-operation.js';
 import { readPrivateFile } from '../apps/control/src/private-file.js';
 import { testDatabase } from '../tests/database.js';
 import { prepareEnrollmentFixture } from './support/enrollment-fixture.js';
@@ -167,6 +173,25 @@ try {
     enrollmentUrl: `https://host.orb.internal:${address.port}/guest/enroll`,
   });
   const probe = createGuestProbe();
+  const runtime = createGuestReadiness({ provider: fixture.provider, signer, probe });
+  const tick = (operationId: OperationId = fixture.operation.id) =>
+    advanceOperation({
+      connection: database.connection,
+      operationId,
+      provider: fixture.provider,
+      limits: fixture.limits,
+      guest: {
+        kind: 'enabled',
+        image,
+        seal: fixture.seal,
+        enrollmentUrl: fixture.bootstrap.spec.enrollmentUrl,
+        runtime,
+      },
+    });
+  const operationProgress = async (operationId: OperationId = fixture.operation.id) =>
+    (
+      await database.connection.db.select().from(operations).where(eq(operations.id, operationId))
+    )[0]?.progress;
   const enrollment = createEnrollmentService({
     connection: database.connection,
     seal: fixture.seal,
@@ -261,6 +286,93 @@ try {
     imageVersion: z.literal(image.version),
   });
   health.parse(JSON.parse(await vm(['curl', '--fail', '--silent', 'http://127.0.0.1:8081/ready'])));
+  progress('testing restricted runtime inspection and unhealthy services');
+  await assert.rejects(
+    vm([
+      '/usr/sbin/runuser',
+      '-u',
+      'agent-probe',
+      '--',
+      '/usr/bin/sudo',
+      '-n',
+      '--',
+      '/usr/bin/id',
+    ]),
+  );
+  await assert.rejects(
+    vm([
+      '/usr/sbin/runuser',
+      '-u',
+      'agent-probe',
+      '--',
+      '/usr/local/bin/guestctl',
+      'inspect',
+      '--json',
+    ]),
+  );
+  const runtimeCredential = await signer.issueRuntimeCredential(proof.allocationId);
+  const readRuntime = () =>
+    probe.readRuntime({
+      allocationId: proof.allocationId,
+      address: info.ip4,
+      credential: runtimeCredential,
+      trust: { kind: 'host_ca', publicKey: signer.trust.sshHostCa },
+    });
+  const firstRuntime = await readRuntime();
+  assert.equal(firstRuntime.checks.docker.kind, 'ok');
+  assert.equal(firstRuntime.checks.proxy.kind, 'ok');
+  await vm(['systemctl', 'stop', 'docker.service', 'docker.socket']);
+  try {
+    assert.equal((await readRuntime()).checks.docker.kind, 'unavailable');
+    await tick();
+    assert.partialDeepStrictEqual(await operationProgress(), {
+      kind: 'waiting_guest',
+      stage: 'runtime',
+    });
+  } finally {
+    await vm(['systemctl', 'start', 'docker.service']);
+  }
+  await vm(['systemctl', 'stop', 'agent-cloud-proxy.service']);
+  try {
+    assert.equal((await readRuntime()).checks.proxy.kind, 'unavailable');
+    await tick();
+    assert.partialDeepStrictEqual(await operationProgress(), {
+      kind: 'waiting_guest',
+      stage: 'runtime',
+    });
+  } finally {
+    await vm(['systemctl', 'start', 'agent-cloud-proxy.service']);
+  }
+  // Give only this owned VM's state directory a small temporary filesystem. Never fill a disk.
+  await vm(['cp', '-a', '/var/lib/agent-cloud', '/tmp/agent-cloud-runtime-state']);
+  let mounted = false;
+  try {
+    await vm([
+      'mount',
+      '-t',
+      'tmpfs',
+      '-o',
+      'size=32m,mode=0700',
+      'agent-cloud-runtime-smoke',
+      '/var/lib/agent-cloud',
+    ]);
+    mounted = true;
+    await vm(['cp', '-a', '/tmp/agent-cloud-runtime-state/.', '/var/lib/agent-cloud/']);
+    const limited = await readRuntime();
+    assert.equal(limited.checks.disk.kind, 'ok');
+    assert.ok(limited.checks.disk.availableBytes < 1024 ** 3);
+    await tick();
+    assert.partialDeepStrictEqual(await operationProgress(), {
+      kind: 'waiting_guest',
+      stage: 'runtime',
+    });
+  } finally {
+    if (mounted) await vm(['umount', '/var/lib/agent-cloud']);
+    await vm(['rm', '-rf', '/tmp/agent-cloud-runtime-state']);
+  }
+  await tick();
+  assert.partialDeepStrictEqual(await operationProgress(), { kind: 'succeeded' });
+  progress('runtime completion requires healthy Docker, proxy and disk headroom');
   // The server leaf is trusted, but a client without a certificate must fail the handshake.
   await assert.rejects(
     new Promise<void>((resolve, reject) => {
@@ -328,12 +440,46 @@ try {
   }
   process.stdout.write(JSON.stringify({ bootstrapScan: scan }) + '\n');
   assert.deepEqual(scan.matches, [], 'Bootstrap token remains in guest state.');
+  // A completed provider action alone is insufficient: the old boot must remain waiting.
+  const [machineRow] = await database.connection.db
+    .select()
+    .from(machines)
+    .where(eq(machines.id, fixture.operation.machineId));
+  if (!machineRow) throw new Error('Expected enrolled machine.');
+  const machine = machineRecord(machineRow);
+  const rebootResponse = await app.request(`/v1/machines/${machine.id}/actions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${fixture.account.token}`,
+      'Idempotency-Key': randomUUID(),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ kind: 'reboot', expectedVersion: machine.version }),
+  });
+  assert.equal(rebootResponse.status, 202);
+  const reboot = operationResponseSchema.parse(await rebootResponse.json()).operation;
+  for (let i = 0; i < 4; i++) await tick(reboot.id);
+  assert.partialDeepStrictEqual(await operationProgress(reboot.id), {
+    kind: 'waiting_guest',
+    stage: 'runtime',
+  });
   // Cloud-init stays disabled and installed identity survives a normal reboot.
   await command('orb', ['restart', owner.name], 120_000);
   assert.deepEqual(
     guestProofSchema.parse(JSON.parse(await vm(['/usr/local/bin/guestctl', 'identity', '--json']))),
     proof,
   );
+  for (let i = 0; i < 15; i++) {
+    await tick(reboot.id);
+    if (
+      z.object({ kind: z.literal('succeeded') }).safeParse(await operationProgress(reboot.id))
+        .success
+    )
+      break;
+    await setTimeout(1000);
+  }
+  assert.partialDeepStrictEqual(await operationProgress(reboot.id), { kind: 'succeeded' });
+  assert.notEqual((await readRuntime()).bootId, firstRuntime.bootId);
   assert.equal(
     (await vm(['systemctl', 'is-active', 'agent-cloud-proxy.service'])).trim(),
     'active',

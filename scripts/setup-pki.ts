@@ -37,7 +37,24 @@ try {
   const certificate = new X509Certificate(await readFile(join(destination, 'public/root_ca.crt')));
   if (certificate.fingerprint256 !== state.rootFingerprint)
     throw new Error('Existing PKI root disagrees with its recorded identity.');
-  process.stdout.write(JSON.stringify({ ...state, created: false }) + '\n');
+  let templatesChanged = false;
+  for (const name of ['guest-leaf.tpl', 'guest-ssh.tpl']) {
+    const path = join(destination, 'issuer/config', name);
+    const intended = await readFile(resolve('infra/pki', name));
+    if (!(await readFile(path)).equals(intended)) {
+      const temporary = path + '.' + randomBytes(8).toString('hex') + '.next';
+      try {
+        await writeFile(temporary, intended, { mode: 0o600, flag: 'wx' });
+        await rename(temporary, path);
+      } finally {
+        await rm(temporary, { force: true });
+      }
+      templatesChanged = true;
+    }
+  }
+  process.stdout.write(
+    JSON.stringify({ ...state, created: false, restartRequired: templatesChanged }) + '\n',
+  );
 } catch (error) {
   if (
     !(

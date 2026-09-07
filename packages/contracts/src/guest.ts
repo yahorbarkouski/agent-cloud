@@ -101,3 +101,39 @@ export const guestBootstrapFileSchema = z.strictObject({
   token: guestEnrollmentInputSchema.shape.token,
 });
 export type GuestBootstrapFile = z.infer<typeof guestBootstrapFileSchema>;
+
+const versionCheck = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('ok'), version: z.string().min(1).max(64) }),
+  z.strictObject({ kind: z.literal('unavailable') }),
+]);
+export const guestRuntimeSchema = z.strictObject({
+  version: z.literal(1),
+  proof: guestProofSchema,
+  manifest: guestManifestSchema,
+  architecture: architectureSchema,
+  bootId: z.uuid(),
+  checks: z.strictObject({
+    node: versionCheck,
+    docker: versionCheck,
+    compose: versionCheck,
+    caddy: versionCheck,
+    step: versionCheck,
+    disk: z.discriminatedUnion('kind', [
+      z.strictObject({
+        kind: z.literal('ok'),
+        availableBytes: z.int().nonnegative(),
+        totalBytes: z.int().positive(),
+      }),
+      z.strictObject({ kind: z.literal('unavailable') }),
+    ]),
+    proxy: z.discriminatedUnion('kind', [
+      z.strictObject({
+        kind: z.literal('ok'),
+        allocationId: allocationIdSchema,
+        imageVersion: guestImageSchema.shape.version,
+      }),
+      z.strictObject({ kind: z.literal('unavailable') }),
+    ]),
+  }),
+});
+export type GuestRuntime = z.infer<typeof guestRuntimeSchema>;

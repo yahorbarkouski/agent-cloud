@@ -73,7 +73,7 @@ pnpm smoke:enrollment
 pnpm pki:down
 ```
 
-The CA listens only on `127.0.0.1:9449`. Its state lives in ignored, owner-only `.local/pki`; repeated setup preserves its identity. The encrypted root key stays outside the container mount. The control signer receives a provisioner credential and public trust, never the CA's private signing keys. These are development keys, not a production recovery setup.
+The CA listens only on `127.0.0.1:9449`. Its state lives in ignored, owner-only `.local/pki`; repeated setup preserves its identity and updates the managed certificate templates. When setup returns `restartRequired: true`, run `pnpm pki:down` followed by `pnpm pki:up` to load them. The encrypted root key stays outside the container mount. The control signer receives a provisioner credential and public trust, never the CA's private signing keys. These are development keys, not a production recovery setup.
 
 The PKI smoke makes an actual TLS connection and checks allocation/hostname rejection. The SSH smoke starts one disposable local OpenSSH container and checks pinned host keys, CA trust, allocation-scoped user certificates and guest evidence. It removes the container and generated keys afterward. It does not boot a guest VM or deploy an application. The enrollment smoke composes admission, the provider journal, encrypted bootstrap, HTTP enrollment, real Smallstep and OpenSSH. It verifies the issued host certificate over SSH and TLS certificate over HTTPS, replay and wrong-key rejection. Its provider observations are local fixtures, so it still does not prove a cloud VM boot. CI runs all three smokes without cloud credentials.
 
@@ -84,7 +84,7 @@ pnpm build:guest
 pnpm smoke:guest
 ```
 
-The image build stages checksum-verified public inputs in `.local/guest-build`. The VM smoke records one owned local machine in `.local/guest-image-machine.json` and deletes it after successful enrollment, secret scanning and reboot checks. A failure preserves that machine for inspection. Read its recorded name, inspect it with `orb info`, then delete exactly that VM with `orb delete --force <recorded-name>` and remove the record before starting fresh. No Hetzner resource is created. See [guest image architecture](docs/architecture/guest-image.md) for the proof boundaries and unfinished snapshot/renewal work.
+The image build stages checksum-verified public inputs in `.local/guest-build`. The VM smoke records one owned local machine in `.local/guest-image-machine.json` and deletes it after successful enrollment, secret scanning and reboot checks. It also verifies restricted runtime inspection and keeps creation pending with stopped Docker, a stopped proxy or insufficient disk space. Reboot completion requires a changed Linux boot ID. A failure preserves that machine for inspection. Read its recorded name, inspect it with `orb info`, then delete exactly that VM with `orb delete --force <recorded-name>` and remove the record before starting fresh. No Hetzner resource is created. See [guest image architecture](docs/architecture/guest-image.md) and [runtime readiness](docs/architecture/guest-runtime.md) for proof boundaries and unfinished activation/renewal work.
 
 ## What is enforced
 

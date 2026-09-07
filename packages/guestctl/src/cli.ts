@@ -3,6 +3,7 @@ import { guestProofSchema } from '@agent-cloud/contracts';
 import { enrollGuest } from './enrollment.js';
 import { readOwnedFile } from './files.js';
 import { guestSystem } from './system.js';
+import { inspectRuntime } from './inspect.js';
 
 const configuration = {
   state: '/var/lib/agent-cloud',
@@ -13,7 +14,11 @@ const configuration = {
 };
 try {
   const [command, format, ...extra] = process.argv.slice(2);
-  if (format !== '--json' || extra.length || !['identity', 'enroll'].includes(command ?? ''))
+  if (
+    format !== '--json' ||
+    extra.length ||
+    !['identity', 'enroll', 'inspect'].includes(command ?? '')
+  )
     throw new Error('Unsupported guest command.');
   if (command === 'identity') {
     const proof = guestProofSchema.parse(
@@ -21,8 +26,11 @@ try {
     );
     process.stdout.write(JSON.stringify(proof) + '\n');
   } else {
-    if (process.getuid?.() !== 0) throw new Error('Enrollment requires root.');
-    const result = await enrollGuest({ configuration, system: guestSystem(configuration) });
+    if (process.getuid?.() !== 0) throw new Error('Guest administration requires root.');
+    const result =
+      command === 'inspect'
+        ? await inspectRuntime(configuration)
+        : await enrollGuest({ configuration, system: guestSystem(configuration) });
     process.stdout.write(JSON.stringify(result) + '\n');
   }
 } catch {

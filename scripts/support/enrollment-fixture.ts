@@ -74,7 +74,13 @@ export async function prepareEnrollmentFixture(input: {
       operationId: operation.id,
       provider,
       limits,
-      guest: { kind: 'enabled', image, seal, enrollmentUrl },
+      guest: {
+        kind: 'enabled',
+        image,
+        seal,
+        enrollmentUrl,
+        runtime: { check: () => Promise.resolve({ kind: 'waiting' }) },
+      },
     });
   const [allocation] = await db
     .select()
@@ -91,6 +97,7 @@ export async function prepareEnrollmentFixture(input: {
     seal,
   });
   return {
+    account,
     provider,
     seal,
     limits,

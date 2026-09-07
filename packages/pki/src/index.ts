@@ -53,6 +53,9 @@ export function guestName(allocationId: AllocationId): string {
 export function probePrincipal(allocationId: AllocationId): string {
   return `probe-${allocationIdSchema.parse(allocationId)}`;
 }
+export function runtimePrincipal(allocationId: AllocationId): string {
+  return `runtime-${allocationIdSchema.parse(allocationId)}`;
+}
 
 export interface SignerConfiguration {
   binary: string;
@@ -64,7 +67,8 @@ export interface SignerConfiguration {
   sshUserCa: string;
   keygenBinary?: string;
 }
-export interface ProbeCredential {
+export interface ProbeCredential<K extends 'probe' | 'runtime' = 'probe'> {
+  kind: K;
   allocationId: AllocationId;
   privateKey: string;
   certificate: string;
@@ -135,11 +139,15 @@ export function createSigner(configuration: SignerConfiguration) {
   async function signSsh(input: {
     allocationId: AllocationId;
     publicKey: string;
-    kind: 'host' | 'probe';
+    kind: 'host' | 'probe' | 'runtime';
   }) {
     const key = guestEnrollmentInputSchema.shape.sshHostPublicKey.parse(input.publicKey);
     const principal =
-      input.kind === 'host' ? guestName(input.allocationId) : probePrincipal(input.allocationId);
+      input.kind === 'host'
+        ? guestName(input.allocationId)
+        : input.kind === 'runtime'
+          ? runtimePrincipal(input.allocationId)
+          : probePrincipal(input.allocationId);
     return inWorkspace(async (directory, run, flags) => {
       const keyPath = join(directory, 'identity.pub');
       await writeFile(keyPath, key + '\n', { flag: 'wx', mode: 0o600 });
@@ -216,7 +224,10 @@ export function createSigner(configuration: SignerConfiguration) {
       return chain;
     });
   }
-  async function issueProbeCredential(allocationId: AllocationId): Promise<ProbeCredential> {
+  async function issueCredential<K extends 'probe' | 'runtime'>(
+    allocationId: AllocationId,
+    kind: K,
+  ): Promise<ProbeCredential<K>> {
     allocationIdSchema.parse(allocationId);
     return inWorkspace(async (directory) => {
       const path = join(directory, 'probe');
@@ -231,18 +242,20 @@ export function createSigner(configuration: SignerConfiguration) {
         throw new CloudError('provider_unavailable', 'Probe key generation failed.', true);
       }
       const signed = await signSsh({
-        kind: 'probe',
+        kind,
         allocationId,
         publicKey: (await readFile(path + '.pub', 'utf8')).trim(),
       });
-      return { allocationId, privateKey: await readFile(path, 'utf8'), ...signed };
+      return { kind, allocationId, privateKey: await readFile(path, 'utf8'), ...signed };
     });
   }
   return Object.freeze({
     trust: Object.freeze({ tlsRoot: root.toString(), sshHostCa: hostCa, sshUserCa: userCa }),
     signHost: async (input: { allocationId: AllocationId; publicKey: string }) =>
       (await signSsh({ ...input, kind: 'host' })).certificate,
-    issueProbeCredential,
+    issueProbeCredential: (allocationId: AllocationId) => issueCredential(allocationId, 'probe'),
+    issueRuntimeCredential: (allocationId: AllocationId) =>
+      issueCredential(allocationId, 'runtime'),
     validateTlsRequest,
     signTls,
   });

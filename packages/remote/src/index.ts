@@ -5,7 +5,12 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { z } from 'zod';
-import { CloudError, guestImageSchema, guestProofSchema } from '@agent-cloud/contracts';
+import {
+  CloudError,
+  guestImageSchema,
+  guestProofSchema,
+  guestRuntimeSchema,
+} from '@agent-cloud/contracts';
 import type { AllocationId } from '@agent-cloud/contracts';
 import { guestName, type ProbeCredential } from '@agent-cloud/pki';
 
@@ -14,13 +19,34 @@ type GuestTarget = {
   address: string;
   port?: number;
   trust: { kind: 'pinned_key'; publicKey: string } | { kind: 'host_ca'; publicKey: string };
-  credential: ProbeCredential;
+  credential: ProbeCredential<'probe' | 'runtime'>;
 };
+type IdentityTarget = Omit<GuestTarget, 'credential'> & { credential: ProbeCredential };
+type RuntimeTarget = Omit<GuestTarget, 'credential' | 'trust'> & {
+  credential: ProbeCredential<'runtime'>;
+  trust: { kind: 'host_ca'; publicKey: string };
+};
+
+function readGuestJson(output: string): unknown {
+  try {
+    return JSON.parse(output);
+  } catch {
+    throw new CloudError('provider_unavailable', 'Guest returned malformed JSON evidence.', true);
+  }
+}
 
 /** Internal identity proof only. The caller supplies an address from owned provider observations. */
 export function createGuestProbe(config: { sshBinary?: string } = {}) {
   const ssh = resolve(config.sshBinary ?? '/usr/bin/ssh');
-  async function readIdentity(input: GuestTarget) {
+  async function read(input: GuestTarget, purpose: 'probe' | 'runtime') {
+    if (
+      input.credential.kind !== purpose ||
+      (purpose === 'runtime' && input.trust.kind !== 'host_ca')
+    )
+      throw new CloudError(
+        'permission_denied',
+        'Guest read needs its matching credential purpose and trust.',
+      );
     const alias = guestName(input.allocationId);
     const address = z
       .string()
@@ -48,9 +74,9 @@ export function createGuestProbe(config: { sshBinary?: string } = {}) {
         const { stdout } = await promisify(execFile)(binary, args, {
           cwd: directory,
           env: { PATH: '/usr/bin:/bin', LANG: 'C' },
-          timeout: 15_000,
+          timeout: input.credential.kind === 'runtime' ? 30_000 : 15_000,
           killSignal: 'SIGKILL',
-          maxBuffer: 16 * 1024,
+          maxBuffer: 32 * 1024,
         });
         return stdout;
       } catch {
@@ -123,32 +149,45 @@ export function createGuestProbe(config: { sshBinary?: string } = {}) {
         '-l',
         'agent-probe',
         address,
-        '/usr/local/bin/guestctl identity --json',
+        input.credential.kind === 'runtime'
+          ? '/usr/bin/sudo -n -- /usr/local/bin/guestctl inspect --json'
+          : '/usr/local/bin/guestctl identity --json',
       ];
-      const output = await run(ssh, args);
-      let proof;
-      try {
-        proof = guestProofSchema.parse(JSON.parse(output));
-      } catch {
-        throw new CloudError(
-          'provider_unavailable',
-          'Guest returned invalid identity evidence.',
-          true,
-        );
-      }
-      if (
-        proof.allocationId !== input.allocationId ||
-        (input.trust.kind === 'pinned_key' && proof.sshHostPublicKey !== trust)
-      )
-        throw new CloudError(
-          'provider_unavailable',
-          'Guest identity evidence disagrees with the allocation.',
-          true,
-        );
-      return proof;
+      return await run(ssh, args);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
   }
-  return { readIdentity };
+  async function readIdentity(input: IdentityTarget) {
+    const output = await read(input, 'probe');
+    const parsed = guestProofSchema.safeParse(readGuestJson(output));
+    if (!parsed.success)
+      throw new CloudError(
+        'provider_unavailable',
+        'Guest returned invalid identity evidence.',
+        true,
+      );
+    const proof = parsed.data;
+    if (
+      proof.allocationId !== input.allocationId ||
+      (input.trust.kind === 'pinned_key' && proof.sshHostPublicKey !== input.trust.publicKey)
+    )
+      throw new CloudError(
+        'provider_unavailable',
+        'Guest identity evidence disagrees with the allocation.',
+        true,
+      );
+    return proof;
+  }
+  async function readRuntime(input: RuntimeTarget) {
+    const parsed = guestRuntimeSchema.safeParse(readGuestJson(await read(input, 'runtime')));
+    if (!parsed.success || parsed.data.proof.allocationId !== input.allocationId)
+      throw new CloudError(
+        'provider_unavailable',
+        'Guest returned invalid runtime evidence.',
+        true,
+      );
+    return parsed.data;
+  }
+  return { readIdentity, readRuntime };
 }

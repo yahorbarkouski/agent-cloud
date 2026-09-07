@@ -6,7 +6,12 @@ import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { newId } from '../packages/contracts/dist/index.js';
-import { createSigner, guestName, probePrincipal } from '../packages/pki/dist/index.js';
+import {
+  createSigner,
+  guestName,
+  probePrincipal,
+  runtimePrincipal,
+} from '../packages/pki/dist/index.js';
 import { readPrivateFile } from '../apps/control/src/private-file.js';
 import { inspectIssuedTls } from '../packages/pki/dist/tls-certificate.js';
 
@@ -41,8 +46,10 @@ try {
   const publicKey = (await readFile(sshKeyPath + '.pub', 'utf8')).trim();
   const host = await signer.signHost({ allocationId, publicKey });
   const probe = (await signer.issueProbeCredential(allocationId)).certificate;
+  const runtime = (await signer.issueRuntimeCredential(allocationId)).certificate;
   await writeFile(join(scratch, 'host-cert.pub'), host + '\n', { mode: 0o600 });
   await writeFile(join(scratch, 'probe-cert.pub'), probe + '\n', { mode: 0o600 });
+  await writeFile(join(scratch, 'runtime-cert.pub'), runtime + '\n', { mode: 0o600 });
   const hostInspection = await run('/usr/bin/ssh-keygen', [
     '-L',
     '-f',
@@ -57,6 +64,22 @@ try {
   assert.ok(hostInspection.stdout.includes(name));
   assert.match(probeInspection.stdout, /user certificate/);
   assert.ok(probeInspection.stdout.includes(probePrincipal(allocationId)));
+  assert.ok(
+    probeInspection.stdout.includes('force-command /usr/local/bin/guestctl identity --json'),
+  );
+  const runtimeInspection = await run('/usr/bin/ssh-keygen', [
+    '-L',
+    '-f',
+    join(scratch, 'runtime-cert.pub'),
+  ]);
+  assert.match(runtimeInspection.stdout, /user certificate/);
+  assert.ok(runtimeInspection.stdout.includes(runtimePrincipal(allocationId)));
+  assert.ok(
+    runtimeInspection.stdout.includes(
+      'force-command /usr/bin/sudo -n -- /usr/local/bin/guestctl inspect --json',
+    ),
+  );
+  assert.match(runtimeInspection.stdout, /Extensions:\s+\(none\)/);
   await run(step, [
     'certificate',
     'create',
@@ -190,6 +213,7 @@ try {
       ok: true,
       sshHostCertificate: 'issued and inspected',
       sshProbeCertificate: 'issued and inspected',
+      sshRuntimeCertificate: 'issued with fixed privileged inspection command and no extensions',
       tls: 'verified real connection',
       wrongAllocation: 'rejected before signing',
       wrongTlsName: 'rejected',

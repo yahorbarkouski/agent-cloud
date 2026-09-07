@@ -3,5 +3,5 @@
   "keyId": {{ toJson .KeyID }},
   "principals": {{ toJson .Principals }},
   "extensions": {},
-  "criticalOptions": {{ if eq .Type "user" }}{"force-command": "/usr/local/bin/guestctl identity --json"}{{ else }}{}{{ end }}
+  "criticalOptions": {{ if eq .Type "user" }}{"force-command": {{ if hasPrefix "runtime-alloc_" .KeyID }}"/usr/bin/sudo -n -- /usr/local/bin/guestctl inspect --json"{{ else }}"/usr/local/bin/guestctl identity --json"{{ end }}}{{ else }}{}{{ end }}
 }

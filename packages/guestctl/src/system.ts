@@ -1,7 +1,7 @@
 import type { Dirent } from 'node:fs';
 import { chmod, chown, copyFile, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { probePrincipal } from '@agent-cloud/pki';
+import { probePrincipal, runtimePrincipal } from '@agent-cloud/pki';
 import { atomicWrite, ensureDirectory, isMissing } from './files.js';
 import type { EnrollmentSystem } from './enrollment.js';
 import { runTool } from './tools.js';
@@ -24,7 +24,7 @@ export function guestSystem(configuration: GuestConfiguration): EnrollmentSystem
       );
       await atomicWrite(
         join(configuration.state, 'probe-principals'),
-        probePrincipal(proof.allocationId) + '\n',
+        probePrincipal(proof.allocationId) + '\n' + runtimePrincipal(proof.allocationId) + '\n',
         0o644,
       );
       // Stopping Ubuntu's socket unit may remove its sshd runtime directory.

@@ -11,6 +11,7 @@ import {
   operationIntentSchema,
   networkProfileSchema,
   guestIdentitySchema,
+  operationProgressSchema,
   isOperationTerminal,
   type Operation,
   type OperationId,
@@ -20,6 +21,7 @@ import {
   type Failure,
   type GuestImage,
   type ProviderCommand,
+  type GuestVerification,
 } from '@agent-cloud/contracts';
 import {
   operations,
@@ -38,6 +40,7 @@ import {
 import type { Config } from './config.js';
 import type { BootstrapSeal } from './bootstrap-seal.js';
 import { prepareGuestBootstrap } from './guest-bootstrap.js';
+import type { GuestReadiness } from './guest-readiness.js';
 import { journalEffect, resolveEffect, setProgress, type Attempt } from './effect-journal.js';
 import {
   effectLabels,
@@ -97,9 +100,32 @@ async function complete(input: {
   operation: Operation;
   machine: Machine;
   server: ProviderServer | null;
+  verification?: Extract<GuestVerification, { kind: 'ssh' }>;
 }) {
   const { db, operation, machine, server } = input;
   await db.transaction(async (tx) => {
+    if (input.verification) {
+      const [current] = await tx
+        .select({
+          progress: operations.progress,
+          expired: sql<boolean>`${operations.createdAt} + interval '30 minutes' <= now()`,
+        })
+        .from(operations)
+        .where(eq(operations.id, operation.id))
+        .for('update');
+      if (!current) throw new CloudError('internal_error', 'Runtime operation disappeared.');
+      const progress = operationProgressSchema.parse(current.progress);
+      if (
+        progress.kind !== 'waiting_guest' ||
+        progress.stage !== 'runtime' ||
+        progress.serverId !== server?.id
+      )
+        return;
+      if (current.expired) {
+        await setProgress(tx, operation, { kind: 'blocked', reason: 'guest_deadline_exceeded' });
+        return;
+      }
+    }
     const [allocation] = await tx
       .select()
       .from(allocations)
@@ -140,6 +166,11 @@ async function complete(input: {
       if (!stored) throw new CloudError('internal_error', 'Operation disappeared while verifying.');
       const command = lifecycleCommandSchema.parse(stored.command);
       const size = command.kind === 'resize' ? command.size : machine.spec.size;
+      const guestVerification: GuestVerification =
+        machine.provider === 'simulated'
+          ? { kind: 'simulated', verifiedAt: new Date().toISOString() }
+          : (input.verification ??
+            (machine.state.kind === 'allocated' ? machine.state.guest : { kind: 'pending' }));
       await tx
         .update(allocations)
         .set({
@@ -162,10 +193,7 @@ async function complete(input: {
             allocationId: allocationIdSchema.parse(allocation.id),
             serverId: server.id,
             power: server.power,
-            guest:
-              machine.provider === 'simulated'
-                ? { kind: 'simulated', verifiedAt: new Date().toISOString() }
-                : { kind: 'pending' },
+            guest: guestVerification,
           },
         })
         .where(eq(machines.id, machine.id));
@@ -182,7 +210,8 @@ async function complete(input: {
       event: 'operation.succeeded',
       details: {
         machineId: machine.id,
-        verification: machine.provider === 'simulated' ? 'simulated' : 'provider',
+        verification:
+          machine.provider === 'simulated' ? 'simulated' : input.verification ? 'ssh' : 'provider',
       },
     });
   });
@@ -190,7 +219,13 @@ async function complete(input: {
 
 export type GuestProvisioning =
   | { kind: 'disabled' }
-  | { kind: 'enabled'; image: GuestImage; seal: BootstrapSeal; enrollmentUrl: string };
+  | {
+      kind: 'enabled';
+      image: GuestImage;
+      seal: BootstrapSeal;
+      enrollmentUrl: string;
+      runtime: GuestReadiness;
+    };
 
 type Work = {
   db: Database;
@@ -203,6 +238,24 @@ type Work = {
   resources: OwnedResource[];
   guest: GuestProvisioning;
 };
+
+async function verifyRuntime(work: Work) {
+  if (work.guest.kind !== 'enabled') {
+    await setProgress(work.db, work.operation, { kind: 'blocked', reason: 'guest_unreachable' });
+    return;
+  }
+  const decision = await work.guest.runtime.check(work);
+  switch (decision.kind) {
+    case 'waiting':
+      return;
+    case 'blocked':
+      await setProgress(work.db, work.operation, { kind: 'blocked', reason: decision.reason });
+      return;
+    case 'ready':
+      await complete({ ...work, server: decision.server, verification: decision.verification });
+      return;
+  }
+}
 function effectOf(history: Attempt[], kind: string) {
   return history.find((row) => {
     const command = providerCommandSchema.parse(row.command);
@@ -434,6 +487,7 @@ async function advanceLocked(
           serverId: resolution.observation.server.id,
           stage,
         });
+        await verifyRuntime(work);
         return;
       }
       await complete({ ...work, server: resolution.observation.server });
@@ -453,9 +507,19 @@ async function advanceLocked(
         throw new CloudError('internal_error', 'Effect was not resolved.');
       if (lifecycle.kind === 'destroy') {
         if (await cleanupIp(work)) await complete({ ...work, server: null });
-      } else if (resolution.observation.kind === 'server')
-        await complete({ ...work, server: resolution.observation.server });
-      else throw new CloudError('internal_error', 'Machine operation has no verified server.');
+      } else if (resolution.observation.kind === 'server') {
+        if (
+          provider.kind === 'hetzner' &&
+          (lifecycle.kind === 'reboot' || lifecycle.kind === 'power_on')
+        ) {
+          await setProgress(db, operation, {
+            kind: 'waiting_guest',
+            serverId: resolution.observation.server.id,
+            stage: 'runtime',
+          });
+          await verifyRuntime(work);
+        } else await complete({ ...work, server: resolution.observation.server });
+      } else throw new CloudError('internal_error', 'Machine operation has no verified server.');
       return;
     }
     if (!serverResource || !allocation.serverId)

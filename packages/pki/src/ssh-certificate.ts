@@ -15,7 +15,7 @@ function fingerprint(publicKey: string) {
 export function inspectIssuedSsh(
   value: unknown,
   expected: {
-    kind: 'host' | 'probe';
+    kind: 'host' | 'probe' | 'runtime';
     key: string;
     ca: string;
     principal: string;
@@ -34,7 +34,13 @@ export function inspectIssuedSsh(
     CriticalOptions:
       expected.kind === 'host'
         ? z.strictObject({})
-        : z.strictObject({ 'force-command': z.literal('/usr/local/bin/guestctl identity --json') }),
+        : z.strictObject({
+            'force-command': z.literal(
+              expected.kind === 'runtime'
+                ? '/usr/bin/sudo -n -- /usr/local/bin/guestctl inspect --json'
+                : '/usr/local/bin/guestctl identity --json',
+            ),
+          }),
     Extensions: z.strictObject({}),
   });
   const result = schema.safeParse(value);

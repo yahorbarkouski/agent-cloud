@@ -84,6 +84,9 @@ export const operationProgressSchema = z.discriminatedUnion('kind', [
       'duplicate_provider_resources',
       'provider_resource_mismatch',
       'guest_unreachable',
+      'guest_identity_mismatch',
+      'guest_deadline_exceeded',
+      'guest_signing_exhausted',
     ]),
   }),
   z.object({ kind: z.literal('succeeded'), completedAt: z.iso.datetime() }),
@@ -108,8 +111,15 @@ export const powerSchema = z.enum(['running', 'off', 'starting', 'stopping', 'un
 export const guestVerificationSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('pending') }),
   z.object({ kind: z.literal('simulated'), verifiedAt: z.iso.datetime() }),
-  z.object({ kind: z.literal('ssh'), verifiedAt: z.iso.datetime(), imageVersion: z.string() }),
+  z.object({
+    kind: z.literal('ssh'),
+    verifiedAt: z.iso.datetime(),
+    imageVersion: z.string(),
+    manifestDigest: z.string().regex(/^[0-9a-f]{64}$/),
+    bootId: z.uuid(),
+  }),
 ]);
+export type GuestVerification = z.infer<typeof guestVerificationSchema>;
 
 export const machineStateSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('pending') }),

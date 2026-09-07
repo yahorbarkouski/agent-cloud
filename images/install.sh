@@ -33,6 +33,8 @@ COMMAND
 chmod 0755 /usr/local/bin/guestctl
 if ! id agent-probe >/dev/null 2>&1; then useradd --system --create-home --home-dir /var/lib/agent-probe --shell /bin/sh agent-probe; fi
 if ! id agent-proxy >/dev/null 2>&1; then useradd --system --no-create-home --home-dir /var/lib/agent-cloud-proxy --shell /usr/sbin/nologin agent-proxy; fi
+install -m 0440 "$image_input/guest-inspect.sudoers" /etc/sudoers.d/agent-cloud-inspect
+visudo -cf /etc/sudoers.d/agent-cloud-inspect
 install -m 0644 "$image_input"/systemd/*.service /etc/systemd/system/
 install -d -m 0755 /etc/docker
 cat > /etc/docker/daemon.json <<'DOCKER'

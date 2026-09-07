@@ -137,6 +137,7 @@ async function admittedGuest() {
       .fn<Signer['issueProbeCredential']>()
       .mockImplementation((allocationId) =>
         Promise.resolve({
+          kind: 'probe',
           allocationId,
           certificate: 'fixture-probe',
           privateKey: 'fixture-private-key',
@@ -145,7 +146,10 @@ async function admittedGuest() {
       ),
     signHost: vi.fn<Signer['signHost']>().mockResolvedValue('fixture-host-cert'),
     signTls: vi.fn<Signer['signTls']>().mockResolvedValue('fixture-tls-cert'),
-  } satisfies Signer;
+  } satisfies Pick<
+    Signer,
+    'trust' | 'validateTlsRequest' | 'issueProbeCredential' | 'signHost' | 'signTls'
+  >;
   const probe = { readIdentity: vi.fn().mockResolvedValue(proof) };
   const ports = { connection: fixture.connection, provider, seal, signer, probe };
   const service = createEnrollmentService(ports);
