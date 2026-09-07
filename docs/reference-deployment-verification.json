@@ -1,0 +1,117 @@
+{
+  "scenario": "Internal identity deploy/update/persistence/HTTPS/cleanup",
+  "sourceCommit": "4d2bffa0495ddc9438289fef359fe43e90012fee",
+  "linuxCi": {
+    "id": 34148449714,
+    "result": "passed"
+  },
+  "localEvidence": "pnpm smoke:reference: actual CLI/API/native SSH/systemd/Compose on owned Ubuntu VM, local Caddy CA, update preserves count; VM/DB removed",
+  "live": {
+    "owner": "63cbe179-f25b-4729-8469-ae6947664b47",
+    "startedAt": "2026-09-07T17:42:02.881Z",
+    "verifiedAt": "2026-09-07T17:48:17.604Z",
+    "cleanedAt": "2026-09-07T17:50:59.132Z",
+    "machineId": "vm_eaad176f-a39d-4869-9139-8336f53265f3",
+    "allocationId": "alloc_19fce871-db60-4249-8bd8-c957adf60260",
+    "serverId": "165001229",
+    "buildId": "8d231356-5482-459c-86ad-ad05a9992d95",
+    "imageManifestDigest": "e0fd042bcd031aef5be69a061bd24460dde80e346e16d04a857723b360ea3c2e",
+    "applicationUrl": "https://acld-8336f53265f3.116-203-81-205.sslip.io",
+    "urlStatus": "VM destroyed after verification; URL is historical and must not be used as a current service",
+    "checks": {
+      "at": "2026-09-07T17:48:17.604Z",
+      "publicHttps": true,
+      "cliDisconnected": true,
+      "freshStatusAndLogs": true,
+      "replayPreservedData": true,
+      "update": {
+        "revision": "2",
+        "count": "1"
+      }
+    },
+    "resources": {
+      "servers": 0,
+      "ips": 0,
+      "snapshots": 0,
+      "firewalls": 0,
+      "keys": 0
+    },
+    "sqlReservations": {
+      "allocations": 0,
+      "resources": 0,
+      "image_builds": 0
+    },
+    "budget": {
+      "currency": "USD",
+      "imageVmGrossMicros": 120000,
+      "customerVmGrossMicros": 60000,
+      "snapshotMonthlyGrossMicros": 1000000
+    },
+    "costEstimate": {
+      "currency": "USD",
+      "imageVmIpMicros": 55596,
+      "applicationVmIpMicros": 27798,
+      "method": "One-hour minimum per VM and IPv4; both image VMs and the application VM existed for less than one hour. Snapshot storage excluded; not an invoice."
+    },
+    "localCleanup": {
+      "processes": "stopped and confirmed absent",
+      "database": "privately archived and dropped"
+    }
+  },
+  "cleanupIncident": {
+    "symptom": "Destroy briefly reported provider_resource_mismatch after server absence, then completed through normal reconciliation with one delete request.",
+    "events": [
+      {
+        "event": "cleanup.admitted",
+        "at": "2026-09-07T17:48:17.901Z",
+        "details": {
+          "grantId": "grant_5be7882b-686d-4961-a87c-be6bee078a55",
+          "allocationId": "alloc_19fce871-db60-4249-8bd8-c957adf60260",
+          "allowDataLoss": true,
+          "expectedVersion": 2,
+          "sourceOperationId": "op_9e80d5d4-30ea-4de3-b094-b0c537bf290e"
+        }
+      },
+      {
+        "event": "effect.resolved",
+        "at": "2026-09-07T17:48:19.297Z",
+        "details": {
+          "result": {
+            "kind": "confirmed",
+            "observation": {
+              "kind": "absent",
+              "resource": {
+                "id": "165001229",
+                "kind": "server"
+              }
+            }
+          },
+          "attemptId": "att_de31105e-a184-45fc-9474-816596dec209"
+        }
+      },
+      {
+        "event": "operation.blocked",
+        "at": "2026-09-07T17:48:19.369Z",
+        "details": {
+          "kind": "blocked",
+          "reason": "provider_resource_mismatch"
+        }
+      },
+      {
+        "event": "cleanup.completed",
+        "at": "2026-09-07T17:49:00.040Z",
+        "details": {
+          "allocationId": "alloc_19fce871-db60-4249-8bd8-c957adf60260",
+          "sourceOperationId": "op_9e80d5d4-30ea-4de3-b094-b0c537bf290e"
+        }
+      }
+    ],
+    "correction": "Locally reproduced stale owned IP assignment; wait without deleting or releasing reservations when the assigned server is already recorded absent in the same allocation. Foreign/mismatched assignments remain blocked.",
+    "correctionVerification": "Focused cleanup checks and full source check passed (455 tests, typecheck, lint); bounded independent review found no blockers. No extra paid rerun."
+  },
+  "limitations": [
+    "Internal root identity only; customer OAuth and general SSH remain unfinished.",
+    "Live public HTTPS/application proof passed on source 4d2bffa. The cleanup classification correction is locally verified separately.",
+    "No protected backup/isolated application restore claim."
+  ]
+}

@@ -630,6 +630,42 @@ it('honors persisted retry exhaustion and still observes authoritative external 
   await absent();
 });
 
+it('waits for an owned IP assignment to disappear after its server is authoritatively absent', async () => {
+  const created = await create();
+  await until(created, 'succeeded');
+  const [row] = await fixture.connection.db.select().from(simulatedPrimaryIps);
+  if (!row) throw new Error('Missing IP.');
+  const stale = providerPrimaryIpSchema.parse(row.value);
+  let lagging = true;
+  class LaggingAssignment extends SimulatedProvider {
+    override async getPrimaryIp(input: { primaryIpId: string }) {
+      const current = await super.getPrimaryIp(input);
+      return current ?? (lagging && input.primaryIpId === stale.id ? stale : null);
+    }
+  }
+  const lagged = new LaggingAssignment({ db: fixture.connection.db });
+  const cleanup = await destroy(created);
+  for (let count = 0; count < 5; count++) await tick(cleanup, lagged);
+  expect((await read(cleanup)).progress).toEqual({
+    kind: 'verifying',
+    resource: { kind: 'primary_ip', id: stale.id },
+  });
+  expect(
+    (await history()).filter((row) => providerCommandSchema.parse(row.command).kind === 'destroy'),
+  ).toHaveLength(1);
+  expect(
+    (await history()).filter(
+      (row) => providerCommandSchema.parse(row.command).kind === 'delete_primary_ip',
+    ),
+  ).toHaveLength(0);
+  expect(
+    await fixture.connection.db.select().from(allocations).where(isNull(allocations.retiredAt)),
+  ).toHaveLength(1);
+  lagging = false;
+  await until(cleanup, 'succeeded', lagged);
+  await absent();
+});
+
 it('blocks deleting a VM whose current attached IP belongs elsewhere', async () => {
   const created = await create();
   await until(created, 'succeeded');

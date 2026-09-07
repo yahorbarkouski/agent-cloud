@@ -130,12 +130,24 @@ async function advance(work: CleanupWork) {
       await recordAbsence(db, allocation, ref);
       return;
     }
-    if (
-      observed.id !== ref.id ||
-      !matchesLabels(observed.labels, ownedLabels(resource)) ||
-      ('assignment' in observed && observed.assignment.kind !== 'unassigned')
-    ) {
+    if (observed.id !== ref.id || !matchesLabels(observed.labels, ownedLabels(resource))) {
       await setProgress(db, operation, { kind: 'blocked', reason: 'provider_resource_mismatch' });
+      return;
+    }
+    if ('assignment' in observed && observed.assignment.kind === 'server') {
+      const assignedServerId = observed.assignment.serverId;
+      // Hetzner can remove the server before its IP assignment read catches up.
+      // Keep the reservation and perform no new deletion while it still appears attached.
+      const absentServer = resources.find(
+        (row) => row.kind === 'server' && row.providerId === assignedServerId && row.absentAt,
+      );
+      await setProgress(
+        db,
+        operation,
+        absentServer
+          ? { kind: 'verifying', resource: ref }
+          : { kind: 'blocked', reason: 'provider_resource_mismatch' },
+      );
       return;
     }
     if ('primaryIpId' in observed && observed.primaryIpId) {

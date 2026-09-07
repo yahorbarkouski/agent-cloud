@@ -1,28 +1,32 @@
 # Current handoff
 
-Updated 2026-09-07. The full non-Stripe goal is active. User authorizes implementation, private GitHub pushes and bounded cheap Hetzner tests. Use working customer capabilities as progress, one primary stream and proportional verification.
+Updated 2026-09-07. The full non-Stripe goal remains active. User authorizes implementation, private GitHub pushes and bounded cheap Hetzner tests. Work by customer acceptance scenarios; do not expand prerequisites.
 
 ## What works
 
-- Internal CLI/API authentication, delegated grant storage/authority, budgeted machine lifecycle and exact owned cleanup.
-- Signed image build, guest enrollment, verified SSH health, graceful reboot/power operations and certificate renewal. M1 live Hetzner proof and full cleanup are preserved in `docs/research/m1-customer-live-*.json`.
-- Durable customer SSH session storage and narrowly bound certificate signer, including native SSH and uncertainty checks. Customer endpoints/gateway are not connected yet.
-- HEAD before current changes: `095adac` on `yahor/agent-cloud`, pushed. Linux CI 34145649715 passed. Do not rerun that unchanged source.
+- **First internal deployment scenario live verified:** existing identity → product CLI provisions CPX12 → frontend/backend/PostgreSQL → public HTTPS → disconnect/reconnect → status/logs → revision update preserving data → destroy and verified cleanup. Source `4d2bffa`, Linux CI34148449714 passed. Public evidence: `docs/reference-deployment-verification.json`. The historical application URL is no longer live.
+- Signed image build, guest enrollment, verified SSH health, lifecycle operations, renewal and exact owned cleanup. Budget admission and current delegated authority are enforced by the control service.
+- Customer SSH session storage and bound certificate signer have local/native verification; customer endpoints/gateway remain unconnected. Internal reference deployment is separately configured for one root grant; it is not public customer access.
+- A real provider lag briefly reported an owned IP still attached after authoritative server absence. Cleanup recovered with one delete. The local correction now waits in that case while retaining the reservation; foreign assignment stays blocked. Regression, focused cleanup checks and full source check passed (455 tests, typecheck, lint). Bounded review found no blockers.
 
 ## Next acceptance scenario
 
-Use the existing internal identity to provision one cheap VM through the CLI, deploy frontend/backend/PostgreSQL, verify HTTPS, disconnect/reconnect, inspect logs/status, update while retaining data, then destroy and verify cleanup. Add a separate restricted deployment account and an explicitly allowlisted internal endpoint. Keep the probe account unchanged. CLI/API/native SSH/systemd/Compose reference deployment is implemented. Native Ubuntu proof passed: verified local HTTPS, CLI disconnect/reconnect, logs and update from revision1 to2 with a persisted visit. Isolated VM and DB were removed. Focused authorization/recovery tests passed. Bounded independent review found a lost systemd wakeup race; an enabled timer now resumes recorded pending work. Source check passed on41files with454tests, typecheck and lint. Formatting passed. Next is capped Hetzner public-HTTPS deployment and cleanup. CI documentation filtering is implemented and locally checked.
+An owner delegates one project to a second CLI credential. The second CLI can inspect only that project and cannot escalate authority. Revoking its parent blocks it and its descendants immediately. Connect the existing grant API to CLI credential files, exercise actual CLI/API paths and document use. Continue customer sign-in and general access afterward; this internal checkpoint is not completion.
 
 ## What remains
 
-First complete the internal application scenario. Then finish customer login/delegation/revocation, files/durable commands, general Compose/recovery, routing/domains, database/analytics recipes, protected backup/isolated restore, limits/usage, self-hosting, agent instructions and budget-appropriate failure verification. Do not expand image-capability prerequisites before the application scenario.
+Customer login/delegation/revocation, file transfer and durable commands, general Compose deployment/recovery, routing/domains, database/analytics recipes, protected backups and isolated restore, limits/usage, self-hosting, agent instructions and budget-appropriate operational failure verification. Reuse the existing foundations.
 
 ## Resume and evidence
 
-Use `npm exec --yes --package=pnpm@12.3.4 -- pnpm <command>`. Focused checks first; `check` and `format:check` at source checkpoints. PostgreSQL 17 at localhost:55439, database `agentcloud`, migrations through 0020 applied and verified. API PID15176/session25749 on4319 and worker PID15190/session89064 use `.env` with simulated provider. Restart after relevant source changes. Native CA at https://localhost:9449; pinned tools and credentials under `.local/pki` and `.local/runtime-identity`. Never print their contents or raw CA logs.
+Use `npm exec --yes --package=pnpm@12.3.4 -- pnpm <command>`. Focused checks while iterating; required `check` and `format:check` at coherent source checkpoints. Do not repeat unchanged suites for docs or reviews. PostgreSQL 17: localhost:55439, DB `agentcloud`, migrations through0020 verified. Simulated API PID15176/session25749 on4319 and worker PID15190/session89064 run older loaded code; restart after relevant source changes. Native CA https://localhost:9449; original keys in `.local/pki` and `.local/runtime-identity`. Never print credentials or raw CA logs.
+
+Local evidence: `.local/reference-local-vm.log`, `.local/reference-check.log`, `.local/reference-cleanup-focused.log`, `.local/reference-cleanup-check.log`. `pnpm smoke:reference` exercises actual CLI/API/native SSH/systemd/Compose on Ubuntu using trusted local HTTPS. Live record: `.local/reference-live-record.json`, owner `63cbe179-f25b-4729-8469-ae6947664b47`; driver and finishing logs beside it. Isolated live DB was privately archived under `.local/archives/` then dropped; the archive was listed, not restored.
 
 ## Resources and blockers
 
-No paid VM, IP, snapshot, firewall or SSH key remains. Hetzner project `agent-cloud-development`15945891; token `.local/hcloud-token`. Default project untouched. Local CA container `agent-cloud-pki-ca-1` uses256MiB/.5CPU; DB container `agent-cloud-dev-postgres-1`. No tunnel or OrbStack guest active. Prior live drill scripts/records are under `.local/customer-drill-*`; archived private DB dump must not be printed or committed. Previous bounded customer VM/IP cap60000µUSD, image VM/IP cap120000µUSD, snapshot monthly cap1000000µUSD. New live run needs its own explicit owned record and cleanup.
+**No paid resources remain.** Hetzner project `agent-cloud-development`15945891 inventory: zero servers, IPs, snapshots, firewalls and SSH keys. Live SQL reservations zero. All six temporary live processes stopped and confirmed absent. No local OrbStack guest remains. Token `.local/hcloud-token`; Default project untouched. Main local CA and PostgreSQL containers remain for development.
 
-Evidence: `.local/reference-local-vm.log`, `.local/reference-focused.log`, `.local/reference-check.log`. Native fixture uses `reference.localhost` and a trusted local Caddy CA; this is not public ACME or Hetzner verification. Run `pnpm smoke:reference` for that local scenario. No user action currently blocks implementation. Public HTTPS domain choice remains to be exercised. Untracked image-capability draft and golden fixture remain preserved in `.local/customer-ssh`; do not discard or pursue them as prerequisites. Detailed previous status is archived in `docs/archive/handoff-before-capability-loop.md`.
+Existing live caps: image VM/IP120000µUSD, customer VM/IP60000µUSD, snapshot monthly1000000µUSD. First scenario's estimated VM/IP cost was83394µUSD (~$0.0834) using hourly rounding, excluding snapshot storage; not an invoice. No extra paid rerun is needed for the locally reproduced cleanup classification fix. Future paid tests still need ownership, deadline, caps and cleanup.
+
+No user action currently blocks implementation. Preserved untracked image-capability drafts remain in `.local/customer-ssh`; do not pursue them as prerequisites. Historical detail is in `docs/archive/`, not a second current status file.
