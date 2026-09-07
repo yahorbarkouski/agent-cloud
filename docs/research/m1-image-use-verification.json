@@ -37,7 +37,10 @@
       "issuedTlsCertificate": "verified native TLS connection",
       "operation": "waiting for runtime verification",
       "provider": "local simulated observations",
-      "cloudResourcesCreated": 0
+      "cloudResourcesCreated": 0,
+      "processExitCode": 0,
+      "processCompletionEvidence": "6b8cf0",
+      "scratchCleanup": "The full formatter finished after a slow traversal of ignored SSH fixture state. The native process exited0; the remaining empty fixture/guest-state/key directories were removed with exact-path rmdir and absence was checked."
     },
     "localCli": {
       "command": "pnpm smoke:local",
