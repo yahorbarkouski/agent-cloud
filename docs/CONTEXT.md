@@ -6,7 +6,7 @@ Updated 2026-09-07. Implement the full agent-operated cloud in `docs/archive/ori
 
 Customers bring their own coding agents. Build the CLI/API/skills they use, not an AI agent. Use TypeScript, Linux VMs, Docker Compose, SSH and Hetzner. Keep infrastructure cheap. No provider benchmarks, expensive fallback VMs or warm pool. Maintain AGENTS.md, architecture, decisions, progress and this short summary. Continue authorized work without repeated approval.
 
-Repo `/Users/yahorbarkouski/Documents/ChatGPT/learning/agent-cloud` is a standalone Git repository inside an unrelated parent workspace. Work only here. Branch `yahor/agent-cloud`; private origin `https://github.com/yahorbarkouski/agent-cloud.git`. Last pushed implementation is `12cee632fda2e86b655e052916e81f9bd69d98f4`, with docs checkpoint `c63ab19`. Linux CI `34066756174` passed frozen installation, 94 tests, formatting, fresh PKI and all three native smokes. Guest/image changes passed final local checks and are staged for committing/pushing.
+Repo `/Users/yahorbarkouski/Documents/ChatGPT/learning/agent-cloud` is a standalone Git repository inside an unrelated parent workspace. Work only here. Branch `yahor/agent-cloud`; private origin `https://github.com/yahorbarkouski/agent-cloud.git`. Guest/image implementation `a43cc322b3a438fd5f9256ff7e135aa28be6efb5` is committed and pushed. Linux CI `34069508351` passed frozen installation, 99-test full check, formatting, fresh PKI setup, all three native smokes and cleanup. Previous enrollment implementation `12cee63` and CI `34066756174` passed.
 
 ## Implemented control path
 
@@ -50,7 +50,7 @@ Read-only: `PROVIDER_CURRENCY=USD HCLOUD_SERVER_TYPE_SMALL=cpx12 pnpm hetzner:ch
 
 ## Next concrete work
 
-1. Finish final check/format/skill validation, update progress and independent review, commit/push guest image checkpoint, wait for Linux CI. Do not rerun the finished control integration slice.
+1. Guest image checkpoint a43cc32 and Linux CI34069508351 are complete. Continue runtime readiness; do not repeat completed enrollment or image tooling work. Do not rerun the finished control integration slice.
 2. Implement actual runtime inspection and worker readiness using the persisted identity and host CA. Identity probe credentials force one command; a runtime inspection capability needs its own narrow certificate policy. Never grant the probe Docker/root access broadly.
 3. Implement image sanitation and cloned fresh identity proof, owned snapshot cleanup, certificate renewal and explicit operator recovery. Only then enable a bounded cheap Hetzner build/boot/cleanup drill.
 4. M2 device/browser auth, CLI grants and customer SSH/gateway access/revocation; M3 transfers/durable commands/Compose/routes; M4 recipes/off-VM backups/isolated restore; M5 usage/traffic/alerts/cost limits; M6 self-hosting; M7 failure drills and end-to-end proof.
