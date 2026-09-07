@@ -1,9 +1,9 @@
 {
   "date": "2026-09-07",
-  "status": "verified_locally",
+  "status": "verified_locally_and_linux_ci",
   "scope": "Explicit operator closure of unknown customer source creates and one additional exact-target deletion after retry exhaustion.",
   "baseCommit": "4030e9d",
-  "implementationCommit": "pending",
+  "implementationCommit": "55b037761e5215c576998455dcca8edda6f48adf",
   "checks": {
     "full": {
       "session": 94746,
@@ -145,6 +145,10 @@
     "Customer SSH access, deployment, routes, backup/restore and the complete product remain unfinished."
   ],
   "ci": {
-    "status": "pending_private_push"
+    "status": "passed",
+    "runId": 34127373737,
+    "headSha": "55b037761e5215c576998455dcca8edda6f48adf",
+    "url": "https://github.com/yahorbarkouski/agent-cloud/actions/runs/34127373737",
+    "evidence": ".local/operator-recovery-ci-result.json"
   }
 }

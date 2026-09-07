@@ -49,7 +49,7 @@ const primaryIpSchema = z
     assignee_id: numericId.nullable(),
   })
   .refine(
-    (value) => (value.assignee_type === 'unassigned') === (value.assignee_id === null),
+    (value) => value.assignee_type === 'server' || value.assignee_id === null,
     'Primary IP assignment type and ID must agree.',
   );
 function primaryIpRecord(value: z.infer<typeof primaryIpSchema>): ProviderPrimaryIp {

@@ -32,7 +32,7 @@ Deletion journals the VM request and observes VM absence, then observes the Prim
 
 The official spec saved during this run says Primary IP creation without an assignee may omit its `action`. A successful Primary IP delete returns HTTP 204 without a JSON body. The shared HTTP transport now accepts that bodyless success. Absence requires a resource-specific 404 with `not_found`; authorization errors and malformed responses do not prove absence.
 
-The Primary IP `assignee_type` description says `unassigned` is returned from 1 August 2026, although the same spec's enum lists only `server`. The parser accepts the documented unassigned form with a null ID and server assignments with positive IDs. It rejects both contradictory combinations. The older server-plus-null form is not accepted for live cleanup after the documented transition date.
+The Primary IP `assignee_type` description says `unassigned` is returned from 1 August 2026, although the same spec's enum lists only `server`. The first customer drill on 7 September still returned `server` with a null `assignee_id`. Rejecting that response left the IP create uncertain and prevented inventory reconciliation. The parser now accepts both type values with a null ID as unassigned. A positive ID requires type `server` and remains an exact server assignment. An `unassigned` type with a non-null ID is invalid. Creation and all inventory reads use this same parser. A documented transition date is not evidence that a compatible wire form has stopped occurring.
 
 Provider credentials stay in the control plane. Shared firewall/key/image configuration is not an allocation-owned resource and must not be deleted during customer cleanup.
 

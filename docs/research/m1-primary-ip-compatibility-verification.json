@@ -1,0 +1,181 @@
+{
+  "updatedAt": "2026-09-07T13:58:00Z",
+  "status": "local_checks_and_review_passed",
+  "wire": {
+    "observedAt": "2026-09-07T13:56:19.172Z",
+    "id": 148478037,
+    "name": "vm-f7c88937-d07d-4b0e-bd0e-8faa1082bfb2-ipv4",
+    "type": "ipv4",
+    "assignee_type": "server",
+    "assignee_id": null,
+    "auto_delete": true,
+    "location": {
+      "city": "Nuremberg",
+      "country": "DE",
+      "description": "Nuremberg DC Park 1",
+      "id": 2,
+      "latitude": 49.452102,
+      "longitude": 11.076665,
+      "name": "nbg1",
+      "network_zone": "eu-central"
+    },
+    "labels": {
+      "account_id": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+      "allocation_id": "alloc_9dd007ec-95df-4a4c-931f-aad3ad4551de",
+      "attempt_id": "att_2e3ceb5e-d346-46ee-98d0-25a63008bb9a",
+      "machine_id": "vm_f7c88937-d07d-4b0e-bd0e-8faa1082bfb2",
+      "managed_by": "agent-cloud",
+      "operation_id": "op_e080a041-7140-470a-aa29-41f9bb7ddb79"
+    },
+    "created": "2026-09-07T13:48:29Z"
+  },
+  "firstCustomerCleanup": {
+    "observedAt": "2026-09-07T13:57:35.293Z",
+    "operation": {
+      "id": "op_e080a041-7140-470a-aa29-41f9bb7ddb79",
+      "accountId": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+      "projectId": "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+      "machineId": "vm_f7c88937-d07d-4b0e-bd0e-8faa1082bfb2",
+      "grantId": "grant_b6e660a9-c35b-4689-9103-ae91f64fb6ba",
+      "kind": "machine.create",
+      "intent": {
+        "kind": "cleanup",
+        "sourceOperationId": "op_e080a041-7140-470a-aa29-41f9bb7ddb79"
+      },
+      "progress": {
+        "kind": "cancelled",
+        "completedAt": "2026-09-07T13:56:46.818Z"
+      },
+      "createdAt": "2026-09-07T13:48:29.120Z"
+    },
+    "machine": {
+      "id": "vm_f7c88937-d07d-4b0e-bd0e-8faa1082bfb2",
+      "accountId": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+      "projectId": "prj_c29440ca-e203-447b-bf7d-7d497bdb6472",
+      "spec": {
+        "name": "customer-drill-2224a90a",
+        "size": "small",
+        "region": "nbg1"
+      },
+      "provider": "hetzner",
+      "state": {
+        "kind": "destroyed",
+        "destroyedAt": "2026-09-07T13:56:46.818Z"
+      },
+      "version": 3,
+      "createdAt": "2026-09-07T13:48:29.117Z"
+    },
+    "primaryIpAbsent": true,
+    "attempts": [
+      {
+        "id": "att_2e3ceb5e-d346-46ee-98d0-25a63008bb9a",
+        "command": {
+          "kind": "create_primary_ip",
+          "name": "vm-f7c88937-d07d-4b0e-bd0e-8faa1082bfb2-ipv4",
+          "labels": {
+            "account_id": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+            "machine_id": "vm_f7c88937-d07d-4b0e-bd0e-8faa1082bfb2",
+            "managed_by": "agent-cloud",
+            "operation_id": "op_e080a041-7140-470a-aa29-41f9bb7ddb79",
+            "allocation_id": "alloc_9dd007ec-95df-4a4c-931f-aad3ad4551de"
+          },
+          "region": "nbg1"
+        },
+        "outcome": {
+          "kind": "unknown",
+          "reason": "Hetzner did not return a definitive, valid submission result."
+        },
+        "resolution": {
+          "kind": "confirmed",
+          "observation": {
+            "kind": "primary_ip",
+            "primaryIp": {
+              "id": "148478037",
+              "ipv4": "116.203.81.205",
+              "name": "vm-f7c88937-d07d-4b0e-bd0e-8faa1082bfb2-ipv4",
+              "labels": {
+                "account_id": "acc_f6c7eb38-41c1-47b7-a04c-b83807a17db4",
+                "attempt_id": "att_2e3ceb5e-d346-46ee-98d0-25a63008bb9a",
+                "machine_id": "vm_f7c88937-d07d-4b0e-bd0e-8faa1082bfb2",
+                "managed_by": "agent-cloud",
+                "operation_id": "op_e080a041-7140-470a-aa29-41f9bb7ddb79",
+                "allocation_id": "alloc_9dd007ec-95df-4a4c-931f-aad3ad4551de"
+              },
+              "region": "nbg1",
+              "assignment": {
+                "kind": "unassigned"
+              },
+              "autoDelete": true
+            }
+          }
+        }
+      },
+      {
+        "id": "att_0409c827-26ee-4575-97cb-6d724f10b076",
+        "command": {
+          "kind": "delete_primary_ip",
+          "primaryIpId": "148478037"
+        },
+        "outcome": {
+          "kind": "completed",
+          "resource": {
+            "id": "148478037",
+            "kind": "primary_ip"
+          }
+        },
+        "resolution": {
+          "kind": "confirmed",
+          "observation": {
+            "kind": "absent",
+            "resource": {
+              "id": "148478037",
+              "kind": "primary_ip"
+            }
+          }
+        }
+      }
+    ],
+    "state": {
+      "active_allocations": 0,
+      "live_resources": 0
+    }
+  },
+  "verification": {
+    "focused": {
+      "tests": 9,
+      "files": 1,
+      "result": "passed",
+      "log": ".local/customer-ip-parser-focused.log"
+    },
+    "full": {
+      "session": 2086,
+      "result": "passed",
+      "tests": 422,
+      "files": 36,
+      "durationSeconds": 100.17,
+      "typecheck": "passed",
+      "lint": "passed",
+      "log": ".local/customer-ip-parser-check.log"
+    },
+    "format": {
+      "session": 79609,
+      "result": "passed",
+      "log": ".local/customer-ip-parser-format.log"
+    }
+  },
+  "limitations": [
+    "Original request response was rejected before receipt parsing; retained wire evidence is a later exact-ID GET of the same IP.",
+    "No customer VM was created in the failed attempt.",
+    "Snapshot429179158 and customer firewall11587191 remain retained for the fresh drill.",
+    "An initial read-only evidence query referenced prepared_at instead of created_at; it failed without mutation and was corrected."
+  ],
+  "review": {
+    "model": "gpt-5.6-sol",
+    "result": "no_blocker",
+    "report": "docs/research/m1-primary-ip-compatibility-review.md",
+    "scope": "Artifacts and repository; no active transcript directory supplied."
+  },
+  "ci": {
+    "result": "pending_exact_commit"
+  }
+}

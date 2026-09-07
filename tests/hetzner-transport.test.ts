@@ -92,15 +92,37 @@ it('creates explicitly owned IPv4, attaches it without automatic IPv6, and accep
   expect(requests[2]?.url).toBe('https://api.hetzner.cloud/v1/primary_ips/23');
 });
 
-it('recognizes unassigned IPs and rejects contradictory assignment states', async () => {
+it.each(['server', 'unassigned'])(
+  'recognizes null assignee IDs with type %s across creation and reconciliation',
+  async (assigneeType) => {
+    const wire = { ...ip, assignee_type: assigneeType };
+    const source = provider((input) => {
+      const url = new URL(input instanceof Request ? input.url : input);
+      return Promise.resolve(
+        Response.json(
+          url.searchParams.has('label_selector')
+            ? { primary_ips: [wire], meta: { pagination: { next_page: null } } }
+            : { primary_ip: wire },
+        ),
+      );
+    });
+    expect(
+      await source.submit({
+        attemptId: newId.attempt(),
+        command: { kind: 'create_primary_ip', name: ip.name, region: 'nbg1', labels: ip.labels },
+      }),
+    ).toEqual({ kind: 'completed', resource: { kind: 'primary_ip', id: '23' } });
+    const observed = await source.getPrimaryIp({ primaryIpId: '23' });
+    expect(observed).toMatchObject({ assignment: { kind: 'unassigned' } });
+    expect(await source.findPrimaryIps({ labels: ip.labels })).toEqual([observed]);
+  },
+);
+
+it('preserves exact server assignments and rejects contradictory assignment states', async () => {
   const source = provider(() => Promise.resolve(Response.json({ primary_ip: ip })));
   expect(await source.getPrimaryIp({ primaryIpId: '23' })).toMatchObject({
     assignment: { kind: 'unassigned' },
   });
-  const ambiguous = provider(() =>
-    Promise.resolve(Response.json({ primary_ip: { ...ip, assignee_type: 'server' } })),
-  );
-  await expect(ambiguous.getPrimaryIp({ primaryIpId: '23' })).rejects.toThrow();
   const assigned = provider(() =>
     Promise.resolve(
       Response.json({ primary_ip: { ...ip, assignee_type: 'server', assignee_id: 42 } }),
