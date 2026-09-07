@@ -15,6 +15,16 @@ Credentials live in the CLI configuration file, or the path named by `ACLD_CREDE
 
 Check the catalog's provider field. `simulated` means no real VM exists. Inspect availability, architecture, currency, and the hourly reservation including IPv4. Simulated prices are synthetic; `account_gross` prices come from the provider account. Never interpret a different currency as equivalent or select a more expensive substitute without an allowed budget. Powered-off VMs retain their reservations and remain billable on Hetzner.
 
+## Delegate access
+
+Use `acld grant create <name> --policy <policy.json> --expires-at <UTC-timestamp> --credentials <new-file>`. The JSON policy uses the same shape returned by `whoami`: select explicit capabilities, project IDs, sizes, regions, currency, maximum machines and hourly reservation. Start with the permissions the task needs. Do not include `grant:manage` or destructive capabilities unless the owner authorizes them. The service rejects policy or lifetime beyond any ancestor.
+
+The command writes a new0600 credential file and prints only its path, grant ID and expiry. Select it with `ACLD_CREDENTIALS=<new-file>` and verify `acld whoami`. A CLI context does not isolate an agent that can read other credentials on the same OS account. Use a separate OS identity or environment when that isolation is required.
+
+`acld grant list` returns descendants without secrets. Follow `nextCursor` using `--after` until it is null. `acld grant revoke <id>` disables that grant and its descendants on subsequent API requests. `revokedAt` describes that row only; a null value does not prove its ancestors are active. Current SSH session revocation is not implemented yet.
+
+An interrupted creation leaves a pending file and will not issue again into that path. Inspect the grant list and revoke any unwanted matching grant before deliberately removing the pending file and retrying. Tokens cannot be retrieved from the service. Existing files and symlinks are never overwritten by grant creation. Never copy the credential into the deployed application.
+
 ## Create and observe
 
 ```sh

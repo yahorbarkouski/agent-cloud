@@ -62,3 +62,17 @@ export const grantInputSchema = z.strictObject({
   policy: grantPolicySchema,
   expiresAt: z.iso.datetime(),
 });
+
+export const grantRecordSchema = z.object({
+  id: grantIdSchema,
+  parentId: grantIdSchema,
+  name: nameSchema,
+  policy: grantPolicySchema,
+  expiresAt: z.iso.datetime(),
+  revokedAt: z.iso.datetime().nullable(),
+  createdAt: z.iso.datetime(),
+});
+export const grantsResponseSchema = z.object({
+  grants: z.array(grantRecordSchema).max(100),
+  nextCursor: grantIdSchema.nullable(),
+});

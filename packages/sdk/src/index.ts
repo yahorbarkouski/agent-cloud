@@ -19,6 +19,7 @@ import {
   operationResponseSchema,
   usageResponseSchema,
   grantInputSchema,
+  grantsResponseSchema,
   issuedGrantResponseSchema,
   revokedResponseSchema,
   isOperationTerminal,
@@ -146,6 +147,12 @@ export class CloudClient {
       method: 'POST',
       body: grantInputSchema.parse(input),
       schema: issuedGrantResponseSchema,
+    });
+  }
+  grants(after?: GrantId) {
+    return this.request({
+      path: `/v1/grants${after === undefined ? '' : `?after=${encodeURIComponent(after)}`}`,
+      schema: grantsResponseSchema,
     });
   }
   revokeGrant(grantId: GrantId) {

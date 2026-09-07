@@ -3,6 +3,7 @@ import { eq, sql } from 'drizzle-orm';
 import { setTimeout as delay } from 'node:timers/promises';
 import {
   issuedGrantResponseSchema,
+  grantsResponseSchema,
   grantPolicySchema,
   newId,
   simulatedCatalog,
@@ -309,21 +310,66 @@ it('accepts a complete 32-grant chain and refuses a truncated deeper chain', asy
   let parentId = account.principal.grantId;
   for (let depth = 2; depth <= 33; depth++) {
     const id = newId.grant();
+    const token = generateToken();
     await fixture.connection.db.insert(grants).values({
       id,
       parentId,
       accountId: account.principal.accountId,
       name: `depth-${depth}`,
-      tokenHash: hashToken(generateToken()),
+      tokenHash: hashToken(token),
       policy: account.principal.policy,
       expiresAt,
     });
     parentId = id;
     if (depth === 32) {
       expect((await loadAuthority(fixture.connection.db, id)).principal.grantId).toBe(id);
+      expect(
+        (
+          await request({
+            path: '/v1/grants',
+            token,
+            body: {
+              name: 'too-deep',
+              policy: account.principal.policy,
+              expiresAt: new Date(expiresAt.getTime() - 1000).toISOString(),
+            },
+          })
+        ).status,
+      ).toBe(403);
     }
   }
   await expect(loadAuthority(fixture.connection.db, parentId)).rejects.toMatchObject({
     failure: { code: 'unauthenticated' },
   });
+});
+
+it('paginates only descendants without exposing credential hashes or other accounts', async () => {
+  const expiresAt = new Date(Date.now() + 60_000);
+  const ids = Array.from({ length: 101 }, () => newId.grant()).sort();
+  await fixture.connection.db.insert(grants).values(
+    ids.map((id) => ({
+      id,
+      parentId: account.principal.grantId,
+      accountId: account.principal.accountId,
+      name: 'page',
+      tokenHash: hashToken(generateToken()),
+      policy: account.principal.policy,
+      expiresAt,
+    })),
+  );
+  const other = await seedAccount(fixture.connection.db);
+  const first = grantsResponseSchema.parse(await (await request({ path: '/v1/grants' })).json());
+  expect(first.grants.map((g) => g.id)).toEqual(ids.slice(0, 100));
+  expect(first.nextCursor).toBe(ids[99]);
+  const second = grantsResponseSchema.parse(
+    await (await request({ path: `/v1/grants?after=${first.nextCursor}` })).json(),
+  );
+  expect(second.grants.map((g) => g.id)).toEqual(ids.slice(100));
+  expect(second.nextCursor).toBeNull();
+  expect(JSON.stringify(first)).not.toContain('tokenHash');
+  expect(
+    grantsResponseSchema.parse(
+      await (await request({ path: '/v1/grants', token: other.token })).json(),
+    ).grants,
+  ).toEqual([]);
 });

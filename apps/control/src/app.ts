@@ -36,7 +36,14 @@ import {
   type Database,
 } from '@agent-cloud/db';
 import type { InternalReference } from './internal-reference.js';
-import { authenticate, authorize, issueGrant, loadPrincipal, revokeGrant } from './auth.js';
+import {
+  authenticate,
+  authorize,
+  issueGrant,
+  listGrants,
+  loadPrincipal,
+  revokeGrant,
+} from './auth.js';
 import { admit, lockAccount } from './lifecycle.js';
 import type { ImageReleaseSelection } from './allocation-image.js';
 import type { Config } from './config.js';
@@ -254,6 +261,15 @@ export function createApp(input: {
     const operation = operationRecord(row);
     authorize(principal, 'machine:read', operation.projectId);
     return c.json({ operation });
+  });
+  app.get('/v1/grants', async (c) => {
+    const after = grantIdSchema.optional().parse(c.req.query('after'));
+    return c.json(
+      await listGrants(input.db, {
+        principal: c.get('principal'),
+        ...(after === undefined ? {} : { after }),
+      }),
+    );
   });
   app.post('/v1/grants', async (c) => {
     const principal = c.get('principal');

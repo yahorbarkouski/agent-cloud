@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
   CloudError,
   grantPolicySchema,
+  grantRecordSchema,
   principalSchema,
   accountIdSchema,
   grantIdSchema,
@@ -88,6 +89,7 @@ export async function loadAuthority(db: Executor, grantId: GrantId) {
     }),
     checkedAt: new Date(checkedAt),
     expiresAt: new Date(expiresAt),
+    delegationDepth: chain.length,
   };
 }
 
@@ -159,8 +161,13 @@ export async function issueGrant(
     expiresAt: Date;
   },
 ) {
-  const { principal, checkedAt, expiresAt } = await loadAuthority(db, input.principal.grantId);
+  const { principal, checkedAt, expiresAt, delegationDepth } = await loadAuthority(
+    db,
+    input.principal.grantId,
+  );
   authorize(principal, 'grant:manage');
+  if (delegationDepth >= 32)
+    throw new CloudError('permission_denied', 'The maximum delegation depth is 32.');
   assertPolicySubset(input.policy, principal.policy);
   if (input.expiresAt > expiresAt || input.expiresAt <= checkedAt) {
     throw new CloudError(
@@ -209,4 +216,32 @@ export async function revokeGrant(db: Executor, input: { principal: Principal; g
     event: 'grant.revoked',
     details: { actorGrantId: input.principal.grantId },
   });
+}
+
+/** List descendants, never ancestor/sibling credentials or token hashes. */
+export async function listGrants(db: Executor, input: { principal: Principal; after?: GrantId }) {
+  authorize(input.principal, 'grant:manage');
+  const result = await db.execute(sql`
+    WITH RECURSIVE descendants AS (
+      SELECT id, parent_id, name, policy, expires_at, revoked_at, created_at, 1 AS depth
+      FROM grants
+      WHERE parent_id = ${input.principal.grantId}
+        AND account_id = ${input.principal.accountId}
+      UNION ALL
+      SELECT child.id, child.parent_id, child.name, child.policy,
+        child.expires_at, child.revoked_at, child.created_at, parent.depth + 1
+      FROM grants child JOIN descendants parent ON child.parent_id = parent.id
+      WHERE child.account_id = ${input.principal.accountId} AND parent.depth < 31
+    )
+    SELECT id, parent_id AS "parentId", name, policy,
+      to_char(expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "expiresAt",
+      to_char(revoked_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "revokedAt",
+      to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "createdAt"
+    FROM descendants
+    WHERE id <> ${input.principal.grantId}
+      ${input.after ? sql`AND id > ${input.after}` : sql``}
+    ORDER BY id LIMIT 101
+  `);
+  const rows = result.rows.slice(0, 100).map((row) => grantRecordSchema.parse(row));
+  return { grants: rows, nextCursor: result.rows.length > 100 ? (rows.at(-1)?.id ?? null) : null };
 }

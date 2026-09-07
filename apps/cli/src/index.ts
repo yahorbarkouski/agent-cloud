@@ -17,6 +17,7 @@ import {
   machineActionSchema,
 } from '@agent-cloud/contracts';
 import { CloudClient } from '@agent-cloud/sdk';
+import { registerGrants } from './grants.js';
 
 const program = new Command()
   .name('acld')
@@ -34,6 +35,7 @@ async function client() {
 function output(value: unknown) {
   process.stdout.write(JSON.stringify(value) + '\n');
 }
+registerGrants({ program, client, output });
 
 program
   .command('login')

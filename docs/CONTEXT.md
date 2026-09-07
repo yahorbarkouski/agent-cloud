@@ -4,14 +4,16 @@ Updated 2026-09-07. The full non-Stripe goal remains active. User authorizes imp
 
 ## What works
 
-- **First internal deployment scenario live verified:** existing identity → product CLI provisions CPX12 → frontend/backend/PostgreSQL → public HTTPS → disconnect/reconnect → status/logs → revision update preserving data → destroy and verified cleanup. Source `4d2bffa`, Linux CI34148449714 passed. Public evidence: `docs/reference-deployment-verification.json`. The historical application URL is no longer live.
+- **First internal deployment scenario live verified:** existing identity → product CLI provisions CPX12 → frontend/backend/PostgreSQL → public HTTPS → disconnect/reconnect → status/logs → revision update preserving data → destroy and verified cleanup. Source `4d2bffa`, Linux CI34148449714 passed. Cleanup correction `86b6b1b`, Linux CI34149865464 passed. Public evidence: `docs/reference-deployment-verification.json`. The historical application URL is no longer live.
 - Signed image build, guest enrollment, verified SSH health, lifecycle operations, renewal and exact owned cleanup. Budget admission and current delegated authority are enforced by the control service.
 - Customer SSH session storage and bound certificate signer have local/native verification; customer endpoints/gateway remain unconnected. Internal reference deployment is separately configured for one root grant; it is not public customer access.
 - A real provider lag briefly reported an owned IP still attached after authoritative server absence. Cleanup recovered with one delete. The local correction now waits in that case while retaining the reservation; foreign assignment stays blocked. Regression, focused cleanup checks and full source check passed (455 tests, typecheck, lint). Bounded review found no blockers.
 
+- CLI delegation is connected to the existing API. Actual CLI/HTTP scenarios pass for selected project access, escalation denial, ancestor/foreign revocation denial, descendant revocation, pagination,0600 credential delivery, existing file/symlink refusal and lost issuance response recovery. Grant listing never returns tokens/hashes. Depth32 cannot issue an unusable depth33 credential. Directory entries are synced before issuance; focused review covered this crash boundary. Required source check passed:459 tests, typecheck and lint. Formatting passed. Evidence `.local/delegation-check.log` and `.local/delegation-format.log`.
+
 ## Next acceptance scenario
 
-An owner delegates one project to a second CLI credential. The second CLI can inspect only that project and cannot escalate authority. Revoking its parent blocks it and its descendants immediately. Connect the existing grant API to CLI credential files, exercise actual CLI/API paths and document use. Continue customer sign-in and general access afterward; this internal checkpoint is not completion.
+An authorized customer credential opens native SSH through the product gateway to an owned local Ubuntu guest. It can transfer an application file and run a command; another project cannot connect, a consumed ticket cannot replay, and revocation closes the connection within its documented bound. Connect existing session storage and certificate signer through admission/worker/API/gateway/CLI. Browser/device sign-in remains required afterward. Do not stop at a disconnected session helper.
 
 ## What remains
 

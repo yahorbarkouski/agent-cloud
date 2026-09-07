@@ -4,6 +4,8 @@ An open-source cloud that customers operate through their existing coding agents
 
 **Current status:** the internal reference application passed the complete CLI/API path on a cheap Hetzner VM: frontend/backend/PostgreSQL, public HTTPS, disconnect/reconnect, logs, an update preserving data, and verified infrastructure cleanup. See [the verification record](docs/reference-deployment-verification.json). Customer authentication/access, general deployments, domains and protected backup/recovery remain unfinished. Stripe is excluded. See [the current handoff](docs/CONTEXT.md) and [internal reference commands](docs/architecture/internal-reference.md).
 
+Project-scoped delegation is available with `acld grant create`, `grant list` and `grant revoke`. Issued secrets are saved to an owner-only file; see [the agent instructions](skills/agent-cloud/SKILL.md#delegate-access). Browser/device sign-in and customer SSH are still in progress.
+
 ## Run locally
 
 Requires Node.js 24+, Docker, and pnpm 12.3.4. If your global pnpm is older, run commands through `npm exec --yes --package=pnpm@12.3.4 -- pnpm ...`.
