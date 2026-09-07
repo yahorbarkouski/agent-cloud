@@ -82,9 +82,12 @@ For an actual local Ubuntu first-boot check on macOS with OrbStack installed, ke
 ```sh
 pnpm build:guest
 pnpm smoke:guest
+pnpm smoke:image
 ```
 
 The image build stages checksum-verified public inputs in `.local/guest-build`. The VM smoke records one owned local machine in `.local/guest-image-machine.json` and deletes it after successful enrollment, secret scanning and reboot checks. It also verifies restricted runtime inspection and keeps creation pending with stopped Docker, a stopped proxy or insufficient disk space. Reboot completion requires a changed Linux boot ID. A failure preserves that machine for inspection. Read its recorded name, inspect it with `orb info`, then delete exactly that VM with `orb delete --force <recorded-name>` and remove the record before starting fresh. No Hetzner resource is created. See [guest image architecture](docs/architecture/guest-image.md) and [runtime readiness](docs/architecture/guest-runtime.md) for proof boundaries and unfinished activation/renewal work.
+
+The image smoke sanitizes a separate disposable builder, checks refusal of allocation and Docker data, and boots two clones through the guest checks. It compares their machine IDs and SSH/TLS public keys. Builder ownership is in `.local/guest-image-builder.json`; a temporary refusal clone uses `.local/guest-image-refusal.json`. Failures preserve these records for the same targeted inspection and deletion procedure. Run VM smokes sequentially, and keep `.local/guest-build` unchanged until they finish. The [sanitation design](docs/architecture/image-sanitation.md) describes retry limits and the remaining Hetzner snapshot proof.
 
 ## What is enforced
 

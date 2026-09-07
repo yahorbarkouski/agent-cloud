@@ -133,6 +133,7 @@ try {
     assert.equal((await post({ ...proposal, sshHostPublicKey: foreignKey })).status, 503);
     assert.equal((await db.select().from(guestIdentities)).length, 0);
     const system = {
+      prepareIdentity: () => Promise.resolve(),
       prepareSsh: async (input: { proof: typeof proof }) => {
         assert.deepEqual(input.proof, proof);
         await Promise.resolve();

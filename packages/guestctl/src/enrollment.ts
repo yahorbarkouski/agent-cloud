@@ -16,6 +16,7 @@ import {
 } from './identity.js';
 
 export type EnrollmentSystem = {
+  prepareIdentity: (spec: BootstrapSpec) => Promise<void>;
   prepareSsh: (input: { proof: GuestProof; spec: BootstrapSpec }) => Promise<void>;
   activate: (input: {
     proof: GuestProof;
@@ -86,6 +87,7 @@ export async function enrollGuest(input: {
     const bootstrap = await loadBootstrap(configuration);
     if (Date.parse(bootstrap.spec.expiresAt) <= Date.now())
       throw new Error('Guest enrollment bootstrap has expired.');
+    await system.prepareIdentity(bootstrap.spec);
     await phase('identity');
     const proof = await ensureIdentity(configuration, bootstrap.spec);
     await atomicWrite(

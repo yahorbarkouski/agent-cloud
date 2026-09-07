@@ -1,0 +1,43 @@
+{
+  "date": "2026-09-07",
+  "command": "pnpm smoke:image",
+  "localSession": 73319,
+  "environment": "OrbStack Ubuntu 24.04 amd64",
+  "imageVersion": "dev-73aed28a0aa7",
+  "manifestDigest": "d0bf1a02b1751a9ed8b49be47f2c9cbd0683248141d137b8b55bca0055e76f33",
+  "checks": [
+    "installer refuses state/home symlinks, non-directory state and wrong home owner before apt",
+    "raw builder enrollment refuses before allocation keys",
+    "allocation, volume, custom network, unexpected home and state symlink remain after refusal",
+    "stopped restart-policy container never runs during refusal; manual restart positive control runs it",
+    "unsafe log directory interrupts after preparing record and machine reset, preserving builder access",
+    "active Docker with a new volume refuses preparing retry; inactive empty retry succeeds",
+    "sanitized replay succeeds and logger/sync leaves persistent logs empty",
+    "fresh clone with preparing record refuses cleanup without changing its machine ID",
+    "both positive clones pass enrollment, restricted SSH, service/disk failures and recovery, token cleanup and reboot",
+    "all allocation IDs, machine IDs, SSH public keys and TLS SPKIs differ"
+  ],
+  "clones": [
+    {
+      "allocationId": "alloc_cf733ac6-68d1-4a04-846c-d3b17c1ae27a",
+      "machineId": "df2a953e93d54ca6abd1fa00afc8ff68",
+      "sshPublicKeySha256": "f45591ee319b9cb350b2bb0879c1e573f503a2f6c643658fbe7a2ba7820e5fa1",
+      "tlsSpkiSha256": "26ec1969f5a76c07aa03d2e8abe7d6b81e08be56af804434ea8a3be20fab26bc",
+      "bootstrapScan": { "files": 125, "bytes": 592717, "matches": [] }
+    },
+    {
+      "allocationId": "alloc_9f627c5c-0cfc-4e34-9f23-0108cce243fa",
+      "machineId": "3cf0b8f73e344742925de7c09193775a",
+      "sshPublicKeySha256": "11b9478a41c543249caba7144c193009284b8a969e13d919762aa67a8ba068ec",
+      "tlsSpkiSha256": "5261af2d05c4fabbe66a7a0aecc10110676d0b66978d1301383168be32e3b27c",
+      "bootstrapScan": { "files": 125, "bytes": 591111, "matches": [] }
+    }
+  ],
+  "cleanup": { "localVmInventory": [], "ownershipRecordsAbsent": true },
+  "cloudResourcesCreated": 0,
+  "limitations": [
+    "Local clones boot before NoCloud staging, then restart for enrollment.",
+    "Provider observations are simulated; Hetzner snapshots and initial power-on are unverified.",
+    "Snapshot publication, full input provenance, certificate renewal and production worker activation remain unfinished."
+  ]
+}

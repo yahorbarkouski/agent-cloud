@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomUUID, X509Certificate } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer, request } from 'node:https';
 import { join, resolve } from 'node:path';
@@ -26,11 +26,13 @@ import { advanceOperation } from '../apps/control/src/advance-operation.js';
 import { readPrivateFile } from '../apps/control/src/private-file.js';
 import { testDatabase } from '../tests/database.js';
 import { prepareEnrollmentFixture } from './support/enrollment-fixture.js';
+import { readImageBuilder, imageReceiptSchema } from './support/image-builder.js';
 
 const ownershipPath = resolve('.local/guest-image-machine.json');
 const ownerSchema = z.object({
   purpose: z.literal('agent-cloud-local-image-validation'),
   name: z.string().regex(/^agent-cloud-image-[0-9a-f]{8}$/),
+  builderId: z.uuid(),
   architecture: z.literal('amd64'),
   distribution: z.literal('ubuntu:noble'),
 });
@@ -59,6 +61,7 @@ async function command(binary: string, args: string[], timeout = 30_000) {
   }
 }
 await mkdir('.local', { recursive: true, mode: 0o700 });
+const clone = process.env.AGENT_CLOUD_SANITIZED_IMAGE === '1';
 let owner;
 try {
   owner = ownerSchema.parse(JSON.parse(await readPrivateFile(ownershipPath)));
@@ -67,20 +70,40 @@ try {
   owner = ownerSchema.parse({
     purpose: 'agent-cloud-local-image-validation',
     name: `agent-cloud-image-${randomUUID().slice(0, 8)}`,
+    builderId: randomUUID(),
     architecture: 'amd64',
     distribution: 'ubuntu:noble',
   });
   // Record intent before creation so an interrupted run remains discoverable.
   await writeFile(ownershipPath, JSON.stringify(owner) + '\n', { mode: 0o600, flag: 'wx' });
-  await command(
-    'orb',
-    ['create', '--arch', 'amd64', '--user', 'agent-cloud-build', 'ubuntu:noble', owner.name],
-    180_000,
-  );
+  if (clone) {
+    const source = await readImageBuilder();
+    assert.equal(source.phase, 'sanitized', 'The recorded image builder is not sanitized.');
+    const sourceInfo = z
+      .object({ record: infoSchema.shape.record.extend({ state: z.literal('stopped') }) })
+      .parse(JSON.parse(await command('orb', ['info', source.name, '--format', 'json'])));
+    assert.equal(sourceInfo.record.name, source.name);
+    await command('orb', ['clone', source.name, owner.name], 120_000);
+    await command('orb', ['start', owner.name], 120_000);
+  } else
+    await command(
+      'orb',
+      ['create', '--arch', 'amd64', '--user', 'agent-cloud-build', 'ubuntu:noble', owner.name],
+      180_000,
+    );
 }
-const info = infoSchema.parse(
-  JSON.parse(await command('orb', ['info', owner.name, '--format', 'json'])),
-);
+async function runningInfo(name: string) {
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const value: unknown = JSON.parse(await command('orb', ['info', name, '--format', 'json']));
+    const metadata = z.object({ record: infoSchema.shape.record }).parse(value);
+    assert.equal(metadata.record.name, name);
+    const result = infoSchema.safeParse(value);
+    if (result.success) return result.data;
+    await setTimeout(1000);
+  }
+  throw new Error('Owned guest did not receive an IPv4 address before the local deadline.');
+}
+const info = await runningInfo(owner.name);
 assert.equal(info.record.name, owner.name);
 const vm = (args: string[], timeout?: number) =>
   command('orb', ['run', '-m', owner.name, '-u', 'root', '-w', '/tmp', ...args], timeout);
@@ -94,17 +117,31 @@ try {
     '-c',
     'test ! -e /var/lib/agent-cloud/keys && test ! -e /var/lib/agent-cloud/bootstrap.json && test ! -e /var/lib/agent-cloud/allocation.json',
   ]);
-  progress('installing owned local Ubuntu VM');
-  await vm(['rm', '-rf', '/tmp/agent-cloud-input']);
-  await vm(['cp', '-R', '/mnt/mac' + resolve('.local/guest-build'), '/tmp/agent-cloud-input']);
-  await vm(
-    [
-      '/bin/sh',
-      '-c',
-      '/bin/sh /tmp/agent-cloud-input/install.sh /tmp/agent-cloud-input > /tmp/agent-cloud-install.log 2>&1',
-    ],
-    600_000,
-  );
+  if (clone) {
+    progress('booting clone of recorded sanitized image');
+    const receipt = imageReceiptSchema.parse(
+      JSON.parse(await vm(['cat', '/usr/lib/agent-cloud/image-build.json'])),
+    );
+    assert.equal(receipt.builderId, (await readImageBuilder()).builderId);
+  } else {
+    progress('installing owned local Ubuntu VM');
+    await vm(['rm', '-rf', '/tmp/agent-cloud-input']);
+    await vm(['cp', '-R', '/mnt/mac' + resolve('.local/guest-build'), '/tmp/agent-cloud-input']);
+    await vm(
+      [
+        '/bin/sh',
+        '-c',
+        '/bin/sh /tmp/agent-cloud-input/install.sh /tmp/agent-cloud-input "$1" > /tmp/agent-cloud-install.log 2>&1',
+        'image-install',
+        owner.builderId,
+      ],
+      600_000,
+    );
+    imageReceiptSchema.parse(
+      JSON.parse(await vm(['/usr/local/bin/guestctl', 'prepare-image', '--json'], 120_000)),
+    );
+    await command('orb', ['restart', owner.name], 120_000);
+  }
   const step = resolve('.local/tools/step-0.30.6');
   await command('env', [
     'STEPPATH=' + scratch,
@@ -166,6 +203,12 @@ try {
     manifestDigest: createHash('sha256').update(JSON.stringify(manifest)).digest('hex'),
     ...manifest.trust,
   });
+  if (clone) {
+    const receipt = imageReceiptSchema.parse(
+      JSON.parse(await vm(['cat', '/usr/lib/agent-cloud/image-build.json'])),
+    );
+    assert.equal(receipt.manifestDigest, image.manifestDigest);
+  }
   const fixture = await prepareEnrollmentFixture({
     connection: database.connection,
     image,
@@ -494,6 +537,21 @@ try {
     proof,
   );
   progress('passed real Ubuntu first boot and restart; provider remains simulated');
+  await vm(['/bin/sh', '-c', 'test ! -e /usr/lib/agent-cloud/image-build.json']);
+  const leaf = new X509Certificate(
+    await vm(['cat', '/var/lib/agent-cloud/certificates/guest.crt']),
+  );
+  process.stdout.write(
+    JSON.stringify({
+      result: 'guest-verified',
+      machineId: (await vm(['cat', '/etc/machine-id'])).trim(),
+      sshIdentity: createHash('sha256').update(proof.sshHostPublicKey).digest('hex'),
+      tlsIdentity: createHash('sha256')
+        .update(leaf.publicKey.export({ type: 'spki', format: 'der' }))
+        .digest('hex'),
+      allocationId: proof.allocationId,
+    }) + '\n',
+  );
   await command('orb', ['delete', '--force', owner.name], 60_000);
   await rm(ownershipPath);
 } finally {

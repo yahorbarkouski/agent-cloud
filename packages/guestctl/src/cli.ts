@@ -4,6 +4,7 @@ import { enrollGuest } from './enrollment.js';
 import { readOwnedFile } from './files.js';
 import { guestSystem } from './system.js';
 import { inspectRuntime } from './inspect.js';
+import { prepareImage } from './image.js';
 
 const configuration = {
   state: '/var/lib/agent-cloud',
@@ -17,7 +18,7 @@ try {
   if (
     format !== '--json' ||
     extra.length ||
-    !['identity', 'enroll', 'inspect'].includes(command ?? '')
+    !['identity', 'enroll', 'inspect', 'prepare-image'].includes(command ?? '')
   )
     throw new Error('Unsupported guest command.');
   if (command === 'identity') {
@@ -28,9 +29,11 @@ try {
   } else {
     if (process.getuid?.() !== 0) throw new Error('Guest administration requires root.');
     const result =
-      command === 'inspect'
-        ? await inspectRuntime(configuration)
-        : await enrollGuest({ configuration, system: guestSystem(configuration) });
+      command === 'prepare-image'
+        ? await prepareImage(configuration)
+        : command === 'inspect'
+          ? await inspectRuntime(configuration)
+          : await enrollGuest({ configuration, system: guestSystem(configuration) });
     process.stdout.write(JSON.stringify(result) + '\n');
   }
 } catch {
