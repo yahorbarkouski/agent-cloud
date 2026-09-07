@@ -65,6 +65,8 @@ chmod 0644 /usr/lib/agent-cloud/ssh_user_ca.pub /usr/lib/agent-cloud/root_ca.crt
 cat > /usr/local/bin/guestctl <<'COMMAND'
 #!/bin/sh
 case "${1:-}" in
+  compose) exec /usr/bin/flock --wait 5 /run/agent-cloud-compose-admission.lock /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@" ;;
+  compose-work) exec /usr/bin/flock --nonblock /run/agent-cloud-compose-work.lock /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@" ;;
   run) exec /usr/bin/flock --wait 5 /run/agent-cloud-runs.lock /usr/local/bin/node /usr/lib/agent-cloud/guestctl.mjs "$@" ;;
   run-work)
     [ "${#2}" -eq 36 ] || exit 1
@@ -91,6 +93,34 @@ cat > /etc/docker/daemon.json <<'DOCKER'
 {"log-driver":"local","log-opts":{"max-size":"10m","max-file":"3"},"live-restore":true,"userland-proxy":false}
 DOCKER
 systemctl daemon-reload
+cat > /etc/systemd/system/agent-cloud-compose.service <<'COMPOSE_SERVICE'
+[Unit]
+Description=Apply queued customer Compose releases
+After=docker.service network-online.target
+Requires=docker.service
+ConditionPathExists=/var/lib/agent-cloud/compose
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/guestctl compose-work --json
+TimeoutStartSec=1800
+TimeoutStopSec=10
+KillMode=control-group
+UMask=0077
+StandardOutput=null
+StandardError=null
+COMPOSE_SERVICE
+cat > /etc/systemd/system/agent-cloud-compose.timer <<'COMPOSE_TIMER'
+[Unit]
+Description=Recover lost Compose wakeups and interrupted deployment records
+[Timer]
+OnBootSec=15s
+OnUnitInactiveSec=15s
+AccuracySec=1s
+Unit=agent-cloud-compose.service
+[Install]
+WantedBy=timers.target
+COMPOSE_TIMER
+systemctl enable agent-cloud-compose.timer
 cat > /etc/systemd/system/agent-cloud-run@.service <<'RUN_SERVICE'
 [Unit]
 Description=Durable customer command %i

@@ -1,6 +1,5 @@
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
-import { execFile } from 'node:child_process';
 import type { Command } from 'commander';
 import { z } from 'zod';
 import {
@@ -12,7 +11,7 @@ import {
   runIdSchema,
 } from '@agent-cloud/contracts';
 import type { CloudClient } from '@agent-cloud/sdk';
-import { withCustomerSession, customerSshArguments } from './ssh.js';
+import { invokeGuest } from './guest-command.js';
 
 async function readRequest(path: string) {
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
@@ -40,44 +39,12 @@ export function registerRuns(input: {
     const request = JSON.stringify(runCommandSchema.parse(value));
     if (Buffer.byteLength(request) > 262_144)
       throw new CloudError('invalid_input', 'Command request exceeds its size limit.');
-    const result = await withCustomerSession(
-      await input.client(),
-      machineIdSchema.parse(machine),
-      (options, host) =>
-        new Promise<string>((resolve, reject) => {
-          const child = execFile(
-            '/usr/bin/ssh',
-            customerSshArguments({
-              options,
-              host,
-              command: ['/usr/bin/sudo', '-n', '--', '/usr/local/bin/guestctl', 'run', '--json'],
-            }),
-            { timeout: 30_000, killSignal: 'SIGKILL', maxBuffer: 262_144 },
-            (error, stdout) => {
-              if (error) {
-                reject(
-                  new CloudError(
-                    'guest_unreachable',
-                    'Command response unavailable. Inspect or retry the same invocation ID; do not create a replacement.',
-                    true,
-                  ),
-                );
-              } else resolve(stdout);
-            },
-          );
-          const interrupted = () => {
-            child.kill('SIGTERM');
-          };
-          process.once('SIGINT', interrupted);
-          process.once('SIGTERM', interrupted);
-          child.once('close', () => {
-            process.removeListener('SIGINT', interrupted);
-            process.removeListener('SIGTERM', interrupted);
-          });
-          child.stdin?.on('error', () => {});
-          child.stdin?.end(request);
-        }),
-    );
+    const result = await invokeGuest({
+      client: await input.client(),
+      machine: machineIdSchema.parse(machine),
+      command: 'run',
+      request,
+    });
     const reply = runReplySchema.parse(JSON.parse(result));
     if ('error' in reply)
       throw new CloudError(reply.error.code, reply.error.message, reply.error.retryable);

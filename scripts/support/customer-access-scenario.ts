@@ -18,6 +18,7 @@ import type { Connection } from '../../packages/db/src/index.js';
 import type { CustomerSshSigner } from '../../packages/pki/dist/index.js';
 import type { prepareEnrollmentFixture } from './enrollment-fixture.js';
 import { exerciseDurableRuns } from './durable-runs-scenario.js';
+import { exerciseCompose } from './compose-scenario.js';
 
 /** Actual CLI, Graphile worker, gateway, native SSH/SFTP and owned Ubuntu guest. No paid provider. */
 export async function exerciseCustomerAccess(input: {
@@ -104,7 +105,7 @@ export async function exerciseCustomerAccess(input: {
         ['apps/cli/dist/index.js', ...args],
         {
           env: { ...process.env, ACLD_CREDENTIALS: credentials },
-          timeout: 100_000,
+          timeout: process.env.AGENT_CLOUD_COMPOSE_SCENARIO === '1' ? 330_000 : 100_000,
           maxBuffer: 262_144,
         },
         (error, stdout, stderr) => {
@@ -199,6 +200,17 @@ export async function exerciseCustomerAccess(input: {
           ]),
         ),
       );
+    if (process.env.AGENT_CLOUD_COMPOSE_SCENARIO === '1') {
+      await exerciseCompose({
+        machine,
+        credentials: agentFile,
+        scratch: input.scratch,
+        address: input.address,
+        cli,
+        vm: input.vm,
+      });
+      return;
+    }
     if (process.env.AGENT_CLOUD_RUN_SCENARIO === '1') {
       await exerciseDurableRuns({
         machine,

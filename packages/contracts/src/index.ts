@@ -19,3 +19,4 @@ export * from './operator-recovery.js';
 export * from './access.js';
 export * from './reference.js';
 export * from './runs.js';
+export * from './compose.js';

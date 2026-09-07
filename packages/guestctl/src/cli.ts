@@ -5,7 +5,12 @@ import {
   runCommandSchema,
   runIdSchema,
   CloudError,
+  composeCommandSchema,
+  composeAppSchema,
 } from '@agent-cloud/contracts';
+import { createComposeDeployments } from './compose.js';
+import { composeSystem } from './compose-system.js';
+import { readJsonInput } from './input.js';
 import { createGuestRuns, runSystem } from './runs.js';
 import { createReferenceDeployment, referenceSystem } from './reference.js';
 import { startReferenceApp } from './reference-app.js';
@@ -25,7 +30,33 @@ const configuration = {
   keygen: '/usr/bin/ssh-keygen',
 };
 try {
-  if (process.argv[2] === 'run' || process.argv[2] === 'run-work') {
+  if (['compose', 'compose-work', 'compose-wait'].includes(process.argv[2] ?? '')) {
+    if (process.getuid?.() !== 0) throw new Error('Compose administration requires root.');
+    const deployment = createComposeDeployments({
+      directory: '/var/lib/agent-cloud/compose',
+      system: composeSystem,
+    });
+    if (process.argv[2] === 'compose-wait') {
+      if (process.argv[4] !== '--json' || process.argv.length !== 5)
+        throw new Error('Invalid wait arguments.');
+      process.stdout.write(
+        JSON.stringify(await deployment.wait(composeAppSchema.parse(process.argv[3]))) + '\n',
+      );
+    } else {
+      if (process.argv[3] !== '--json' || process.argv.length !== 4)
+        throw new Error('Invalid Compose arguments.');
+      if (process.argv[2] === 'compose-work') await deployment.work();
+      else {
+        process.stdout.write(
+          JSON.stringify(
+            await deployment.command(
+              composeCommandSchema.parse(await readJsonInput(process.stdin, 16_777_216)),
+            ),
+          ) + '\n',
+        );
+      }
+    }
+  } else if (process.argv[2] === 'run' || process.argv[2] === 'run-work') {
     if (process.getuid?.() !== 0) throw new Error('Durable commands require root.');
     const runs = createGuestRuns({ directory: '/var/lib/agent-cloud/runs', system: runSystem });
     if (process.argv[2] === 'run-work') {
@@ -35,12 +66,9 @@ try {
     } else {
       if (process.argv[3] !== '--json' || process.argv.length !== 4)
         throw new Error('Invalid command arguments.');
-      let body = '';
-      for await (const chunk of process.stdin) {
-        body += String(chunk);
-        if (Buffer.byteLength(body) > 262_144) throw new Error('Command request too large.');
-      }
-      const result = await runs.command(runCommandSchema.parse(JSON.parse(body)));
+      const result = await runs.command(
+        runCommandSchema.parse(await readJsonInput(process.stdin, 262_144)),
+      );
       process.stdout.write(JSON.stringify(result) + '\n');
     }
   } else if (process.argv[2] === 'reference-app' && process.argv.length === 3) {
@@ -55,12 +83,9 @@ try {
     });
     if (process.argv[2] === 'reference-work') await deployment.work();
     else {
-      let body = '';
-      for await (const chunk of process.stdin) {
-        body += String(chunk);
-        if (Buffer.byteLength(body) > 4096) throw new Error('Reference request too large.');
-      }
-      const result = await deployment.command(referenceCommandSchema.parse(JSON.parse(body)));
+      const result = await deployment.command(
+        referenceCommandSchema.parse(await readJsonInput(process.stdin, 4096)),
+      );
       process.stdout.write(JSON.stringify(result) + '\n');
     }
   } else {
@@ -98,7 +123,10 @@ try {
     }
   }
 } catch (error) {
-  if (process.argv[2] === 'run' && error instanceof CloudError) {
+  if (
+    ['run', 'compose', 'compose-wait'].includes(process.argv[2] ?? '') &&
+    error instanceof CloudError
+  ) {
     // Expected command outcomes belong to the reply channel. SSH may add its own
     // diagnostics to stderr, so it cannot carry an unambiguous application reply.
     process.stdout.write(JSON.stringify({ error: error.failure }) + '\n');

@@ -5,7 +5,7 @@ description: Operate agent-cloud machines through its JSON CLI, inspect durable 
 
 # Agent-cloud
 
-Use the installed `acld` CLI. In a source checkout, use `pnpm acld`. Run `acld --help` when unsure about available commands. The current release supports machine lifecycle, scoped delegation, SSH, single-file transfer and durable commands. General application deployment, routes, protected backups and browser login are still being implemented.
+Use the installed `acld` CLI. In a source checkout, use `pnpm acld`. Run `acld --help` when unsure about available commands. The current release supports machine lifecycle, scoped delegation, SSH, single-file transfer, durable commands and Compose deployment/recovery. Managed routes, protected backups and browser login are still being implemented.
 
 ## Establish context
 
@@ -37,7 +37,7 @@ Use valid IDs returned by the service. Generate and retain one idempotency key o
 
 Mutation acceptance returns an operation, not a ready machine. Inspect or wait for that operation. JSON results go to stdout; errors go to stderr. `operation wait` exits 0 for `succeeded` or `cancelled`, 1 for `failed`, and 2 when blocked. Read the JSON progress: `cancelled` means creation was stopped and cleanup completed, not that a machine is ready. A client timeout does not cancel server work. `cleaning_up` means the service is reconciling and removing owned resources before releasing the reservation; keep inspecting the returned operation.
 
-`waiting_guest` distinguishes enrollment from runtime checks. A provider's completed create/reboot action does not prove the guest is usable. `guest_identity_mismatch`, `guest_deadline_exceeded` and `guest_signing_exhausted` retain the owned VM/IP reservation for operator recovery. Do not create a replacement automatically or claim the reservation was released. Customer admission requires an operator-configured customer runtime with a retained signed image and explicit spending limits. The runtime and internal reference application have passed bounded Hetzner verification with cleanup; general customer deployment helpers remain unfinished. Customer SSH requires a signed image advertising customerSsh:1 and an operator-configured access gateway. The separate image factory rejects customer `/v1/*` calls. Do not infer customer availability from its health endpoint.
+`waiting_guest` distinguishes enrollment from runtime checks. A provider's completed create/reboot action does not prove the guest is usable. `guest_identity_mismatch`, `guest_deadline_exceeded` and `guest_signing_exhausted` retain the owned VM/IP reservation for operator recovery. Do not create a replacement automatically or claim the reservation was released. Customer admission requires an operator-configured customer runtime with a retained signed image and explicit spending limits. The runtime and internal reference application have passed bounded Hetzner verification with cleanup; general customer Compose uses the separate SSH access path. Customer SSH requires a signed image advertising customerSsh:1 and an operator-configured access gateway. The separate image factory rejects customer `/v1/*` calls. Do not infer customer availability from its health endpoint.
 
 If progress is `blocked`, retain the operation ID and report its reason. Empty provider inventory does not prove creation failed. Do not use a fresh key or a new machine name to work around an unknown outcome; that could duplicate paid infrastructure. Duplicate-resource resolution currently needs the operator.
 
@@ -70,6 +70,27 @@ Use an owner-only request file with an `argv` array and absolute executable/cwd,
 Keep one ID and identical request through lost responses. A started invocation never runs again under that ID; changed intent returns `idempotency_conflict`. Read `run.state`, not just the CLI exit code: `queued`/`running` are pending; `exited` includes the command's exit code; `terminated` gives its reason. A successful CLI query does not imply the remote command succeeded. Resume logs with `nextCursor` until `complete` is true. Do not put sensitive command contents or output in shared logs.
 
 Closing the CLI stops waiting, while admitted work continues. Access revocation does not undo admitted work; use explicit cancellation when authorized. Reboot or an uncertain start produces `interrupted`, which must not be retried under a new ID without understanding possible effects. Runs have bounded time/output and systemd limits. Use Compose or a service unit for applications that should remain online; background children of a run are cleaned up when its unit ends.
+
+## Deploy and recover a Compose application
+
+```sh
+acld compose apply vm_... example --source ./deployment --file compose.yaml --release <UUIDv4>
+acld compose wait vm_... example
+acld compose inspect vm_... example
+acld compose logs vm_... example --service backend
+acld compose apply vm_... example --source ./deployment --file compose.yaml \
+  --release <new-UUIDv4> --expected-release <current-UUIDv4>
+acld compose recover vm_... example --from <successful-UUIDv4> \
+  --release <new-recovery-UUIDv4> --expected-release <current-UUIDv4>
+```
+
+Prepare a dedicated source directory: all regular files are uploaded, with no implicit ignore rules. Keep cloud/CLI credentials, repository history and installed dependencies outside it. Source is limited to 8 MiB and 1024 files; links and special files are refused. Use prebuilt images or ordinary SSH for larger contexts. Application secrets travel inside authenticated SSH and remain in root-protected release directories on the VM. Do not print those files into shared logs.
+
+Keep a release ID and identical source/options when recovering a lost admission reply. Changed inputs under that ID conflict. `--expected-release` names the current attempt, including failed or interrupted attempts. Inspect a conflict instead of automatically overwriting concurrent work. `apply` admission does not mean healthy: use `wait`, check the returned release ID and phase, and inspect container health. A wait timeout leaves deployment work running. Applications need meaningful health checks and a restart policy such as `unless-stopped`.
+
+The helper keeps a stable `acld-<app>` Compose project and pins built/pulled images. Use named volumes for mutable data. Anonymous volumes, including image-declared volumes without explicit mounts, are refused. Source bind mounts must be read-only; use named volumes or deliberate absolute guest paths for writes. An app name does not isolate tenants: this credential controls the whole VM, and explicit external volumes or host paths can share data.
+
+A failed or interrupted release can leave a partially updated app. Inspect its containers/logs, then choose a new apply or an explicit `recover` from a previously succeeded release. Recovery uses retained images/configuration without rebuilding or fetching mutable tags. It preserves named volumes but **does not undo database migrations or restore lost database contents**. Run migrations explicitly through durable commands. Do not delete release directories, prune recovery images, or use `docker compose down -v` as a routine fix. Protected backups and isolated data restore remain separate unfinished capabilities.
 
 ## Change an existing machine
 
