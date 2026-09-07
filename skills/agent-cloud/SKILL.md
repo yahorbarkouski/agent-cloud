@@ -27,7 +27,7 @@ Use valid IDs returned by the service. Generate and retain one idempotency key o
 
 Mutation acceptance returns an operation, not a ready machine. Inspect or wait for that operation. JSON results go to stdout; errors go to stderr. `operation wait` exits 0 for success, 1 for failure, and 2 when blocked. A client timeout does not cancel server work. `cleaning_up` means provisioning stopped and the service is removing its unused IP before releasing the reservation; keep waiting on the same operation.
 
-`waiting_guest` distinguishes enrollment from runtime checks. A provider's completed create/reboot action does not prove the guest is usable. `guest_identity_mismatch`, `guest_deadline_exceeded` and `guest_signing_exhausted` retain the owned VM/IP reservation for operator recovery. Do not create a replacement automatically or claim the reservation was released. Live customer admission remains disabled in this development version. The operator image factory rejects customer `/v1/*` calls; its presence does not mean customer machines can be deployed.
+`waiting_guest` distinguishes enrollment from runtime checks. A provider's completed create/reboot action does not prove the guest is usable. `guest_identity_mismatch`, `guest_deadline_exceeded` and `guest_signing_exhausted` retain the owned VM/IP reservation for operator recovery. Do not create a replacement automatically or claim the reservation was released. Customer admission requires an operator-configured customer runtime with a retained signed image and explicit spending limits. This runtime has local protocol verification; customer Hetzner boot is still pending. The separate image factory rejects customer `/v1/*` calls. Do not infer customer availability from its health endpoint.
 
 If progress is `blocked`, retain the operation ID and report its reason. Empty provider inventory does not prove creation failed. Do not use a fresh key or a new machine name to work around an unknown outcome; that could duplicate paid infrastructure. Duplicate-resource resolution currently needs the operator.
 
@@ -41,7 +41,7 @@ acld operation wait op_...
 acld machine resize vm_... --size medium --expected-version 4 --key <another-key>
 ```
 
-Resize requires the machine to be powered off. Disk shrinking is unsupported. Use `power-on` when the resize succeeds. `reboot` is also available.
+Power-off requests graceful shutdown and waits for the provider to report off. If the guest does not shut down, keep the same operation and report the blocked state; do not force a power cut. Resize requires the machine to be powered off. Disk shrinking is unsupported. Use `power-on` when the resize succeeds. `reboot` is also available.
 
 Deletion destroys the disk. When deletion and data loss are already authorized by the user, run:
 

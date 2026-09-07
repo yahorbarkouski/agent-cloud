@@ -1,6 +1,6 @@
 # Operator runtime
 
-The production entrypoints support `PROVIDER=hetzner` with a strict `image_factory` runtime configuration. This mode serves `/image/enroll` and runs only image-build jobs. Every `/v1/*` customer endpoint returns 403 and `/guest/enroll` is absent. Simulated development remains the default. Customer Hetzner admission is still unavailable until the renewal service is wired into customer mode, recovery and mandatory customer release configuration are complete.
+The production entrypoints support `PROVIDER=hetzner` with explicit `image_factory` or `customer` configuration. The factory serves `/image/enroll` and runs only image-build jobs. Every `/v1/*` customer endpoint returns 403 there, and customer guest endpoints are absent. Customer mode serves authenticated lifecycle APIs, `/guest/enroll` and `/guest/renew`, and runs only customer operation jobs. Simulated development remains the default. Customer runtime composition has local protocol verification; a customer Hetzner boot and recovery of blocked provisioning remain open.
 
 Startup and image admission create no cloud resource. `image:build start <build-id>` records explicit, durable permission to advance an admitted build. That command can incur charges when an image worker is running. Global and per-build image caps, pinned prices, exact provider ownership, deadlines and cleanup remain enforced by the existing SQL journals. A configured worker reconciles unfinished builds each minute, including cleaned builds whose local key removal is incomplete.
 
@@ -57,6 +57,32 @@ After database migration and configuration, `pnpm dev` serves the image factory 
 
 Run `PUBLIC_URL=https://your-origin.example pnpm runtime:check` to verify public HTTPS reachability and the factory's route restrictions. It checks health200, disabled customer403, invalid verifier input400 and absent customer enrollment404. It sends no token and creates no resource. A [Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/) can supply a temporary test origin without another VM or a domain. Quick tunnels are for development and their random URL changes when the process restarts. Keep the selected tunnel alive for a bounded drill; an existing bootstrap retains its original URL.
 
+## Customer configuration and recovery availability
+
+Customer mode uses the same `version`, `identityDirectory` and `pki` fields, replacing `images` with:
+
+```json
+{
+  "mode": "customer",
+  "releaseBuildId": "<retained-image-build-uuid>",
+  "firewallIds": [123456]
+}
+```
+
+This is a configuration fragment. Supply the common fields too, and use actual owned IDs. `firewallIds` contains one to five distinct firewall IDs in the configured provider project. Each firewall must have labels `managed_by=agent-cloud`, `role=customer_access` and exactly three inbound TCP rules for public IPv4 ports22,80,443, with no destination IPs or outbound rules. The rules exported as `customerFirewallRules` are the operator setup contract. Customer processes only read them; they do not create or repair network resources. Certificate authentication protects SSH, and the initial control HTTPS service uses mutual TLS. Application routing remains unfinished.
+
+A customer create pins the configured release in the admission transaction. Historical enrollment-only images remain auditable, but both admission and subsequent resolution require the renewal service and timer in the signed input inventory. Fresh effects observe the exact pinned snapshot, current signing policy, configured CA trust and firewall rules. Rendering rechecks those conditions. Guests receive no provider SSH keys or provider credentials. The default release never replaces an allocation's existing pin.
+
+Customer processes read `bootstrap.key` and its metadata without opening `release.key`. Mount only the bootstrap identity, public release policy and required PKI files into them. Preserve the release signing key in the factory/backup environment. Public policy reloads for each release authorization; private changes require restarting both customer processes.
+
+`runtime:check` in customer mode performs explicit read-only PKI, release, CA-trust and firewall preflight, then checks public health, customer authentication and guest route registration. This preflight is deliberately separate from API/worker startup. Missing bootstrap or PKI files, unavailable pricing or an expired default image must not prevent authenticated recovery reads and already-admitted cleanup. Each fresh-create or guest operation loads its own required material. Renewal and runtime inspection need the signer but never the bootstrap seal; losing that seal must affect only fresh bootstrap preparation and enrollment. Provider credentials and PostgreSQL are still required. The existing create controller compensates a known unused IP when guest preparation fails; uncertain VM creates retain ownership and never retry blindly.
+
+Run image and customer workers as separate processes with their respective config files. Keep the image worker available for retained snapshot expiry and cleanup. This does not start a warm pool. The customer worker uses a bootstrap callback instead of holding a seal in its configuration, which keeps exact-resource reconciliation independent of private guest material.
+
+Customer power-off now calls the provider's [shutdown endpoint](https://raw.githubusercontent.com/hetznercloud/hcloud-go/main/hcloud/server.go), matching the earlier image durability correction. An acknowledged request alone does not prove the VM is off; the journal observes its state before completion. There is no force-off fallback.
+
+The first live customer drill still requires an operator path to cancel/recover blocked provisioning, a renewal-capable retained release, owned customer firewall setup and a bounded lifecycle/cleanup exercise. No live customer VM is claimed from the protocol fixture.
+
 ## Recovery without signing credentials
 
 `pnpm image:build cancel <build-id>` records cancellation and wakes the worker. `pnpm image:build cleanup <build-id>` performs one recovery pass directly. Repeat the latter until inspection reports `cleaned` and a nonnull `accessRemovedAt`, or leave the configured worker to reconcile. It requires only `DATABASE_URL`, `HCLOUD_TOKEN_FILE`, the exact build ID and `IMAGE_ACCESS_DIRECTORY`. It does not read the runtime JSON, bootstrap key, release private key, source inputs, price service or CA credentials. Its provider renderer rejects server creation and the journal accepts only deletion commands without spending ports.
@@ -67,4 +93,4 @@ Recovery still requires authoritative ownership. Unknown creates remain unresolv
 
 `tests/runtime-identity.test.ts` checks repeated setup, decryption binding, substituted keys, partial setup, unsafe files, configuration and policy reload. `tests/image-runtime.test.ts` composes actual runtime ports with a controlled HTTP transport, covering startup/admission without provider I/O, disabled customer endpoints, fresh prices, revocation, recovery after credential loss and host-clock skew. These are protocol proofs, not live cloud proofs.
 
-The corrected bounded Hetzner drill passed builder installation, sanitation, observed graceful shutdown, snapshot creation, verifier enrollment/runtime and signed publication/selection. Cancellation then removed all provider resources and local access; independent inventory and cleanup replay passed. The historical signed release remains auditable, but its snapshot is absent and current selection rejects it. See [live evidence](../research/m1-hetzner-durability-drill.json). Temporary image API, worker and HTTPS tunnel were stopped after cleanup. Customer certificate renewal now passes separate [local native checks](guest-renewal.md). Its customer runtime wiring, SSH access, application deployment, routing, backups and self-hosted recovery remain open milestones.
+The corrected bounded Hetzner drill passed builder installation, sanitation, observed graceful shutdown, snapshot creation, verifier enrollment/runtime and signed publication/selection. Cancellation then removed all provider resources and local access; independent inventory and cleanup replay passed. The historical signed release remains auditable, but its snapshot is absent and current selection rejects it. See [live evidence](../research/m1-hetzner-durability-drill.json). Temporary image API, worker and HTTPS tunnel were stopped after cleanup. Customer certificate renewal now passes separate [local native checks](guest-renewal.md). Customer runtime wiring now has separate local checks. A customer Hetzner boot, blocked-operation recovery, SSH access, application deployment, routing, backups and self-hosted recovery remain open milestones.

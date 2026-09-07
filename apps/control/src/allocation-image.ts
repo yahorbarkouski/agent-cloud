@@ -7,6 +7,7 @@ import {
   type ImageBuildId,
   type ImageProvider,
   type Operation,
+  type SignedImageRelease,
 } from '@agent-cloud/contracts';
 import {
   allocationImages,
@@ -26,6 +27,19 @@ import {
 } from './image-publication.js';
 
 export type ImageReleaseSelection = { buildId: ImageBuildId; readKeys: ImageReleaseKeySource };
+
+/** Historical releases remain auditable, but every new customer boot needs automatic renewal. */
+export function requireCustomerImage(release: SignedImageRelease) {
+  const paths = new Set(release.payload.inputs.files.map((file) => file.path));
+  if (
+    !paths.has('systemd/agent-cloud-renew.service') ||
+    !paths.has('systemd/agent-cloud-renew.timer')
+  )
+    throw new CloudError(
+      'permission_denied',
+      'Customer machines require a renewal-capable image release.',
+    );
+}
 
 /** Admission verifies signed metadata locally; the worker observes the provider before any create. */
 export async function pinAllocationImage(
@@ -73,6 +87,7 @@ export async function pinAllocationImage(
     await input.selection.readKeys(),
     await databaseTime(tx),
   );
+  requireCustomerImage(release);
   const offer = catalogItemSchema.parse(allocation.offer);
   if (
     image.architecture !== offer.architecture ||
@@ -130,6 +145,7 @@ export function createAllocationImageResolver(input: {
         'provider_rejected',
         'Allocation image differs from its pinned snapshot.',
       );
+    requireCustomerImage(selected.value.release);
     return selected.value.image;
   };
 }

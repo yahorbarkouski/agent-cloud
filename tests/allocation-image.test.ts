@@ -120,8 +120,8 @@ async function scenario(fault: SimulationFault = { kind: 'none' }) {
   const guest = {
     kind: 'enabled',
     resolveImage,
-    seal: f.seal,
-    enrollmentUrl: f.enrollmentUrl,
+    prepareBootstrap: (tx, input) =>
+      prepareGuestBootstrap(tx, { ...input, seal: f.seal, enrollmentUrl: f.enrollmentUrl }),
     runtime: { check: () => Promise.resolve({ kind: 'waiting' }) },
   } satisfies NonNullable<Parameters<typeof advanceOperation>[0]['guest']>;
   const tick = () =>
@@ -218,10 +218,9 @@ it('refuses a substituted bootstrap, mutable pin and a second guest-create effec
   const image = await f.guest.resolveImage(f.allocation);
   await expect(
     database.connection.db.transaction((tx) =>
-      prepareGuestBootstrap(tx, {
+      f.guest.prepareBootstrap(tx, {
         allocation: f.allocation,
         operation: f.operation,
-        ...f.guest,
         image: { ...image, providerImage: 'other-snapshot' },
       }),
     ),

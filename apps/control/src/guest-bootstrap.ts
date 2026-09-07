@@ -9,7 +9,13 @@ import {
   type GuestImage,
   type Operation,
 } from '@agent-cloud/contracts';
-import { allocations, guestBootstraps, type Database, type Transaction } from '@agent-cloud/db';
+import {
+  allocations,
+  guestBootstraps,
+  databaseTime,
+  type Database,
+  type Transaction,
+} from '@agent-cloud/db';
 import type { BootstrapSeal } from './bootstrap-seal.js';
 import type { Allocation } from './resource-journal.js';
 
@@ -45,7 +51,7 @@ export async function prepareGuestBootstrap(
         'internal_error',
         'Guest bootstrap ownership does not match its operation.',
       );
-    if (current.expiresAt.getTime() <= Date.now() || current.consumedAt)
+    if (current.expiresAt.getTime() <= (await databaseTime(tx)).getTime() || current.consumedAt)
       throw new CloudError(
         'provider_rejected',
         'Guest bootstrap is no longer usable for a new VM submission.',
@@ -113,7 +119,7 @@ export async function recoverGuestBootstrap(
     );
   if (
     !row ||
-    row.bootstrap.expiresAt.getTime() <= Date.now() ||
+    row.bootstrap.expiresAt.getTime() <= (await databaseTime(db)).getTime() ||
     row.bootstrap.consumedAt ||
     !row.bootstrap.sealedToken
   )

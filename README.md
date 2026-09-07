@@ -2,7 +2,7 @@
 
 An open-source cloud that customers operate through their existing coding agents. The product supplies machines, credentials, lifecycle operations, and eventually application deployment and recovery. It does not contain an AI agent.
 
-**Current status:** the local control plane works with a persistent simulated provider. The CLI, HTTP API, PostgreSQL, and background worker have been exercised together through creation and deletion. Hetzner startup supports an operator image factory with persistent credentials and recovery cleanup. Customer Hetzner activation, guest access, application deployment, routes, and backups are still in progress. Stripe is deferred.
+**Current status:** the local control plane works with a persistent simulated provider. The CLI, HTTP API, PostgreSQL, and background worker have been exercised together through creation and deletion. Hetzner startup supports an operator image factory with persistent credentials and recovery cleanup. An explicit customer runtime now connects signed image selection, enrollment, renewal and lifecycle jobs. Its configuration and failure paths are verified locally; a customer Hetzner boot, guest access, application deployment, routes and backups are still in progress. Stripe is deferred.
 
 ## Run locally
 

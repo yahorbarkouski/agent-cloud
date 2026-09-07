@@ -10,7 +10,6 @@ import {
 } from '@agent-cloud/hetzner';
 import { imageReleaseKeyId, verifyImageInputs } from '@agent-cloud/images';
 import { createPublicKey } from 'node:crypto';
-import { createSigner } from '@agent-cloud/pki';
 import { createGuestProbe, createImageBuilder } from '@agent-cloud/remote';
 import { advanceImageBuild, cleanupImageBuild } from './advance-image-build.js';
 import { createImageAccessStore } from './image-access.js';
@@ -18,39 +17,18 @@ import { inspectImageBuild, requestImageCleanup, type ImageBuild } from './image
 import { createImageRenderer } from './image-renderer.js';
 import { createImageVerifierEnrollment } from './image-verifier-enrollment.js';
 import { createImageVerifierRuntime } from './image-verifier-runtime.js';
-import { readPrivateFile, readPublicTrustFile } from './private-file.js';
+import { readPrivateFile } from './private-file.js';
 import { createImageReleaseKeySource, readRuntimeIdentity } from './runtime-identity.js';
 import { readPublishedImage } from './image-publication.js';
-import { imageEnrollmentUrl, type RuntimeConfig } from './runtime-config.js';
+import { imageEnrollmentUrl, type ImageRuntimeConfig } from './runtime-config.js';
+import { readRuntimeSigner } from './runtime-pki.js';
 import type { Config } from './config.js';
-
-export async function readRuntimeSigner(config: RuntimeConfig['pki']) {
-  try {
-    const [tlsRoot, sshHostCa, sshUserCa, provisionerPassword] = await Promise.all([
-      readPublicTrustFile(config.tlsRootFile),
-      readPublicTrustFile(config.sshHostCaFile),
-      readPublicTrustFile(config.sshUserCaFile),
-      readPrivateFile(config.provisionerPasswordFile),
-    ]);
-    return createSigner({
-      binary: config.binary,
-      caUrl: config.caUrl,
-      provisioner: config.provisioner,
-      tlsRoot,
-      sshHostCa,
-      sshUserCa,
-      provisionerPassword,
-    });
-  } catch {
-    throw new CloudError('permission_denied', 'PKI configuration is unavailable or invalid.');
-  }
-}
 
 /** Composes real ports; construction does not create or start any provider resource. */
 export async function createImageRuntime(input: {
   connection: Connection;
   config: Extract<Config, { provider: 'hetzner' }>;
-  runtime: RuntimeConfig;
+  runtime: ImageRuntimeConfig;
   transport?: typeof fetch;
 }) {
   const { connection, config, runtime } = input;

@@ -7,9 +7,12 @@ import {
   createImageReleaseKeySource,
   initializeRuntimeIdentity,
   readRuntimeIdentity,
+  readBootstrapIdentity,
 } from '../apps/control/dist/runtime-identity.js';
 import {
   imageEnrollmentUrl,
+  customerRuntimeConfigSchema,
+  guestEnrollmentUrl,
   readRuntimeConfig,
   runtimeConfigSchema,
 } from '../apps/control/dist/runtime-config.js';
@@ -124,6 +127,27 @@ it('accepts only bounded private factory configuration and a credential-free HTT
       provisionerPasswordFile: join(directory, 'password'),
     },
   };
+  const customer = {
+    version: 1,
+    mode: 'customer',
+    identityDirectory: config.identityDirectory,
+    pki: config.pki,
+    releaseBuildId: 'c264e837-761a-48af-ac30-d5d7a6709e89',
+    firewallIds: [123],
+  };
+  expect(customerRuntimeConfigSchema.parse(customer)).toEqual(customer);
+  expect(customerRuntimeConfigSchema.safeParse({ ...customer, firewallIds: [] }).success).toBe(
+    false,
+  );
+  expect(
+    customerRuntimeConfigSchema.safeParse({ ...customer, firewallIds: [123, 123] }).success,
+  ).toBe(false);
+  expect(
+    customerRuntimeConfigSchema.safeParse({ ...customer, images: config.images }).success,
+  ).toBe(false);
+  expect(guestEnrollmentUrl('https://control.example.test')).toBe(
+    'https://control.example.test/guest/enroll',
+  );
   const path = join(directory, 'runtime.json');
   await writeFile(path, JSON.stringify(config), { mode: 0o600 });
   expect(await readRuntimeConfig(path)).toEqual(config);
@@ -144,4 +168,19 @@ it('accepts only bounded private factory configuration and a credential-free HTT
     'https://example.test#fragment',
   ])
     expect(() => imageEnrollmentUrl(value)).toThrow();
+});
+
+it('customer identity recovery works without a release private key and still rejects substituted bootstrap material', async () => {
+  const path = join(directory, 'customer');
+  await initializeRuntimeIdentity(path);
+  const first = await readBootstrapIdentity(path);
+  const issued = first.seal.issue('customer-owner');
+  await rm(join(path, 'release.key'));
+  const next = await readBootstrapIdentity(path);
+  expect(next.seal.matches(next.seal.recover(issued.sealed, 'customer-owner'), issued.hash)).toBe(
+    true,
+  );
+  await expect(readRuntimeIdentity(path)).rejects.toThrow('incomplete');
+  await writeFile(join(path, 'bootstrap.key'), 'changed');
+  await expect(readBootstrapIdentity(path)).rejects.toThrow('inconsistent');
 });

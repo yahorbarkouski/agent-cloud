@@ -67,21 +67,31 @@ export function createImageReleaseKeySource(directory: string): ImageReleaseKeyS
   };
 }
 
-export async function readRuntimeIdentity(directory: string) {
+/** Customer processes need bootstrap decryption and public policy, never the release signing key. */
+export async function readBootstrapIdentity(directory: string) {
   try {
     await requirePrivateDirectory(directory);
     const value: unknown = JSON.parse(await readPrivateFile(join(directory, 'identity.json')));
     const metadata = metadataSchema.parse(value);
     const encodedKey = await readPrivateFile(join(directory, 'bootstrap.key'));
+    if (hash(encodedKey) !== metadata.bootstrapHash) throw new Error('Bootstrap identity differs.');
+    return { metadata, seal: new BootstrapSeal(encodedKey) };
+  } catch {
+    throw new CloudError(
+      'permission_denied',
+      'Bootstrap identity is missing, incomplete or inconsistent. Restore its original files.',
+    );
+  }
+}
+
+export async function readRuntimeIdentity(directory: string) {
+  try {
+    const identity = await readBootstrapIdentity(directory);
     const privateKey = createPrivateKey(await readPrivateFile(join(directory, 'release.key')));
-    if (
-      hash(encodedKey) !== metadata.bootstrapHash ||
-      imageReleaseKeyId(privateKey) !== metadata.releaseKeyId
-    )
+    if (imageReleaseKeyId(privateKey) !== identity.metadata.releaseKeyId)
       throw new Error('Runtime identity files disagree.');
     return {
-      metadata,
-      seal: new BootstrapSeal(encodedKey),
+      ...identity,
       publication: { privateKey, readKeys: createImageReleaseKeySource(directory) },
     };
   } catch {

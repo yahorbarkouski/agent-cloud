@@ -20,6 +20,7 @@ import {
   type ProviderServer,
   type Failure,
   type GuestImage,
+  type BootstrapReference,
   type ProviderCommand,
   type GuestVerification,
 } from '@agent-cloud/contracts';
@@ -36,10 +37,9 @@ import {
   withMachineLock,
   type Database,
   type Connection,
+  type Transaction,
 } from '@agent-cloud/db';
 import type { Config } from './config.js';
-import type { BootstrapSeal } from './bootstrap-seal.js';
-import { prepareGuestBootstrap } from './guest-bootstrap.js';
 import type { GuestReadiness } from './guest-readiness.js';
 import { journalEffect, resolveEffect, setProgress, type Attempt } from './effect-journal.js';
 import {
@@ -222,8 +222,10 @@ export type GuestProvisioning =
   | {
       kind: 'enabled';
       resolveImage: (allocation: Allocation) => Promise<GuestImage>;
-      seal: BootstrapSeal;
-      enrollmentUrl: string;
+      prepareBootstrap: (
+        tx: Transaction,
+        input: { allocation: Allocation; operation: Operation; image: GuestImage },
+      ) => Promise<BootstrapReference>;
       runtime: GuestReadiness;
     };
 
@@ -457,7 +459,7 @@ async function advanceLocked(
               'Guest creation requires an owned Primary IP.',
             );
           const bootstrap = await db.transaction((tx) =>
-            prepareGuestBootstrap(tx, { allocation, operation, ...guest, image }),
+            guest.prepareBootstrap(tx, { allocation, operation, image }),
           );
           command = {
             ...details,

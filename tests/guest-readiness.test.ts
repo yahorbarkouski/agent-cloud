@@ -1,3 +1,4 @@
+import { prepareGuestBootstrap } from '../apps/control/dist/guest-bootstrap.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { eq, isNull, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
@@ -141,8 +142,12 @@ async function scenario() {
       guest: {
         kind: 'enabled',
         resolveImage: () => Promise.resolve(image),
-        seal: fixture.seal,
-        enrollmentUrl: fixture.bootstrap.spec.enrollmentUrl,
+        prepareBootstrap: (tx, input) =>
+          prepareGuestBootstrap(tx, {
+            ...input,
+            seal: fixture.seal,
+            enrollmentUrl: fixture.bootstrap.spec.enrollmentUrl,
+          }),
         runtime,
       },
     });

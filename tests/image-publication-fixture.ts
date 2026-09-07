@@ -5,8 +5,12 @@ import { advanceImageBuild } from '../apps/control/dist/advance-image-build.js';
 import { imageVerifierScenario } from './image-verifier-fixture.js';
 
 /** Uses real admission, journals, verifier and signing with protocol-only infrastructure. */
-export async function verifiedImageScenario(connection: Connection, directory: string) {
-  const f = await imageVerifierScenario(connection, directory, true);
+export async function verifiedImageScenario(
+  connection: Connection,
+  directory: string,
+  trust?: Parameters<typeof imageVerifierScenario>[4],
+) {
+  const f = await imageVerifierScenario(connection, directory, true, undefined, trust);
   await f.service.enroll(f.proposal);
   await f.runtimeService.check(f.buildId);
   const pair = generateKeyPairSync('ed25519');

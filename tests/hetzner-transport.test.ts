@@ -28,7 +28,6 @@ function provider(
     },
     access: {
       firewallIds: [1],
-      sshKeys: ['test-key'],
     },
     renderGuest,
     transport,
@@ -82,6 +81,7 @@ it('creates explicitly owned IPv4, attaches it without automatic IPv6, and accep
     public_net: { enable_ipv4: true, ipv4: 23, enable_ipv6: false },
     image: 'pinned-image',
     user_data: '#cloud-config\n',
+    ssh_keys: [],
   });
   expect(
     await source.submit({
@@ -207,4 +207,19 @@ it('rejects legacy live creates and local rendering failures without a network m
   expect(JSON.stringify(result)).not.toContain('sensitive');
   expect(render).toHaveBeenCalledTimes(1);
   expect(transport).not.toHaveBeenCalled();
+});
+
+it('requests graceful shutdown for customer power-off without falling back to hard poweroff', async () => {
+  const paths: string[] = [];
+  const source = provider((input, init) => {
+    paths.push(new URL(new Request(input, init).url).pathname);
+    return Promise.resolve(Response.json({ action: { id: 12, status: 'running' } }));
+  });
+  expect(
+    await source.submit({
+      attemptId: newId.attempt(),
+      command: { kind: 'power_off', serverId: '42' },
+    }),
+  ).toMatchObject({ kind: 'accepted', actionId: '12' });
+  expect(paths).toEqual(['/v1/servers/42/actions/shutdown']);
 });

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { createHetznerRequest, HttpError } from './http.js';
 export { createHetznerRequest } from './http.js';
+export { checkCustomerFirewalls, customerFirewallRules } from './customer-firewall.js';
 export { HetznerImageProvider, type ImageBootRenderer } from './image-release.js';
 export { readHetznerImagePrice } from './image-pricing.js';
 import {
@@ -90,7 +91,6 @@ function serverRecord(value: z.infer<typeof serverSchema>): ProviderServer {
 
 const accessSchema = z.strictObject({
   firewallIds: z.array(numericId).min(1),
-  sshKeys: z.array(z.string().min(1)).min(1),
 });
 const renderedGuestSchema = z.strictObject({
   image: z.string().min(1),
@@ -207,7 +207,7 @@ export class HetznerProvider implements MachineProvider {
             image: guest.image,
             labels: { ...command.labels, attempt_id: input.attemptId },
             firewalls: this.access.firewallIds.map((firewall) => ({ firewall })),
-            ssh_keys: this.access.sshKeys,
+            ssh_keys: [],
             user_data: guest.userData,
             start_after_create: true,
             automount: false,
@@ -240,7 +240,7 @@ export class HetznerProvider implements MachineProvider {
           path = `/servers/${id}/actions/poweron`;
           break;
         case 'power_off':
-          path = `/servers/${id}/actions/poweroff`;
+          path = `/servers/${id}/actions/shutdown`;
           break;
         case 'resize':
           path = `/servers/${id}/actions/change_type`;

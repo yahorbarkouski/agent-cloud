@@ -8,9 +8,10 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vite
 import { simulatedCatalog } from '../packages/contracts/dist/index.js';
 import { createApp } from '../apps/control/dist/app.js';
 import { readConfig } from '../apps/control/dist/config.js';
-import { createImageRuntime, readRuntimeSigner } from '../apps/control/dist/image-runtime.js';
+import { createImageRuntime } from '../apps/control/dist/image-runtime.js';
+import { readRuntimeSigner } from '../apps/control/dist/runtime-pki.js';
 import { initializeRuntimeIdentity } from '../apps/control/dist/runtime-identity.js';
-import { runtimeConfigSchema } from '../apps/control/dist/runtime-config.js';
+import { imageRuntimeConfigSchema } from '../apps/control/dist/runtime-config.js';
 import { createImageAccessStore } from '../apps/control/dist/image-access.js';
 import {
   admitImageBuild,
@@ -75,7 +76,7 @@ async function scenario() {
   });
   if (config.provider !== 'hetzner') throw new Error('Expected Hetzner fixture config.');
   await writeFile(config.providerTokenFile, 'fixture-token'.padEnd(64, 'x'), { mode: 0o600 });
-  const runtime = runtimeConfigSchema.parse({
+  const runtime = imageRuntimeConfigSchema.parse({
     version: 1,
     mode: 'image_factory',
     identityDirectory: join(directory, 'identity'),

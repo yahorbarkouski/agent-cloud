@@ -16,6 +16,7 @@ import {
   guestIdentities,
   operations,
   runtimeSigningAttempts,
+  databaseTime,
   type Database,
 } from '@agent-cloud/db';
 import type { Signer, ProbeCredential } from '@agent-cloud/pki';
@@ -114,8 +115,9 @@ export function createGuestReadiness(ports: {
         return { kind: 'blocked', reason: 'guest_identity_mismatch' };
       try {
         const observed = await observeGuest(db, ports.provider, { allocation, spec });
+        const now = await databaseTime(db);
         for (const [id, credential] of credentials)
-          if (Date.parse(credential.expiresAt) <= Date.now() + 35_000) credentials.delete(id);
+          if (Date.parse(credential.expiresAt) <= now.getTime() + 35_000) credentials.delete(id);
         let credential = credentials.get(operation.id);
         if (!credential) {
           if (credentials.size >= 1024) return { kind: 'waiting' };
@@ -177,7 +179,7 @@ export function createGuestReadiness(ports: {
           server: observed.server,
           verification: {
             kind: 'ssh',
-            verifiedAt: new Date().toISOString(),
+            verifiedAt: (await databaseTime(db)).toISOString(),
             imageVersion: spec.image.version,
             manifestDigest: digest,
             bootId: runtime.bootId,

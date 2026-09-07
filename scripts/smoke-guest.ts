@@ -1,3 +1,4 @@
+import { prepareGuestBootstrap } from '../apps/control/dist/guest-bootstrap.js';
 import { imageInstallCommand } from '../packages/images/dist/index.js';
 import { readGuestBuild } from './support/guest-build.js';
 import { prepareVmSeedFixture } from './support/vm-seed.js';
@@ -232,8 +233,12 @@ try {
       guest: {
         kind: 'enabled',
         resolveImage: () => Promise.resolve(image),
-        seal: fixture.seal,
-        enrollmentUrl: fixture.bootstrap.spec.enrollmentUrl,
+        prepareBootstrap: (tx, input) =>
+          prepareGuestBootstrap(tx, {
+            ...input,
+            seal: fixture.seal,
+            enrollmentUrl: fixture.bootstrap.spec.enrollmentUrl,
+          }),
         runtime,
       },
     });

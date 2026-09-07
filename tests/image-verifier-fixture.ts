@@ -27,9 +27,10 @@ export async function imageVerifierScenario(
   directory: string,
   retain = false,
   durationMs = 90 * 60_000,
+  trust?: Parameters<typeof imageBuildFixture>[1],
 ) {
   const sourceDirectory = join(directory, 'inputs');
-  const fixture = await imageBuildFixture(sourceDirectory);
+  const fixture = await imageBuildFixture(sourceDirectory, trust);
   const { admission } = fixture;
   admission.deadlineAt = new Date(Date.parse(admission.admittedAt) + durationMs).toISOString();
   if (retain)

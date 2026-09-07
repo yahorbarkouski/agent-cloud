@@ -1,10 +1,16 @@
 # Implementation progress
 
+## Customer runtime wiring verified locally
+
+The explicit customer mode composes the real Hetzner transport, pinned renewal-capable image selection, bootstrap rendering, enrollment, renewal and runtime readiness. It uses the existing operation journal and a lazy bootstrap callback. Customer API startup remains available without bootstrap/PKI files, default-release availability or successful provider reads. Private release signing keys stay outside customer processes. Fresh allocation effects check owned firewall rules; power-off requests graceful shutdown.
+
+Focused protocol tests pass creation through waiting for enrollment, single submission, wrong firewall rejection and unused-IP compensation after private-material loss. The actual customer API subprocess starts and authenticates reads with bootstrap/PKI files missing and provider reads unavailable. Final check37481 passed 383 tests in 35 files, typecheck and lint. Native58010 passed actual Smallstep/OpenSSH/TLS enrollment and renewal, with fixture-aged issuance and complete cleanup. The simulated CLI smoke1715 passed after API/worker restart. All18 migration hashes match. SQL cleanup and native VM records are empty. Final formatting and customer skill validation passed; exact CI remains pending. The [review](research/m1-customer-runtime-review.md) found no material blocker. No paid resource has been created for this checkpoint. Blocked create cancellation/recovery and the customer live drill remain next. See [operator runtime](architecture/operator-runtime.md).
+
 ## Enrollment clock follow-up
 
 Initial enrollment now uses PostgreSQL time for authorization expiry, signing cooldown, credential reuse and issuance. Its final transaction locks and reloads allocation/bootstrap ownership, so retirement or expiry during CA signing prevents certificate publication and token erasure. The schema is unchanged.
 
-Full check27453 passed372tests/34files, typecheck/lint and formatting. Native95533 passed actual Smallstep/OpenSSH/TLS enrollment and renewal with cleanup. New tests exercise application clock drift and retirement during signing. Earlier full32711 failed on a test response typing error, which was corrected before the final run. The [review](research/m1-enrollment-clock-review.md) found no material blocker. Exact CI for this follow-up remains pending.
+Full check27453 passed372tests/34files, typecheck/lint and formatting. Native95533 passed actual Smallstep/OpenSSH/TLS enrollment and renewal with cleanup. New tests exercise application clock drift and retirement during signing. Earlier full32711 failed on a test response typing error, which was corrected before the final run. The [review](research/m1-enrollment-clock-review.md) found no material blocker. Implementation `b16466b9624f98b889f5a41e0a289d4507c5e2a6` is pushed. [Linux CI34116511248](https://github.com/yahorbarkouski/agent-cloud/actions/runs/34116511248) passed the full check, formatting, fresh PKI, native smokes and cleanup.
 
 ## Current renewal checkpoint
 

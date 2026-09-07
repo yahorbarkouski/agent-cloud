@@ -1,3 +1,4 @@
+import * as databaseClock from '../packages/db/dist/index.js';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
@@ -241,7 +242,7 @@ it('expires preparation and recovery without minting a replacement token', async
   );
   const [stored] = await fixture.connection.db.select().from(guestBootstraps);
   if (!stored) throw new Error('Expected bootstrap.');
-  vi.spyOn(Date, 'now').mockReturnValue(stored.expiresAt.getTime());
+  vi.spyOn(databaseClock, 'databaseTime').mockResolvedValue(stored.expiresAt);
   await expect(recoverGuestBootstrap(fixture.connection.db, { reference, seal })).rejects.toThrow(
     'expired',
   );
@@ -252,3 +253,19 @@ it('expires preparation and recovery without minting a replacement token', async
     stored.tokenHash,
   );
 });
+
+it.each([-86_400_000, 86_400_000])(
+  'preserves preparation and recovery under %i ms application clock drift',
+  async (skew) => {
+    const input = await preparation();
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + skew);
+    const reference = await fixture.connection.db.transaction((tx) =>
+      prepareGuestBootstrap(tx, input),
+    );
+    const first = await recoverGuestBootstrap(fixture.connection.db, { reference, seal });
+    expect(
+      await fixture.connection.db.transaction((tx) => prepareGuestBootstrap(tx, input)),
+    ).toEqual(reference);
+    expect(await recoverGuestBootstrap(fixture.connection.db, { reference, seal })).toEqual(first);
+  },
+);

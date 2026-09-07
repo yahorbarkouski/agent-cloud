@@ -1,3 +1,4 @@
+import { prepareGuestBootstrap } from '../apps/control/dist/guest-bootstrap.js';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { eq, isNull, sql } from 'drizzle-orm';
@@ -93,8 +94,12 @@ async function scenario(fault: SimulationFault = { kind: 'none' }) {
     kind: 'enabled',
     runtime: { check: () => Promise.resolve({ kind: 'waiting' }) },
     resolveImage: () => Promise.resolve(image),
-    seal,
-    enrollmentUrl: 'https://enrollment.example.test/guest/enroll',
+    prepareBootstrap: (tx, input) =>
+      prepareGuestBootstrap(tx, {
+        ...input,
+        seal,
+        enrollmentUrl: 'https://enrollment.example.test/guest/enroll',
+      }),
   } satisfies NonNullable<Parameters<typeof advanceOperation>[0]['guest']>;
   const tick = () =>
     advanceOperation({
@@ -118,7 +123,7 @@ async function scenario(fault: SimulationFault = { kind: 'none' }) {
       .where(eq(attempts.operationId, operation.id))
       .orderBy(attempts.sequence);
   }
-  return { account, operation, provider, guest, tick, state, history, render };
+  return { account, operation, provider, guest, seal, tick, state, history, render };
 }
 
 it('pins bootstrap rendering to the persisted initial attempt and preserves the runtime phase on worker ticks', async () => {
@@ -144,7 +149,7 @@ it('pins bootstrap rendering to the persisted initial attempt and preserves the 
   await expect(test.render({ attemptId: newId.attempt(), command })).rejects.toThrow('prepared');
   const { token } = await recoverGuestBootstrap(fixture.connection.db, {
     reference: command.bootstrap,
-    seal: test.guest.seal,
+    seal: test.seal,
   });
   expect(rendered.userData).toContain(token);
   expect(JSON.stringify(history)).not.toContain(token);

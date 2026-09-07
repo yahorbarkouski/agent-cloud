@@ -7,7 +7,13 @@ import {
   isOperationTerminal,
   type MachineProvider,
 } from '@agent-cloud/contracts';
-import { operations, operationRecord, enqueueOperation, type Connection } from '@agent-cloud/db';
+import {
+  operations,
+  operationRecord,
+  enqueueOperation,
+  databaseTime,
+  type Connection,
+} from '@agent-cloud/db';
 import { createImageTasks } from './image-tasks.js';
 import { advanceOperation, type GuestProvisioning } from './advance-operation.js';
 
@@ -38,7 +44,10 @@ export function createTasks(input: {
       await helpers.addJob(
         'advance_operation',
         { operationId },
-        { jobKey: operationId, runAt: new Date(Date.now() + delay) },
+        {
+          jobKey: operationId,
+          runAt: new Date((await databaseTime(input.connection.db)).getTime() + delay),
+        },
       );
     },
     reconcile_operations: async () => {

@@ -1,3 +1,4 @@
+import { prepareGuestBootstrap } from '../../apps/control/src/guest-bootstrap.js';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
@@ -77,8 +78,8 @@ export async function prepareEnrollmentFixture(input: {
       guest: {
         kind: 'enabled',
         resolveImage: () => Promise.resolve(image),
-        seal,
-        enrollmentUrl,
+        prepareBootstrap: (tx, input) =>
+          prepareGuestBootstrap(tx, { ...input, seal, enrollmentUrl }),
         runtime: { check: () => Promise.resolve({ kind: 'waiting' }) },
       },
     });

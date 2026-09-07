@@ -1,0 +1,112 @@
+{
+  "date": "2026-09-07",
+  "checkpoint": "customer runtime wiring",
+  "status": "locally_verified",
+  "cloudGoal": "active",
+  "fullCheck": {
+    "session": 37481,
+    "passed": true,
+    "tests": 383,
+    "files": 35,
+    "seconds": 85.97,
+    "typecheck": true,
+    "lint": true,
+    "log": ".local/customer-runtime-complete-check.log"
+  },
+  "protocol": {
+    "customerCases": 7,
+    "actualApiSubprocess": true,
+    "provider": "controlled HTTP fixture",
+    "reaches": "waiting_guest/enrollment",
+    "paidResourcesCreated": 0,
+    "sealLossRenewal": "dependency boundary only; unknown allocation reaches renewal authorization"
+  },
+  "native": {
+    "session": 58010,
+    "passed": true,
+    "log": ".local/customer-runtime-native.log",
+    "proof": [
+      "Smallstep signing",
+      "native SSH and TLS",
+      "enrollment lost-response retry",
+      "renewal replay",
+      "atomic installation",
+      "activation retry",
+      "cleanup"
+    ],
+    "clock": "isolated fixture-aged issuance; not elapsed expiry",
+    "limits": "predates customer-only firewall and service dependency changes; does not boot a customer Hetzner VM"
+  },
+  "localCli": {
+    "session": 1715,
+    "passed": true,
+    "machineId": "vm_31f24355-065d-4003-a653-1cbda1206fbb",
+    "log": ".local/customer-runtime-local-smoke.log"
+  },
+  "migrations": {
+    "applied": 18,
+    "expected": 18,
+    "matches": true,
+    "changed": false
+  },
+  "providerInventory": {
+    "observedAt": "2026-09-07T11:52:55.769Z",
+    "resources": {
+      "servers": 0,
+      "primaryIps": 0,
+      "snapshots": 0,
+      "firewalls": 0,
+      "sshKeys": 0
+    },
+    "log": ".local/customer-runtime-provider-inventory.json"
+  },
+  "localCleanup": {
+    "observedAt": "2026-09-07T11:52:55.469Z",
+    "sql": [
+      {
+        "active_allocations": "0",
+        "simulated_servers": "0",
+        "simulated_ips": "0",
+        "unfinished_image_builds": "0"
+      }
+    ],
+    "vmRecordsPresent": []
+  },
+  "review": {
+    "model": "gpt-5.6-sol",
+    "remainingCodeBlockers": 0,
+    "transcriptAudit": false,
+    "report": "docs/research/m1-customer-runtime-review.md"
+  },
+  "intermediateChecks": [
+    {
+      "session": 32555,
+      "tests": 381,
+      "passed": true,
+      "before": "firewall classification"
+    },
+    {
+      "session": 96292,
+      "tests": 382,
+      "passed": true,
+      "before": "bootstrap dependency split"
+    }
+  ],
+  "initialFailures": [
+    "noncanonical PEM in test fixture corrected without loosening trust equality",
+    "new test lint corrected before full verification"
+  ],
+  "remaining": [
+    "blocked customer provisioning cancellation/recovery",
+    "owned customer firewall setup",
+    "renewal-capable live release",
+    "bounded customer Hetzner lifecycle and cleanup",
+    "M2-M7 product milestones"
+  ],
+  "exactCommitCi": "pending",
+  "formatting": {
+    "passed": true,
+    "log": ".local/customer-runtime-final-format.log"
+  },
+  "customerSkillValidation": "passed with quick_validate.py via uv and PyYAML"
+}
