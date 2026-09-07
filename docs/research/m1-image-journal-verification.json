@@ -50,5 +50,22 @@
     "Guest VM smokes were not rerun locally because guest code did not change.",
     "Retained release promotion and successful-release cleanup are unfinished.",
     "An uncertain create can keep its allowance reserved even after known duplicate resources are deleted."
-  ]
+  ],
+  "linuxCi": {
+    "result": "passed",
+    "commit": "bda634cdcd1a098eafb1411c9d0b7edc3ed8acc5",
+    "runId": 34080973650,
+    "url": "https://github.com/yahorbarkouski/agent-cloud/actions/runs/34080973650",
+    "duration": "2m32s",
+    "verified": [
+      "frozen install",
+      "194-test full check",
+      "format",
+      "fresh PKI setup",
+      "native PKI",
+      "native SSH",
+      "native enrollment",
+      "cleanup"
+    ]
+  }
 }
