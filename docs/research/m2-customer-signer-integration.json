@@ -1,0 +1,29 @@
+{
+  "source": "b441661802a2fe0e5a79e32e1a1e538890c1472a",
+  "linuxCi": {
+    "runId": 34145188845,
+    "result": "passed"
+  },
+  "rootIntegration": {
+    "typecheck": "passed",
+    "nativePki": "allocation and image_verifier SSH/TLS passed with no OTT logging",
+    "caKeys": "original keys preserved; verified customer template applied by setup and container recreation",
+    "cli": {
+      "result": "passed",
+      "provider": "simulated",
+      "machineId": "vm_c661e5cf-3752-434d-ae28-04cdb31bef4e",
+      "verified": [
+        "CLI",
+        "HTTP API",
+        "PostgreSQL",
+        "Graphile worker",
+        "create",
+        "inspect",
+        "destroy",
+        "cleanup"
+      ]
+    }
+  },
+  "paidResourcesCreated": 0,
+  "remaining": "Customer image capability, access admission and durable issuer, gateway, SDK and CLI"
+}
