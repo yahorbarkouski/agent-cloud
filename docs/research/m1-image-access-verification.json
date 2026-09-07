@@ -122,5 +122,25 @@
     "Terminal operator key deletion is not wired; native fixture keys were removed after VM cleanup",
     "Local filesystem scans are bounded residual-secret checks, not forensic disk erasure",
     "The VM clone smoke requires macOS OrbStack and is not part of Linux GitHub CI"
-  ]
+  ],
+  "implementationCommit": "d2e12f9808c0567851131acbcab987589aca688c",
+  "linuxCi": {
+    "runId": 34086739961,
+    "url": "https://github.com/yahorbarkouski/agent-cloud/actions/runs/34086739961",
+    "headSha": "d2e12f9808c0567851131acbcab987589aca688c",
+    "conclusion": "success",
+    "durationSeconds": 153,
+    "verified": [
+      "frozen install",
+      "typecheck",
+      "lint",
+      "full test suite",
+      "format",
+      "fresh PKI setup",
+      "native PKI",
+      "native SSH",
+      "native enrollment",
+      "cleanup"
+    ]
+  }
 }
