@@ -16,6 +16,7 @@ import {
   composeResponseSchema,
 } from '../../packages/contracts/dist/index.js';
 import { exerciseCompose } from './compose-scenario.js';
+import type { prepareBackupStoreFixture } from './backup-store-fixture.js';
 
 /** CLI/API/Graphile → verified source SSH → encrypted protected S3 → newly provisioned isolated guest. */
 export async function exerciseBackups(input: {
@@ -30,6 +31,7 @@ export async function exerciseBackups(input: {
     credentials: string,
   ) => Promise<{ code: number; stdout: string; stderr: string }>;
   rotateWrappingKey: () => Promise<void>;
+  keyRecovery: Awaited<ReturnType<typeof prepareBackupStoreFixture>>['keyRecovery'];
   hosting?: { gatewayState: string; httpsPort: number };
 }) {
   const progress = (phase: string) =>
@@ -188,6 +190,7 @@ export async function exerciseBackups(input: {
   assert.equal(await input.vm(['cat', '/var/lib/agent-customer/declared.txt']), content);
   // Reading an older versioned key must survive rotation before the isolated restore starts.
   await input.rotateWrappingKey();
+  await input.keyRecovery.loseActive();
   const restoreId = randomUUID();
   progress('admitting a separate isolated restore VM through customer backup CLI');
   const restoreArguments = [
@@ -211,6 +214,25 @@ export async function exerciseBackups(input: {
     0,
     'An unfinished restore accepted customer SSH.',
   );
+  progress(
+    'missing wrapping key keeps the same native restore pending without guest backup access',
+  );
+  const missingKeyRefusals = await input.keyRecovery.verifyUnavailable(restoreId);
+  assert.deepEqual(
+    restoreResponseSchema.parse(JSON.parse(await cli(['backup', 'restore-inspect', restoreId])))
+      .restore.state,
+    { kind: 'pending', waitingFor: 'backup_key' },
+  );
+  await input.keyRecovery.installWrong();
+  progress('wrong bytes under the original key version preserve zero restore preparation attempts');
+  const wrongKeyRefusals = await input.keyRecovery.verifyUnavailable(restoreId);
+  assert.deepEqual(
+    restoreResponseSchema.parse(JSON.parse(await cli(['backup', 'restore-inspect', restoreId])))
+      .restore.state,
+    { kind: 'pending', waitingFor: 'backup_key' },
+  );
+  await input.keyRecovery.recover();
+  progress('recovering the independent private keyring resumes the same admitted restore');
   const restored = restoreResponseSchema.parse(
     JSON.parse(await cli(['backup', 'restore-wait', restoreId, '--timeout', '900'])),
   ).restore;
@@ -393,6 +415,14 @@ export async function exerciseBackups(input: {
       offVmEncryptedObject: true,
       objectLock: 'COMPLIANCE on local MinIO',
       wrappingKeyRotation: true,
+      wrappingKeyRecovery: {
+        independentPrivateCopy: true,
+        missingKeyRefusals,
+        wrongKeyRefusals,
+        preparationAttemptsDuringKeyLoss: 0,
+        backupCredentialsIssuedDuringKeyLoss: 0,
+        sameRestoreIdRecovered: true,
+      },
       sourceUnchanged: true,
       restoredCount: '1',
       quarantine: true,

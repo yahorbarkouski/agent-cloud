@@ -1,15 +1,22 @@
 import { execFile } from 'node:child_process';
-import { randomBytes, randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import assert from 'node:assert/strict';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { mkdir, mkdtemp, open, rm, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
 import { setTimeout } from 'node:timers/promises';
+import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import type { Connection } from '../../packages/db/src/index.js';
-import type { MachineProvider } from '../../packages/contracts/dist/index.js';
+import { backupRestores, type Connection } from '../../packages/db/src/index.js';
+import { CloudError, type MachineProvider } from '../../packages/contracts/dist/index.js';
 import type { Signer } from '../../packages/pki/dist/index.js';
 import { createFixtureDeleterPolicy } from '../../packages/backup-store/src/fixture/policies.js';
 import { createBackupRuntime } from '../../apps/control/src/backup-runtime.js';
+import { backupKeyringSchema } from '../../apps/control/src/backup-crypto.js';
+import { restoreRecord, restoreWorkSchema } from '../../apps/control/src/backup-records.js';
+import { readPrivateFile } from '../../apps/control/src/private-file.js';
+import { atomicWrite, syncDirectory } from '../../packages/guestctl/src/files.js';
 
 const image = 'minio/minio@sha256:d249d1fb6966de4d8ad26c04754b545205ff15a62e4fd19ebd0f26fa5baacbc0';
 
@@ -22,18 +29,81 @@ export async function prepareBackupStoreFixture(input: {
 }) {
   const fixture = await prepareProtectedStoreFixture({ scratch: input.scratch });
   try {
+    let backupCredentialsIssued = 0;
     const runtime = await createBackupRuntime({
       connection: input.connection,
       provider: input.provider,
-      signer: () => Promise.resolve(input.signer),
+      signer: () =>
+        Promise.resolve({
+          issueBackupCredential: (...args: Parameters<Signer['issueBackupCredential']>) => {
+            backupCredentialsIssued++;
+            return input.signer.issueBackupCredential(...args);
+          },
+        }),
       path: fixture.configFile,
     });
     return {
       runtime,
       rotateWrappingKey: () => fixture.rotateWrappingKey(),
+      keyRecovery: {
+        ...fixture.keyRecovery,
+        async verifyUnavailable(id: string) {
+          const readWork = async () => {
+            const [row] = await input.connection.db
+              .select()
+              .from(backupRestores)
+              .where(eq(backupRestores.id, id));
+            assert.ok(row, 'Admitted native restore is missing.');
+            assert.equal(restoreRecord(row).state.kind, 'pending');
+            return restoreWorkSchema.parse(row.work);
+          };
+          // Provisioning still runs through Graphile and the actual native machine path.
+          const deadline = Date.now() + 900_000;
+          while ((await readWork()).kind === 'waiting' && Date.now() < deadline)
+            await setTimeout(250);
+          assert.deepEqual(await readWork(), { kind: 'prepare', attempts: 0 });
+          const issuedBefore = backupCredentialsIssued;
+          let refusals = 0;
+          const refusalDeadline = Date.now() + 30_000;
+          while (refusals < 6 && Date.now() < refusalDeadline) {
+            try {
+              await runtime.service.advance('restore', id);
+              throw new Error('Restore advanced without its original wrapping key.');
+            } catch (error) {
+              assert.ok(error instanceof CloudError, 'Restore key failure was not sanitized.');
+              assert.equal(error.failure.code, 'resource_busy');
+              assert.equal(error.failure.retryable, true);
+              if (
+                error.failure.message.startsWith(
+                  'Restore is waiting for its matching backup wrapping key.',
+                )
+              )
+                refusals++;
+              else {
+                assert.equal(
+                  error.failure.message,
+                  'Another backup or restore owns the bounded worker scratch capacity.',
+                );
+                await setTimeout(100);
+              }
+            }
+            assert.deepEqual(await readWork(), { kind: 'prepare', attempts: 0 });
+            assert.equal(
+              backupCredentialsIssued,
+              issuedBefore,
+              'Blocked restore requested guest backup access.',
+            );
+          }
+          assert.equal(refusals, 6, 'Six actual key preflight refusals were not observed.');
+          return refusals;
+        },
+      },
       stop: async () => {
-        await runtime.close();
-        await fixture.stop();
+        try {
+          await runtime.close();
+        } finally {
+          await fixture.stop();
+        }
       },
     };
   } catch (error) {
@@ -67,6 +137,8 @@ export async function prepareProtectedStoreFixture(input: { scratch: string }) {
   };
   const bucket = 'protected-backups';
   let container: string | undefined;
+  let offlineKeyDirectory: string | undefined;
+  let offlineKeyDigest: string | undefined;
   async function docker(args: string[]) {
     try {
       return (
@@ -77,6 +149,10 @@ export async function prepareProtectedStoreFixture(input: { scratch: string }) {
     }
   }
   async function stop() {
+    if (offlineKeyDirectory) {
+      await rm(offlineKeyDirectory, { recursive: true, force: true });
+      offlineKeyDirectory = undefined;
+    }
     if (container) {
       const actual = z
         .array(
@@ -251,17 +327,80 @@ export async function prepareProtectedStoreFixture(input: { scratch: string }) {
       configFile,
       deleterCredentialsFile: join(directory, 'deleter-credentials.json'),
       stop,
+      keyRecovery: {
+        async loseActive() {
+          assert.equal(offlineKeyDirectory, undefined, 'Offline key copy already exists.');
+          const original = await readPrivateFile(keyringFile);
+          const keyring = backupKeyringSchema.parse(JSON.parse(original));
+          assert.equal(keyring.current, 'v2');
+          assert.ok(keyring.keys.v1, 'Original capture key version is missing.');
+          offlineKeyDirectory = await mkdtemp(join(tmpdir(), `agent-cloud-backup-keyring-${id}-`));
+          await atomicWrite(
+            ownership,
+            JSON.stringify({
+              purpose: 'agent-cloud-native-backup-store',
+              id,
+              name,
+              image,
+              container,
+              offlineKeyDirectory,
+            }) + '\n',
+            0o600,
+          );
+          const file = await open(join(offlineKeyDirectory, 'keyring.json'), 'wx', 0o600);
+          try {
+            await file.writeFile(original);
+            await file.sync();
+          } finally {
+            await file.close();
+          }
+          await syncDirectory(offlineKeyDirectory);
+          await syncDirectory(dirname(offlineKeyDirectory));
+          offlineKeyDigest = createHash('sha256').update(original).digest('hex');
+          await unlink(keyringFile);
+          await syncDirectory(dirname(keyringFile));
+        },
+        async installWrong() {
+          assert.ok(offlineKeyDirectory);
+          const original = await readPrivateFile(join(offlineKeyDirectory, 'keyring.json'));
+          assert.equal(createHash('sha256').update(original).digest('hex'), offlineKeyDigest);
+          const keyring = backupKeyringSchema.parse(JSON.parse(original));
+          const wrong = {
+            current: keyring.current,
+            keys: Object.fromEntries(
+              Object.keys(keyring.keys).map((version) => [
+                version,
+                randomBytes(32).toString('base64'),
+              ]),
+            ),
+          };
+          await atomicWrite(keyringFile, JSON.stringify(wrong), 0o600);
+        },
+        async recover() {
+          assert.ok(offlineKeyDirectory);
+          const original = await readPrivateFile(join(offlineKeyDirectory, 'keyring.json'));
+          assert.equal(createHash('sha256').update(original).digest('hex'), offlineKeyDigest);
+          backupKeyringSchema.parse(JSON.parse(original));
+          await atomicWrite(keyringFile, original, 0o600);
+          assert.equal(
+            createHash('sha256')
+              .update(await readPrivateFile(keyringFile))
+              .digest('hex'),
+            offlineKeyDigest,
+          );
+        },
+      },
       async rotateWrappingKey() {
         const keyring = z
           .object({ current: z.string(), keys: z.record(z.string(), z.string()) })
-          .parse(JSON.parse(await readFile(keyringFile, 'utf8')));
-        await writeFile(
+          .parse(JSON.parse(await readPrivateFile(keyringFile)));
+        await atomicWrite(
           keyringFile,
           JSON.stringify({
             current: 'v2',
             keys: { ...keyring.keys, v2: randomBytes(32).toString('base64') },
           }),
-          { mode: 0o600 },
+          0o600,
         );
       },
     };

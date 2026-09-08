@@ -144,7 +144,7 @@ export const restoreSummarySchema = z.strictObject({
   operationId: operationIdSchema,
   createdAt: z.iso.datetime(),
   state: z.discriminatedUnion('kind', [
-    z.strictObject({ kind: z.literal('pending') }),
+    z.strictObject({ kind: z.literal('pending'), waitingFor: z.literal('backup_key').optional() }),
     z.strictObject({ kind: z.literal('blocked'), reason: z.string().max(256) }),
     z.strictObject({ kind: z.literal('restored'), result: restoreCompletedStateSchema }),
   ]),

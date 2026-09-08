@@ -99,10 +99,50 @@ async function persist(path: string) {
 function wrappingKey(keyring: z.infer<typeof backupKeyringSchema>, version: string) {
   const key = keyring.keys[version];
   if (!key)
-    throw new Error(
+    throw new BackupWrappingKeyUnavailable(
       'Required backup wrapping key version is unavailable. Restore its offline copy.',
     );
   return Buffer.from(key, 'base64');
+}
+
+export class BackupWrappingKeyUnavailable extends Error {}
+
+type WrappedBackupKey = {
+  encryption: BackupEncryption;
+  binding: Binding;
+  keyring: z.infer<typeof backupKeyringSchema>;
+};
+
+function unwrapBackupKey(input: WrappedBackupKey) {
+  const encryption = backupEncryptionSchema.parse(input.encryption);
+  const binding = bindingSchema.parse(input.binding);
+  if (!aad(binding).equals(aad(encryption)))
+    throw new Error('Backup encryption belongs to a different account, backup or manifest.');
+  const masterKey = wrappingKey(backupKeyringSchema.parse(input.keyring), encryption.keyVersion);
+  let clear: Buffer | undefined;
+  try {
+    const wrapper = createDecipheriv(
+      algorithm,
+      masterKey,
+      Buffer.from(encryption.wrappingIv, 'base64'),
+    )
+      .setAAD(aad(binding))
+      .setAuthTag(Buffer.from(encryption.wrappingTag, 'base64'));
+    clear = wrapper.update(Buffer.from(encryption.wrappedKey, 'base64'));
+    return Buffer.concat([clear, wrapper.final()]);
+  } catch {
+    throw new BackupWrappingKeyUnavailable(
+      'Backup wrapping key could not authenticate this envelope. Recover the matching offline key and verify the backup receipt.',
+    );
+  } finally {
+    clear?.fill(0);
+    masterKey.fill(0);
+  }
+}
+
+/** Authenticate the bound envelope before downloading an archive or spending a restore attempt. */
+export function verifyBackupKey(input: WrappedBackupKey) {
+  unwrapBackupKey(input).fill(0);
 }
 
 /** The worker encrypts an untrusted bounded guest stream; keys never enter the guest or object store. */
@@ -186,23 +226,10 @@ export async function decryptBackup(input: {
   const maximum = z.int().positive().max(1_073_741_824).parse(input.maxBytes);
   if (encryption.plaintextBytes > maximum || encryption.ciphertextBytes > maximum)
     throw new Error('Backup exceeds the admitted restore byte limit.');
-  const keyring = backupKeyringSchema.parse(input.keyring);
-  const masterKey = wrappingKey(keyring, encryption.keyVersion);
-  let dataKey: Buffer | undefined;
+  const dataKey = unwrapBackupKey(input);
   const temporary = `${input.destination}.${randomBytes(16).toString('hex')}.partial`;
   let created = false;
   try {
-    const wrapper = createDecipheriv(
-      algorithm,
-      masterKey,
-      Buffer.from(encryption.wrappingIv, 'base64'),
-    )
-      .setAAD(aad(binding))
-      .setAuthTag(Buffer.from(encryption.wrappingTag, 'base64'));
-    dataKey = Buffer.concat([
-      wrapper.update(Buffer.from(encryption.wrappedKey, 'base64')),
-      wrapper.final(),
-    ]);
     const decipher = createDecipheriv(algorithm, dataKey, Buffer.from(encryption.iv, 'base64'))
       .setAAD(aad(binding))
       .setAuthTag(Buffer.from(encryption.tag, 'base64'));
@@ -255,8 +282,10 @@ export async function decryptBackup(input: {
     created = false;
     await persist(input.destination);
   } finally {
-    if (created) await rm(temporary, { force: true });
-    dataKey?.fill(0);
-    masterKey.fill(0);
+    try {
+      if (created) await rm(temporary, { force: true });
+    } finally {
+      dataKey.fill(0);
+    }
   }
 }

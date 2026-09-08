@@ -35,6 +35,7 @@ import {
   type WithBackupGuest,
 } from '../apps/control/src/backup-work.js';
 import { createBackupRecovery } from '../apps/control/src/backup-recovery.js';
+import type { backupKeyringSchema } from '../apps/control/src/backup-crypto.js';
 import {
   backupControlConfigSchema,
   backupRecord,
@@ -65,6 +66,7 @@ let blockCapture: Promise<void> | undefined;
 let availableScratchBytes = 8_589_934_592n;
 let readEffects = 0;
 let downloadEffects = 0;
+let keyring: ReturnType<typeof backupKeyringSchema.parse> | undefined;
 const guest: BackupGuest = {
   capture: async (request) => {
     effects.captures++;
@@ -200,13 +202,16 @@ beforeAll(async () => {
     limits: { maxBytes: 1_048_576, timeoutSeconds: 30 },
     maxGlobalBytes: 10_485_760,
   });
-  const keyring = { current: 'v1', keys: { v1: randomBytes(32).toString('base64') } };
+  keyring = { current: 'v1', keys: { v1: randomBytes(32).toString('base64') } };
   worker = createBackupWorker({
     connection: fixture.connection,
     config,
     withGuest,
     availableScratchBytes: () => Promise.resolve(availableScratchBytes),
-    keyring: () => Promise.resolve(keyring),
+    keyring: () => {
+      if (!keyring) return Promise.reject(new Error('Private keyring file is unavailable.'));
+      return Promise.resolve(keyring);
+    },
     writer: {
       checkProtection: () =>
         Promise.resolve({
@@ -374,7 +379,13 @@ it('captures through the authenticated API, resolves a lost upload without repea
     mode: 0o600,
   });
   await writeFile(join(restoreDirectory, 'archive.tar'), plaintext, { mode: 0o600 });
-  await worker.advance('restore', restore.id);
+  const submittedKeyring = keyring;
+  keyring = undefined;
+  try {
+    await worker.advance('restore', restore.id);
+  } finally {
+    keyring = submittedKeyring;
+  }
   expect(await readdir(restoreDirectory)).toEqual([]);
   expect(effects.restores).toBe(1);
   expect((await service.inspectRestore(owner.principal, restore.id)).state.kind).toBe('restored');
@@ -547,11 +558,117 @@ it('waits for scratch capacity before transfer without consuming capture or rest
   await worker.advance('backup', capture.id);
   expect(readEffects).toBe(reads + 1);
   expect((await service.inspect(owner.principal, capture.id)).state.kind).toBe('captured');
+  const restore = await readyRestore(capture.id, 'capacity-restore');
+  const downloads = downloadEffects;
+  const restores = effects.restores;
+  availableScratchBytes = 0n;
+  for (let i = 0; i < 6; i++)
+    await expect(worker.advance('restore', restore.id)).rejects.toMatchObject(
+      failure('resource_busy'),
+    );
+  const [blocked] = await fixture.connection.db
+    .select()
+    .from(backupRestores)
+    .where(eq(backupRestores.id, restore.id));
+  expect(blocked?.work).toMatchObject({ kind: 'prepare', attempts: 0 });
+  expect(downloadEffects).toBe(downloads);
+  expect(effects.restores).toBe(restores);
+  availableScratchBytes = 8_589_934_592n;
+  await worker.advance('restore', restore.id);
+  expect(downloadEffects).toBe(downloads + 1);
+  expect(effects.restores).toBe(restores + 1);
+  expect((await service.inspectRestore(owner.principal, restore.id)).state.kind).toBe('restored');
+});
+
+it('keeps the same restore pending through missing and wrong wrapping keys, then recovers without replay', async () => {
+  const [previous] = await fixture.connection.db.select().from(backupRestores).limit(1);
+  if (!previous) throw new Error('Missing verified backup.');
+  const restore = await readyRestore(previous.backupId, 'key-recovery');
+  const saved = keyring;
+  const downloads = downloadEffects;
+  const restores = effects.restores;
+  try {
+    for (const unavailable of [
+      undefined,
+      { current: 'v2', keys: { v2: randomBytes(32).toString('base64') } },
+      { current: 'v1', keys: { v1: randomBytes(32).toString('base64') } },
+    ]) {
+      keyring = unavailable;
+      for (let attempt = 0; attempt < 6; attempt++)
+        await expect(worker.advance('restore', restore.id)).rejects.toMatchObject({
+          failure: { code: 'resource_busy', retryable: true },
+        });
+      const [waiting] = await fixture.connection.db
+        .select()
+        .from(backupRestores)
+        .where(eq(backupRestores.id, restore.id));
+      expect(waiting?.work).toEqual({ kind: 'prepare', attempts: 0 });
+      expect(waiting?.record).toMatchObject({ state: { kind: 'pending' } });
+      expect(
+        restoreResponseSchema.parse(await (await api(`/v1/restores/${restore.id}`)).json()).restore
+          .state,
+      ).toEqual({ kind: 'pending', waitingFor: 'backup_key' });
+      expect(downloadEffects).toBe(downloads);
+      expect(effects.restores).toBe(restores);
+      expect(await readdir(join(directory, `restore-${restore.id}`))).toEqual([]);
+      await expect(
+        assertRestoreAccessible(fixture.connection.db, restore.machineId),
+      ).rejects.toMatchObject(failure('resource_busy'));
+    }
+  } finally {
+    keyring = saved;
+  }
+  await worker.advance('restore', restore.id);
+  await worker.advance('restore', restore.id);
+  expect((await service.inspectRestore(owner.principal, restore.id)).state.kind).toBe('restored');
+  expect(downloadEffects).toBe(downloads + 1);
+  expect(effects.restores).toBe(restores + 1);
+});
+
+it('honors revocation while a restore is waiting for its key', async () => {
+  const [previous] = await fixture.connection.db.select().from(backupRestores).limit(1);
+  if (!previous) throw new Error('Missing verified backup.');
+  const restore = await readyRestore(previous.backupId, 'revoked-key-wait');
+  const saved = keyring;
+  const downloads = downloadEffects;
+  const restores = effects.restores;
+  try {
+    keyring = undefined;
+    await expect(worker.advance('restore', restore.id)).rejects.toMatchObject(
+      failure('resource_busy'),
+    );
+    await fixture.connection.db
+      .update(grants)
+      .set({ revokedAt: new Date() })
+      .where(eq(grants.id, owner.principal.grantId));
+    await worker.advance('restore', restore.id);
+    const [blocked] = await fixture.connection.db
+      .select()
+      .from(backupRestores)
+      .where(eq(backupRestores.id, restore.id));
+    const state = restoreResponseSchema.parse({ restore: blocked?.record }).restore.state;
+    expect(state.kind).toBe('blocked');
+    if (state.kind === 'blocked') expect(state.reason).toContain('no longer authorized');
+    expect(blocked?.work).toEqual({ kind: 'prepare', attempts: 0 });
+    expect(downloadEffects).toBe(downloads);
+    expect(effects.restores).toBe(restores);
+  } finally {
+    keyring = saved;
+    await fixture.connection.db
+      .update(grants)
+      .set({ revokedAt: null })
+      .where(eq(grants.id, owner.principal.grantId));
+  }
+  await worker.advance('restore', restore.id);
+  expect(effects.restores).toBe(restores);
+});
+
+async function readyRestore(backupId: string, name: string) {
   const restoreRequest = restoreRequestSchema.parse({
     id: randomUUID(),
-    backupId: capture.id,
-    app: 'capacity-check',
-    machine: { name: 'capacity-restore', size: 'small', region: 'fsn1' },
+    backupId,
+    app: name,
+    machine: { name, size: 'small', region: 'fsn1' },
   });
   const restore = await service.restore(owner.principal, restoreRequest, {
     provider: 'simulated',
@@ -585,23 +702,5 @@ it('waits for scratch capacity before transfer without consuming capture or rest
     .update(operations)
     .set({ progress: { kind: 'succeeded', completedAt: new Date().toISOString() } })
     .where(eq(operations.id, restore.operationId));
-  const downloads = downloadEffects;
-  const restores = effects.restores;
-  availableScratchBytes = 0n;
-  for (let i = 0; i < 6; i++)
-    await expect(worker.advance('restore', restore.id)).rejects.toMatchObject(
-      failure('resource_busy'),
-    );
-  const [blocked] = await fixture.connection.db
-    .select()
-    .from(backupRestores)
-    .where(eq(backupRestores.id, restore.id));
-  expect(blocked?.work).toMatchObject({ kind: 'prepare', attempts: 0 });
-  expect(downloadEffects).toBe(downloads);
-  expect(effects.restores).toBe(restores);
-  availableScratchBytes = 8_589_934_592n;
-  await worker.advance('restore', restore.id);
-  expect(downloadEffects).toBe(downloads + 1);
-  expect(effects.restores).toBe(restores + 1);
-  expect((await service.inspectRestore(owner.principal, restore.id)).state.kind).toBe('restored');
-});
+  return restore;
+}

@@ -9,6 +9,8 @@ import {
   encryptBackup,
   decryptBackup,
   backupKeyringSchema,
+  verifyBackupKey,
+  BackupWrappingKeyUnavailable,
 } from '../apps/control/src/backup-crypto.js';
 
 it('encrypts off-VM, binds account/backup/manifest, survives wrapping-key rotation and refuses tampered bytes', async () => {
@@ -49,6 +51,33 @@ it('encrypts off-VM, binds account/backup/manifest, survives wrapping-key rotati
       maxBytes: 2_000_000,
       signal: AbortSignal.timeout(10000),
     };
+    expect(() => {
+      verifyBackupKey(request);
+    }).not.toThrow();
+    expect(() => {
+      verifyBackupKey({
+        ...request,
+        keyring: { current: 'first', keys: { first: randomBytes(32).toString('base64') } },
+      });
+    }).toThrow(BackupWrappingKeyUnavailable);
+    expect(() => {
+      verifyBackupKey({
+        ...request,
+        encryption: { ...encryption, wrappingTag: randomBytes(16).toString('base64') },
+      });
+    }).toThrow(BackupWrappingKeyUnavailable);
+    for (const changed of [
+      { ...binding, accountId: newId.account() },
+      { ...binding, backupId: backupIdSchema.parse(randomUUID()) },
+      { ...binding, manifestSha256: 'f'.repeat(64) },
+    ]) {
+      expect(() => {
+        verifyBackupKey({ ...request, binding: changed });
+      }).toThrow('different account');
+      expect(() => {
+        verifyBackupKey({ ...request, binding: changed });
+      }).not.toThrow(BackupWrappingKeyUnavailable);
+    }
     await decryptBackup(request);
     expect(await readFile(restore)).toEqual(plaintext);
     await expect(decryptBackup(request)).rejects.toMatchObject({ code: 'EEXIST' });

@@ -281,6 +281,7 @@ export async function exerciseCustomerAccess(input: {
         vm: input.vm,
         cli,
         rotateWrappingKey: () => backup.rotateWrappingKey(),
+        keyRecovery: backup.keyRecovery,
         ...(hosting
           ? { hosting: { gatewayState: hosting.gatewayState, httpsPort: hosting.httpsPort } }
           : {}),

@@ -33,7 +33,13 @@ import {
 import type { createBackupWriter, createBackupReader } from '@agent-cloud/backup-store';
 import { authorize, loadAuthority } from './auth.js';
 import { lockAccount } from './lifecycle.js';
-import { type backupKeyringSchema, encryptBackup, decryptBackup } from './backup-crypto.js';
+import {
+  type backupKeyringSchema,
+  encryptBackup,
+  decryptBackup,
+  verifyBackupKey,
+  BackupWrappingKeyUnavailable,
+} from './backup-crypto.js';
 import {
   backupDigest,
   backupRecord,
@@ -415,10 +421,8 @@ export function createBackupWorker(input: {
     const directory = await scratch(input.config.directory, 'restore', id);
     await cleanupRestoreScratch(input.config.directory, id);
     await requireScratchSpace(directory, input.config.limits.maxBytes);
-    const attempts = work.attempts + 1;
-    await authorizeEffect(db, row, 'backup:restore', (tx) =>
-      saveWork({ kind: 'prepare', attempts }, tx),
-    );
+    // Revocation still terminates pending work even during an operator key outage.
+    await authorizeEffect(db, row, 'backup:restore', () => Promise.resolve());
     const [sourceRow] = await db
       .select()
       .from(backups)
@@ -428,6 +432,29 @@ export function createBackupWorker(input: {
     const source = backupWorkSchema.parse(sourceRow.work);
     if (source.kind !== 'stored')
       throw new Error('Restore source has no protected object version.');
+    const keyring = await input.keyring().catch(async () => {
+      throw await keyUnavailable(row);
+    });
+    try {
+      verifyBackupKey({
+        encryption: source.encryption,
+        binding: binding(sourceRecord, source),
+        keyring,
+      });
+    } catch (error) {
+      if (error instanceof BackupWrappingKeyUnavailable) throw await keyUnavailable(row);
+      throw error;
+    }
+    const attempts = work.attempts + 1;
+    await authorizeEffect(db, row, 'backup:restore', async (tx) => {
+      await tx
+        .update(backupRestores)
+        .set({
+          record: { ...record, state: { kind: 'pending' } },
+          work: { kind: 'prepare', attempts },
+        })
+        .where(eq(backupRestores.id, id));
+    });
     const ciphertext = join(directory, 'archive.enc');
     const plaintext = join(directory, 'archive.tar');
     try {
@@ -437,7 +464,7 @@ export function createBackupWorker(input: {
         destination: plaintext,
         encryption: source.encryption,
         binding: binding(sourceRecord, source),
-        keyring: await input.keyring(),
+        keyring,
         maxBytes: input.config.limits.maxBytes,
         signal: AbortSignal.timeout(input.config.limits.timeoutSeconds * 1000),
       });
@@ -479,6 +506,19 @@ export function createBackupWorker(input: {
     }
     async function saveWork(next: z.infer<typeof restoreWorkSchema>, executor: Executor = db) {
       await executor.update(backupRestores).set({ work: next }).where(eq(backupRestores.id, id));
+    }
+    async function keyUnavailable(admission: typeof backupRestores.$inferSelect) {
+      await authorizeEffect(db, admission, 'backup:restore', async (tx) => {
+        await tx
+          .update(backupRestores)
+          .set({ record: { ...record, state: { kind: 'pending', waitingFor: 'backup_key' } } })
+          .where(eq(backupRestores.id, id));
+      });
+      return new CloudError(
+        'resource_busy',
+        'Restore is waiting for its matching backup wrapping key. Recover the private offline keyring and verify the backup receipt. No download or database restore started; the isolated target remains billable.',
+        true,
+      );
     }
     async function block(reason: string) {
       await cleanupRestoreScratch(input.config.directory, id);
