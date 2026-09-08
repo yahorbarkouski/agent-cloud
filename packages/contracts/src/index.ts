@@ -1,6 +1,7 @@
 export * from './ids.js';
 export * from './errors.js';
 export * from './catalog.js';
+export * from './capabilities.js';
 export * from './lifecycle.js';
 export * from './auth.js';
 export * from './provider.js';

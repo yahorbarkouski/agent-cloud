@@ -193,6 +193,9 @@ importers:
       '@agent-cloud/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
+      '@agent-cloud/skills':
+        specifier: workspace:*
+        version: link:../../skills
       commander:
         specifier: 15.0.0
         version: 15.0.0
@@ -375,6 +378,8 @@ importers:
       zod:
         specifier: 4.5.4
         version: 4.5.4
+
+  skills: {}
 
 packages:
 

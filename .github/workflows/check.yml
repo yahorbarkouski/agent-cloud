@@ -62,6 +62,9 @@ jobs:
       - if: needs.scope.outputs.code_changed == 'true'
         run: npm exec --yes --package=pnpm@12.3.4 -- pnpm format:check
       - if: needs.scope.outputs.code_changed == 'true'
+        timeout-minutes: 3
+        run: node scripts/smoke-agent-instructions.mjs
+      - if: needs.scope.outputs.code_changed == 'true'
         timeout-minutes: 8
         run: npm exec --yes --package=pnpm@12.3.4 -- pnpm smoke:self-host-wal
       - if: needs.scope.outputs.code_changed == 'true'

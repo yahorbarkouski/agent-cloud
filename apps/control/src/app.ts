@@ -6,6 +6,7 @@ import { ZodError, z } from 'zod';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import {
   referenceInputSchema,
+  type CapabilitiesResponse,
   accessSessionIdSchema,
   accessSessionRequestSchema,
   gatewayClaimSchema,
@@ -196,6 +197,22 @@ export function createApp(input: {
     await next();
   });
   app.get('/v1/whoami', (c) => c.json({ principal: c.get('principal') }));
+  app.get('/v1/capabilities', (c) =>
+    c.json({
+      protocolVersion: 1,
+      provider: input.provider,
+      configured: {
+        machineLifecycle: true,
+        ssh: Boolean(input.access),
+        files: Boolean(input.access),
+        durableCommands: Boolean(input.access),
+        compose: Boolean(input.access),
+        routing: Boolean(input.hosting),
+        protectedBackups: Boolean(input.backups),
+        recipes: true,
+      },
+    } satisfies CapabilitiesResponse),
+  );
   if (input.access && input.customerAccess !== 'disabled') {
     const access = input.access;
     app.post('/v1/machines/:machineId/access-sessions', async (c) =>

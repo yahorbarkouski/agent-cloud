@@ -3,6 +3,7 @@ export { loginConfiguration, exchangeGithubLogin, readLoginJson } from './login.
 import { z } from 'zod';
 import {
   recipeIdSchema,
+  capabilitiesResponseSchema,
   recipeVersionSchema,
   recipeResponseSchema,
   recipesResponseSchema,
@@ -172,6 +173,9 @@ export class CloudClient {
   }
   whoami() {
     return this.request({ path: '/v1/whoami', schema: whoamiResponseSchema });
+  }
+  capabilities() {
+    return this.request({ path: '/v1/capabilities', schema: capabilitiesResponseSchema });
   }
   captureBackup(input: {
     machineId: MachineId;

@@ -22,6 +22,7 @@ import { registerRuns } from './runs.js';
 import { registerHosting } from './hosting.js';
 import { registerBackups } from './backups.js';
 import { registerRecipes } from './recipes.js';
+import { registerAgent } from './agent.js';
 import { registerCompose } from './compose.js';
 import { loginWithDevice, logout } from './login.js';
 import { syncCredentialDirectories, withCredentialLock } from './credential-file.js';
@@ -48,6 +49,7 @@ registerSsh({ program, client, output });
 registerRuns({ program, client, output });
 registerCompose({ program, client, output });
 registerRecipes({ program, output });
+registerAgent({ program, output });
 registerHosting({ program, client, output });
 registerBackups({ program, client, output });
 
@@ -88,6 +90,14 @@ program
 program.command('whoami').action(async () => {
   output(await (await client()).whoami());
 });
+program
+  .command('capabilities')
+  .description(
+    'Configured API features; permissions, guest compatibility and current health are separate.',
+  )
+  .action(async () => {
+    output(await (await client()).capabilities());
+  });
 program
   .command('logout')
   .description('Revoke this credential and descendants, then remove its local file.')

@@ -3,6 +3,7 @@ WORKDIR /build
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps ./apps
 COPY packages ./packages
+COPY skills ./skills
 COPY scripts/install-step.ts ./scripts/install-step.ts
 RUN npm exec --yes --package=pnpm@12.3.4 -- pnpm install --frozen-lockfile --reporter=silent
 RUN npm exec --yes --package=pnpm@12.3.4 -- pnpm exec tsc -b apps/control apps/cli apps/access-gateway apps/public-gateway

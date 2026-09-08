@@ -1,6 +1,7 @@
 packages:
   - apps/*
   - packages/*
+  - skills
 
 allowBuilds:
   esbuild@0.18.20: true

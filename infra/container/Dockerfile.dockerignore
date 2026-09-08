@@ -21,6 +21,10 @@
 !packages/recipes/assets/**
 !packages/db/migrations/
 !packages/db/migrations/**
+!skills/
+!skills/package.json
+!skills/agent-cloud/
+!skills/agent-cloud/SKILL.md
 !scripts/
 !scripts/install-step.ts
 !infra/

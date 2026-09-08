@@ -14,7 +14,25 @@ Manual `backup capture/wait/inspect/restore/restore-wait` commands protect Postg
 
 [PostgreSQL and Umami recipes](docs/recipes.md) prepare ordinary Compose contexts with pinned images, generated credentials and resource limits. Their local Docker checks cover SQL persistence, safe administrator setup and visitor/event collection. Native customer-site verification also passed: a browser click persisted application data and recorded the intended analytics event. Public/provider verification remains separate.
 
-The [self-host quickstart](docs/self-host.md) packages the API, worker, CLI and PostgreSQL in a pinned runtime image. Its local simulated scenario verifies persisted identity and machines across a restart. An isolated restore also preserves the CLI identity, machine and reservation history while leaving the original installation unchanged. Live customer configuration, WAL archival and provider recovery fencing remain separate verification steps.
+The [self-host quickstart](docs/self-host.md) packages the API, worker, CLI and PostgreSQL in a pinned runtime image. Its local simulated scenario verifies persisted identity and machines across a restart. Isolated dump and encrypted WAL recovery preserve the selected CLI identity, machine and reservation history while leaving the original installation unchanged. Live customer configuration, off-host WAL storage and provider recovery fencing remain separate verification steps.
+
+## Connect an existing agent
+
+The installed CLI includes the same [agent skill](skills/agent-cloud/SKILL.md) as this repository. Read it offline as structured JSON, or install it in a new directory inside the skill location supported by your existing agent:
+
+```sh
+acld agent instructions
+acld agent install --directory <existing-agent-skill-parent>/agent-cloud
+acld login --server <operator-HTTPS-origin>
+acld capabilities
+acld whoami
+```
+
+The parent directory must already exist. Installation writes a private `SKILL.md` and reports its version, SHA-256 and path. It never overwrites an existing skill, including customer edits or a symlink destination. Keep an incomplete installation for inspection and choose an explicitly new directory if retrying. Neither offline command reads credentials or contacts a server. Instructions describe the installed CLI version; update them deliberately when changing CLI releases.
+
+`capabilities` calls authenticated `GET /v1/capabilities`; the SDK exposes `capabilities()`. The response separates the provider and protocol version from `configured` service flags. A configured gateway or backup service may be unhealthy, and the selected machine may lack a required guest helper. `whoami` reports the credential's policy; it is still enforced on every operation. The image factory rejects customer discovery along with all other customer API calls. No internal operator shortcuts or private service addresses appear in discovery.
+
+Release artifacts are not published yet. The runtime image bundles the CLI and skill; development uses `pnpm acld`. `pnpm smoke:agent-instructions` verifies the production package outside the checkout with no credentials, installs its skill, checks exact content and refuses overwriting edited/symlink destinations.
 
 ## Run locally
 
