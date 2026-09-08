@@ -20,7 +20,8 @@
     "@agent-cloud/sdk": "workspace:*",
     "commander": "15.0.0",
     "zod": "4.5.4",
-    "ws": "8.21.3"
+    "ws": "8.21.3",
+    "@agent-cloud/recipes": "workspace:*"
   },
   "bin": {
     "acld": "./dist/index.js"

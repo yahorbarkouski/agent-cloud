@@ -65,7 +65,8 @@
     "smoke:backup-recovery": "pnpm build && AGENT_CLOUD_BACKUP_RECOVERY_SCENARIO=1 tsx scripts/smoke-backup-retention.ts",
     "backup:recover": "pnpm build && tsx --env-file-if-exists=.env scripts/backup-recover.ts",
     "backup:retention": "node apps/control/dist/backup-retention-main.js",
-    "smoke:backup-store": "tsx packages/backup-store/src/fixture/smoke.ts"
+    "smoke:backup-store": "tsx packages/backup-store/src/fixture/smoke.ts",
+    "smoke:recipes": "pnpm build && node --import tsx recipes/smoke.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

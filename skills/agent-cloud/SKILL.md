@@ -5,7 +5,7 @@ description: Operate agent-cloud machines through its JSON CLI, inspect durable 
 
 # Agent-cloud
 
-Use the installed `acld` CLI. In a source checkout, use `pnpm acld`. Run `acld --help` when unsure about available commands. The current release supports GitHub device sign-in, machine lifecycle, scoped delegation, SSH, single-file transfer, durable commands, Compose deployment/recovery, managed HTTPS routing and explicit PostgreSQL backup/isolated restore. Daily scheduling and operator-run retention/purge are available. For maintained PostgreSQL and Umami deployment contexts, read [the recipe instructions](../../docs/recipes.md); they include secret generation, resource limits, backup commands and analytics instrumentation checks.
+Use the installed `acld` CLI. In a source checkout, use `pnpm acld`. Run `acld --help` when unsure about available commands. The current release supports GitHub device sign-in, machine lifecycle, scoped delegation, SSH, single-file transfer, durable commands, Compose deployment/recovery, managed HTTPS routing and explicit PostgreSQL backup/isolated restore. Daily scheduling and operator-run retention/purge are available. Discover bundled PostgreSQL and Umami versions with `acld recipe list` and `acld recipe inspect <id>`. Prepare an explicit version with `acld recipe prepare <id> --version <version> --output <new-private-directory>`, then deploy with ordinary Compose commands. These local commands need no credential; remote operations still require access. For deployment and recovery, read [the recipe instructions](../../docs/recipes.md); they include secret generation, resource limits, backup commands and analytics instrumentation checks.
 
 ## Establish context
 

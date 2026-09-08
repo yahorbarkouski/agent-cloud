@@ -24,7 +24,16 @@ export async function exerciseAnalytics(input: {
   const context = join(input.scratch, 'analytics recipe');
   await promisify(execFile)(
     process.execPath,
-    ['recipes/prepare.mjs', 'umami', '--output', context],
+    [
+      'apps/cli/dist/index.js',
+      'recipe',
+      'prepare',
+      'umami',
+      '--version',
+      '1.0.0',
+      '--output',
+      context,
+    ],
     { timeout: 10000 },
   );
   const release = z.uuid().parse((await readFile(join(context, 'release-id'), 'utf8')).trim());

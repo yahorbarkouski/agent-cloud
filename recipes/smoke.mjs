@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import process from 'node:process';
@@ -16,6 +16,19 @@ async function docker(args, timeout = 30_000) {
     ).stdout.trim();
   } catch {
     throw new Error('Recipe Docker command failed.');
+  }
+}
+async function requireUnusedProject(project) {
+  for (const list of [
+    ['ps', '-aq', '--no-trunc'],
+    ['network', 'ls', '-q', '--no-trunc'],
+    ['volume', 'ls', '-q'],
+  ]) {
+    assert.equal(
+      await docker([...list, '--filter', `label=com.docker.compose.project=${project}`]),
+      '',
+      'Recipe project already exists.',
+    );
   }
 }
 async function cleanup(project) {
@@ -38,37 +51,108 @@ async function cleanup(project) {
   process.stdout.write(JSON.stringify({ project, cleanupVerified: true, removed }) + '\n');
 }
 const directory = await mkdtemp('/tmp/acld-recipes-check-');
+const cli = join(directory, 'installed-cli', 'dist', 'index.js');
 let stage = 'configuration';
 let passed = false;
 const results = [];
 try {
+  stage = 'production CLI packaging';
+  // pnpm deploy --prod can prune the source workspace. Give packaging its own inputs;
+  // never copy credentials, application contexts or the developer's node_modules.
+  const packaging = join(directory, 'workspace');
+  await mkdir(packaging, { mode: 0o700 });
+  for (const name of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml'])
+    await cp(name, join(packaging, name));
+  for (const group of ['apps', 'packages']) {
+    for (const entry of await readdir(group, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const path = join(group, entry.name);
+      await mkdir(join(packaging, path), { recursive: true });
+      await cp(join(path, 'package.json'), join(packaging, path, 'package.json'));
+    }
+  }
+  for (const path of [
+    'apps/cli/dist',
+    'packages/contracts/dist',
+    'packages/sdk/dist',
+    'packages/recipes/dist',
+    'packages/recipes/assets',
+  ])
+    await cp(path, join(packaging, path), { recursive: true });
+  await exec(
+    'npm',
+    [
+      'exec',
+      '--yes',
+      '--package=pnpm@12.3.4',
+      '--',
+      'pnpm',
+      '--filter',
+      '@agent-cloud/cli',
+      'deploy',
+      '--legacy',
+      '--prod',
+      join(directory, 'installed-cli'),
+    ],
+    { cwd: packaging, timeout: 120_000, maxBuffer: 131_072 },
+  );
+  const installed = async (args) =>
+    exec(process.execPath, [cli, 'recipe', ...args], {
+      cwd: directory,
+      env: { PATH: process.env.PATH, ACLD_CREDENTIALS: join(directory, 'no-credentials') },
+      timeout: 10_000,
+      maxBuffer: 32_768,
+    });
+  const catalog = JSON.parse((await installed(['list'])).stdout).recipes;
+  assert.deepEqual(
+    catalog.map((recipe) => recipe.id),
+    ['postgres', 'umami'],
+  );
+  assert.ok(catalog.every((recipe) => recipe.version === '1.0.0'));
   const recipes = process.argv.length === 2 ? ['postgres', 'umami'] : process.argv.slice(2);
   assert.ok(recipes.every((recipe) => ['postgres', 'umami'].includes(recipe)));
   for (const recipe of recipes) {
-    const project = `acld-recipe-${randomUUID().slice(0, 8)}`;
+    const project = `acld-recipe-${randomUUID()}`;
     const context = join(directory, recipe);
     const listener = createServer();
     await new Promise((resolve) => listener.listen(0, '127.0.0.1', resolve));
     const port = listener.address().port;
     await new Promise((resolve) => listener.close(resolve));
-    await exec(
-      process.execPath,
-      [
-        'recipes/prepare.mjs',
-        recipe,
-        '--output',
-        context,
-        ...(recipe === 'umami' ? ['--port', String(port)] : []),
-      ],
-      { timeout: 10_000, maxBuffer: 4096 },
+    const prepared = JSON.parse(
+      (
+        await installed([
+          'prepare',
+          recipe,
+          '--version',
+          '1.0.0',
+          '--output',
+          context,
+          ...(recipe === 'umami' ? ['--port', String(port)] : []),
+        ])
+      ).stdout,
     );
+    assert.equal(prepared.prepared, true);
+    assert.equal(prepared.version, '1.0.0');
+    assert.equal(prepared.releaseId, (await readFile(join(context, 'release-id'), 'utf8')).trim());
     const compose = (args) =>
       docker(
         ['compose', '--project-name', project, '--file', join(context, 'compose.yaml'), ...args],
         210_000,
       );
+    stage = 'project ownership';
+    // A refused collision must never enter the mutation/cleanup scope.
+    await requireUnusedProject(project);
     try {
       const config = JSON.parse(await compose(['config', '--format', 'json']));
+      const metadata = JSON.parse(
+        (await installed(['inspect', recipe, '--version', '1.0.0'])).stdout,
+      ).recipe;
+      for (const service of metadata.services) {
+        assert.equal(config.services[service.name].image, service.image);
+        assert.equal(Number(config.services[service.name].mem_limit), service.memoryBytes);
+        assert.equal(Number(config.services[service.name].cpus), service.cpus);
+        assert.equal(config.services[service.name].pids_limit, service.pids);
+      }
       const isolated = isolatedBackupConfig(config, {
         sourceRoot: context,
         customerRoot: '/var/lib/agent-customer',

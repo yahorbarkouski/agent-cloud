@@ -187,6 +187,9 @@ importers:
       '@agent-cloud/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@agent-cloud/recipes':
+        specifier: workspace:*
+        version: link:../../packages/recipes
       '@agent-cloud/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
@@ -220,6 +223,9 @@ importers:
       '@agent-cloud/pki':
         specifier: workspace:*
         version: link:../../packages/pki
+      '@agent-cloud/recipes':
+        specifier: workspace:*
+        version: link:../../packages/recipes
       '@agent-cloud/remote':
         specifier: workspace:*
         version: link:../../packages/remote
@@ -339,6 +345,12 @@ importers:
       zod:
         specifier: 4.5.4
         version: 4.5.4
+
+  packages/recipes:
+    dependencies:
+      '@agent-cloud/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/remote:
     dependencies:

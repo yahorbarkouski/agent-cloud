@@ -10,6 +10,7 @@ Read `docs/CONTEXT.md` for the single current handoff. Architecture documentatio
 - Reuse working foundations. Do not expand prerequisites, speculative frameworks or future-scale infrastructure. Record non-blocking improvements briefly and continue.
 - Use one primary implementation stream. Delegate only concrete independent work that shortens delivery. Review consequential authorization, concurrency and recovery changes with a bounded scope and stopping condition.
 - Run focused tests while iterating and required integration checks when code, dependencies, configuration or a concrete concern changes. Do not rerun comprehensive suites for documentation, another review, or an unchanged fast-forward. Documentation-only CI uses lightweight checks.
+- Run production-only packaging in an isolated copy; dependency pruning must not mutate the active development workspace. Temporary fixtures must work in a clean checkout without ignored directories.
 - Keep this file concise. Update the single handoff at meaningful checkpoints and before compaction with what works, what remains, the next acceptance scenario, commands/evidence, owned resources/cleanup and actual blockers. Put durable subsystem lessons beside that subsystem.
 
 ## Boundaries and guarantees

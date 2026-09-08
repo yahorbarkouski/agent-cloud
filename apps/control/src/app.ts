@@ -67,6 +67,7 @@ import {
   loadPrincipal,
   revokeGrant,
 } from './auth.js';
+import { recipes, findRecipe } from '@agent-cloud/recipes/catalog';
 import { readUsage, readReservationHistory } from './usage.js';
 import { admit, lockAccount } from './lifecycle.js';
 import type { ImageReleaseSelection } from './allocation-image.js';
@@ -308,6 +309,10 @@ export function createApp(input: {
       }),
     );
   }
+  app.get('/v1/recipes', (c) => c.json({ recipes }));
+  app.get('/v1/recipes/:id', (c) =>
+    c.json({ recipe: findRecipe(c.req.param('id'), c.req.query('version')) }),
+  );
   app.get('/v1/catalog', (c) => c.json(input.catalog()));
   if (input.backups && input.customerAccess !== 'disabled') {
     const backups = input.backups;

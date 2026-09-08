@@ -21,12 +21,14 @@ import { registerSsh } from './ssh.js';
 import { registerRuns } from './runs.js';
 import { registerHosting } from './hosting.js';
 import { registerBackups } from './backups.js';
+import { registerRecipes } from './recipes.js';
 import { registerCompose } from './compose.js';
 import { loginWithDevice, logout } from './login.js';
 import { syncCredentialDirectories, withCredentialLock } from './credential-file.js';
 
 const program = new Command()
   .name('acld')
+  .enablePositionalOptions()
   .description('Operate agent-cloud with structured JSON results.')
   .version('0.1.0');
 program.exitOverride();
@@ -45,6 +47,7 @@ registerGrants({ program, client, output });
 registerSsh({ program, client, output });
 registerRuns({ program, client, output });
 registerCompose({ program, client, output });
+registerRecipes({ program, output });
 registerHosting({ program, client, output });
 registerBackups({ program, client, output });
 

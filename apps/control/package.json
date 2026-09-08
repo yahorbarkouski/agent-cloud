@@ -29,7 +29,8 @@
     "pino": "10.3.1",
     "@agent-cloud/pki": "workspace:*",
     "@agent-cloud/remote": "workspace:*",
-    "@agent-cloud/backup-store": "workspace:*"
+    "@agent-cloud/backup-store": "workspace:*",
+    "@agent-cloud/recipes": "workspace:*"
   },
   "devDependencies": {
     "@types/pg": "8.23.1"

@@ -47,6 +47,9 @@
     },
     {
       "path": "packages/backup-store"
+    },
+    {
+      "path": "packages/recipes"
     }
   ]
 }

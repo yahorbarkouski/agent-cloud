@@ -2,18 +2,22 @@
 
 These deployment contexts use the ordinary customer `acld compose apply` path. PostgreSQL stores its data in a named volume on a private bridge. Umami adds a frontend on `127.0.0.1:3000`, ready for an authenticated cloud HTTPS route. They contain no provider credentials, public database port, external volume, or mutable image tag without a digest.
 
-The maintained pins are PostgreSQL **17.11 / Alpine 3.24** and Umami **3.3.1**. Their exact multiarch image digests are in [the PostgreSQL recipe](../recipes/postgres/compose.yaml) and [the Umami recipe](../recipes/umami/compose.yaml). Both support Linux AMD64 and ARM64. Umami uses PostgreSQL 17 so its database fits the implemented protected-backup recipe.
+The maintained pins are PostgreSQL **17.11 / Alpine 3.24** and Umami **3.3.1**. Their exact multiarch image digests are in [the PostgreSQL recipe](../packages/recipes/assets/postgres/compose.yaml) and [the Umami recipe](../packages/recipes/assets/umami/compose.yaml). Both support Linux AMD64 and ARM64. Umami uses PostgreSQL 17 so its database fits the implemented protected-backup recipe.
 
 ## Prepare a private context
 
-Run from this repository with Node 24 or newer. Choose a new destination outside version-controlled source; `.local` is ignored here.
+Use the installed CLI with Node 24 or newer; a source checkout is not needed. Choose a new destination outside version-controlled source; `.local` is ignored here.
 
 ```sh
-node recipes/prepare.mjs postgres --output .local/recipes/postgres
-node recipes/prepare.mjs umami --output .local/recipes/umami
+acld recipe list
+acld recipe inspect umami --version 1.0.0
+acld recipe prepare postgres --version 1.0.0 --output .local/recipes/postgres
+acld recipe prepare umami --version 1.0.0 --output .local/recipes/umami
 ```
 
-The helper creates a 0700 directory, independent random database passwords, a saved initial `release-id`, and 0600 secret files. Umami also receives independent application-signing, two-factor-encryption, and initial administrator secrets. It prints only the context path. An existing destination is refused, preserving its secrets and release identity. A failed partial preparation is also left for inspection; do not overwrite a context already submitted as a release. `--port 3001` selects another Umami loopback port when a machine already uses 3000.
+`recipe list` and `recipe inspect` read versions bundled with the installed CLI and work offline. Preparation never downloads code or starts services. The authenticated API exposes the same server-bundled catalog at `GET /v1/recipes` and `GET /v1/recipes/:id?version=1.0.0`; the SDK has `recipes()` and `recipe(id, version)`. A server and CLI on different releases may have different catalogs. Select an available explicit version rather than assuming the latest. The catalog reports image digests, resource limits, secret paths and the actual backup scope.
+
+The helper creates a 0700 directory, independent random database passwords, a saved initial `release-id`, and 0600 secret files. Umami also receives independent application-signing, two-factor-encryption, and initial administrator secrets. It prints the context path, selected version and saved release UUID, never credentials. `recipe.json` records the selection inside the context. An existing destination is refused, preserving its secrets and release identity. A failed partial preparation is also left for inspection; do not overwrite a context already submitted as a release. `--port 3001` selects another Umami loopback port when a machine already uses 3000.
 
 Keep the entire generated context private. `acld compose apply` includes every regular file inside it, including application secrets; upload no unrelated files. The guest retains these files beneath its root-protected Compose directory. The bootstrap code is non-secret and readable by Umami's UID 1001. Docker reads the private Umami `env_file` and injects the environment, so that user does not need to read a root-owned 0600 secret bind. PostgreSQL's initial root entrypoint reads its password through `POSTGRES_PASSWORD_FILE` before dropping privileges.
 
@@ -58,7 +62,7 @@ acld compose wait <machine> umami
 acld compose inspect <machine> umami
 ```
 
-Before the HTTP server starts, [the bootstrap](../recipes/umami/bootstrap.mjs) runs the pinned upstream database migrations and tracker configuration. PostgreSQL's bundled `pgcrypto` then replaces any administrator still using Umami's upstream default password with the generated 64-character password. An administrator already using another password is preserved, including after restoration. Failure stops startup before HTTP binds. This behavior is tied to Umami 3.3.1's user schema and must be reverified when upgrading. The recipe does not install packages at runtime.
+Before the HTTP server starts, [the bootstrap](../packages/recipes/assets/umami/bootstrap.mjs) runs the pinned upstream database migrations and tracker configuration. PostgreSQL's bundled `pgcrypto` then replaces any administrator still using Umami's upstream default password with the generated 64-character password. An administrator already using another password is preserved, including after restoration. Failure stops startup before HTTP binds. This behavior is tied to Umami 3.3.1's user schema and must be reverified when upgrading. The recipe does not install packages at runtime.
 
 The initial username is `admin`; its generated password is `RECIPE_ADMIN_PASSWORD` in the private `secrets/umami.env`. Once the application is healthy, publish its loopback port:
 
@@ -125,7 +129,7 @@ PostgreSQL minor updates remain on major 17 and the existing named volume. Chang
 
 ## Local verification and upstream references
 
-Run `node --import tsx recipes/smoke.mjs` from the installed workspace with Docker. It pulls missing pinned images with bounded timeouts, validates generated Compose and isolated-restore configuration, checks owner-only secrets, SQL persistence, default-login rejection, administrator-password preservation, and collector readback. Unique project labels bind cleanup to only its containers, networks and volumes; temporary contexts are removed in `finally`. It prints IDs and verification facts, never credentials. This fixture uses a local collector and does not claim customer-site instrumentation, provider storage enforcement, public ACME, or native VM verification.
+Run `pnpm build` then `node --import tsx recipes/smoke.mjs` from the installed workspace with Docker. It pulls missing pinned images with bounded timeouts, validates generated Compose and isolated-restore configuration, checks owner-only secrets, SQL persistence, default-login rejection, administrator-password preservation, and collector readback. The smoke builds a production-only CLI in a temporary workspace, then runs it from outside the repository without credentials. Packaging is isolated because `pnpm deploy --prod` may prune its source workspace. Full UUID project names and an absence check precede Docker mutations; cleanup touches only the admitted project’s containers, networks and volumes; temporary contexts are removed in `finally`. It prints IDs and verification facts, never credentials. This fixture uses a local collector and does not claim customer-site instrumentation, provider storage enforcement, public ACME, or native VM verification.
 
 For the full native customer-site check, use the existing local CA, guest build tools, OrbStack and installed Google Chrome on the development Mac:
 

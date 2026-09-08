@@ -67,6 +67,9 @@ jobs:
       - if: needs.scope.outputs.code_changed == 'true'
         run: npm exec --yes --package=pnpm@12.3.4 -- pnpm smoke:usage
       - if: needs.scope.outputs.code_changed == 'true'
+        timeout-minutes: 5
+        run: npm exec --yes --package=pnpm@12.3.4 -- pnpm smoke:recipes
+      - if: needs.scope.outputs.code_changed == 'true'
         run: npm exec --yes --package=pnpm@12.3.4 -- pnpm smoke:cleanup
       - if: needs.scope.outputs.code_changed == 'true'
         timeout-minutes: 6

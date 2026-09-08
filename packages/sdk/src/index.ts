@@ -2,6 +2,10 @@ import { setTimeout } from 'node:timers/promises';
 export { loginConfiguration, exchangeGithubLogin, readLoginJson } from './login.js';
 import { z } from 'zod';
 import {
+  recipeIdSchema,
+  recipeVersionSchema,
+  recipeResponseSchema,
+  recipesResponseSchema,
   backupCaptureRequestSchema,
   backupPurgeIdSchema,
   backupPurgeRequestSchema,
@@ -343,6 +347,19 @@ export class CloudClient {
         );
       await setTimeout(500, undefined, { signal });
     }
+  }
+  recipes() {
+    return this.request({ path: '/v1/recipes', schema: recipesResponseSchema });
+  }
+  recipe(id: string, version?: string) {
+    const query =
+      version === undefined
+        ? ''
+        : `?version=${encodeURIComponent(recipeVersionSchema.parse(version))}`;
+    return this.request({
+      path: `/v1/recipes/${recipeIdSchema.parse(id)}${query}`,
+      schema: recipeResponseSchema,
+    });
   }
   catalog() {
     return this.request({ path: '/v1/catalog', schema: catalogResponseSchema });

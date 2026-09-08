@@ -2,7 +2,8 @@ import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { mkdtemp, open, rename, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { Buffer } from 'node:buffer';
 import { fileURLToPath, URL } from 'node:url';
 import process from 'node:process';
@@ -211,7 +212,7 @@ async function verifyRestore(machine, identity) {
   requireFact(usage.usage.activeReservations === 1 && history.history.length > 0);
   await compose(['stop', 'api', 'worker']);
   stage = 'quiesced private snapshot';
-  snapshotDirectory = await mkdtemp(join(root, '.local', 'self-host-restore-'));
+  snapshotDirectory = await mkdtemp(join(tmpdir(), 'self-host-restore-'));
   const migrations = await migrationState(project);
   const files = [];
   for (const file of snapshotFiles) {
@@ -249,7 +250,7 @@ async function verifyRestore(machine, identity) {
   );
   await writePrivate(join(snapshotDirectory, 'receipt.json'), receipt);
   await syncDirectory(snapshotDirectory);
-  await syncDirectory(join(root, '.local'));
+  await syncDirectory(dirname(snapshotDirectory));
   snapshotDigest = digest(receipt);
   stage = 'reject corrupt incomplete or mismatched restore';
   const dumpPath = join(snapshotDirectory, 'control.dump');
