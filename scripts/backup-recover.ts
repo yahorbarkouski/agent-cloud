@@ -11,17 +11,29 @@ import {
   createBackupRecovery,
 } from '../apps/control/dist/backup-recovery.js';
 import { readPrivateFile } from '../apps/control/dist/private-file.js';
+import { openControlFence, openControlRecoveryFence } from '../apps/control/dist/control-fence.js';
 
 async function main() {
   const [command, argument, ...extra] = process.argv.slice(2);
-  if (!['inspect', 'apply'].includes(command ?? '') || !argument || extra.length)
+  if (!['inspect', 'apply', 'apply-recovered'].includes(command ?? '') || !argument || extra.length)
     throw new CloudError(
       'invalid_input',
-      'Usage: pnpm backup:recover inspect <backup-id> | apply <private-request.json>',
+      'Usage: pnpm backup:recover inspect <backup-id> | apply|apply-recovered <private-request.json>',
     );
   const url = process.env.DATABASE_URL;
   if (!url) throw new CloudError('invalid_input', 'DATABASE_URL is required.');
   const connection = connect(url);
+  const generationPath = resolve(
+    process.env.ACLD_CONTROL_GENERATION_FILE ?? '.local/control-generation.json',
+  );
+  const fence =
+    command === 'inspect'
+      ? undefined
+      : command === 'apply-recovered'
+        ? await openControlRecoveryFence(connection, generationPath, {
+            onLost: () => process.exit(1),
+          })
+        : await openControlFence(connection, generationPath, { onLost: () => process.exit(1) });
   let writer: ReturnType<typeof createBackupWriter> | undefined;
   const recovery = createBackupRecovery({
     connection,
@@ -51,6 +63,7 @@ async function main() {
     );
     return { backup: await recovery.apply(request) };
   } finally {
+    await fence?.close();
     writer?.close();
     await connection.pool.end();
   }

@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   capabilitySchema,
   grantPolicySchema,
@@ -38,6 +41,7 @@ export async function testDatabase(initialize?: (connection: Connection) => Prom
   const url = new URL(sourceUrl);
   url.pathname = `/${name}`;
   const connection = connect(url.toString());
+  let controlDirectory: string | undefined;
   try {
     if (initialize) await initialize(connection);
     else await migrate(connection);
@@ -50,6 +54,20 @@ export async function testDatabase(initialize?: (connection: Connection) => Prom
   return {
     connection,
     databaseUrl: url.toString(),
+    async controlIdentity() {
+      controlDirectory ??= await mkdtemp(join(tmpdir(), 'acld-test-control-'));
+      const generation = randomUUID();
+      const path = join(controlDirectory, generation + '.json');
+      await writeFile(path, JSON.stringify({ version: 1, generation }), {
+        mode: 0o600,
+        flag: 'wx',
+      });
+      await connection.pool.query(
+        'INSERT INTO control_state (id,state) VALUES (1,$1) ON CONFLICT (id) DO UPDATE SET state=EXCLUDED.state',
+        [JSON.stringify({ kind: 'ready', generation })],
+      );
+      return path;
+    },
     async reset() {
       await connection.pool.query(
         'TRUNCATE accounts, image_builds, simulated_servers, simulated_actions, simulated_primary_ips RESTART IDENTITY CASCADE',
@@ -59,6 +77,7 @@ export async function testDatabase(initialize?: (connection: Connection) => Prom
       await connection.pool.end();
       await admin.pool.query(`DROP DATABASE "${name}"`);
       await admin.pool.end();
+      if (controlDirectory) await rm(controlDirectory, { recursive: true, force: true });
     },
   };
 }

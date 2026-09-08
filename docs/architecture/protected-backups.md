@@ -143,7 +143,9 @@ An existing exact version remains readable after its promised retention ends. Th
 
 ### Separate retention operator
 
-Run `node apps/control/dist/backup-retention-main.js` with `DATABASE_URL` and `ACLD_BACKUP_RETENTION_CONFIG` pointing to an absolute, owner-only JSON file:
+Run `node apps/control/dist/backup-retention-main.js` with `DATABASE_URL`, the ready `ACLD_CONTROL_GENERATION_FILE`, and `ACLD_BACKUP_RETENTION_CONFIG` pointing to an absolute, owner-only JSON file. The control generation defaults to `.local/control-generation.json`; [fenced control recovery](../control-recovery.md) explains initialization and restore. Retention refuses restored or mismatched authority and terminates if its execution lease is lost.
+
+Retention configuration:
 
 ```json
 {
@@ -177,6 +179,8 @@ A lost upload acknowledgement can remain blocked after the automatic verificatio
 pnpm backup:recover inspect <backup-uuid>
 pnpm backup:recover apply /absolute/private/recovery.json
 ```
+
+Normal apply requires the ready control generation. While the control database is deliberately fenced for recovery, use `apply-recovered` with its matching recovering generation. That command takes an exclusive recovery lease, so it cannot race control resume. Its existing storage I/O remains read-only; it cannot repeat a PUT or delete an object.
 
 Inspection works without storage keys. It returns the backup state, phase, reservation, a receipt digest and whether upload resolution applies. The owner-only request file contains `{ "backupId": "<uuid>", "expectedReceiptDigest": "<digest-from-inspect>" }`. Apply uses `ACLD_BACKUP_CONFIG` and its writer identity's read/list permissions. It does not load the reader file, wrapping keyring, guest runtime or provider credentials.
 

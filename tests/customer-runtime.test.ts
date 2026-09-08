@@ -480,6 +480,7 @@ it('the actual customer API starts and authenticates reads with missing bootstra
       env: {
         PATH: process.env.PATH,
         DATABASE_URL: database.databaseUrl,
+        ACLD_CONTROL_GENERATION_FILE: await database.controlIdentity(),
         PROVIDER: 'hetzner',
         PROVIDER_CURRENCY: 'USD',
         MAX_PROVIDER_HOURLY: '0.03',

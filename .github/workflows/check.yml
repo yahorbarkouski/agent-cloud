@@ -65,6 +65,11 @@ jobs:
         timeout-minutes: 3
         run: node scripts/smoke-agent-instructions.mjs
       - if: needs.scope.outputs.code_changed == 'true'
+        timeout-minutes: 2
+        env:
+          ACLD_TEST_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: node --import tsx scripts/smoke-control-recovery.ts
+      - if: needs.scope.outputs.code_changed == 'true'
         timeout-minutes: 8
         run: node scripts/self-host-smoke.mjs --restore --wal --gateway
       - if: needs.scope.outputs.code_changed == 'true'

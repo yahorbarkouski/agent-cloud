@@ -55,6 +55,14 @@ export async function withImageBuildLock<T>(input: {
   return withResourceLock({ ...input, key: `image-build:${input.buildId}` });
 }
 
+/** Offline recovery writes use the same connection that owns exclusivity. */
+export async function withControlRecoveryLock<T>(input: {
+  pool: pg.Pool;
+  work: (db: Database) => Promise<T>;
+}) {
+  return withResourceLock({ ...input, key: 'control-recovery' });
+}
+
 export async function withAccessSessionLock<T>(input: {
   pool: pg.Pool;
   sessionId: string;

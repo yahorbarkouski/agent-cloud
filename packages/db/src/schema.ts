@@ -16,6 +16,22 @@ import {
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 
+/** The matching generation lives outside database backups. Recovery starts with a fresh file. */
+export const controlState = pgTable(
+  'control_state',
+  {
+    id: integer('id').primaryKey().default(1),
+    state: jsonb('state').notNull(),
+  },
+  (t) => [check('control_state_singleton', sql`${t.id} = 1`)],
+);
+
+export const controlRecoveries = pgTable('control_recoveries', {
+  id: text('id').primaryKey(),
+  request: jsonb('request').notNull(),
+  createdAt: createdAt(),
+});
+
 export const imageBuilds = pgTable('image_builds', {
   id: text('id').primaryKey(),
   admission: jsonb('admission').notNull(),

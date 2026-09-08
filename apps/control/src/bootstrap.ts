@@ -17,6 +17,7 @@ import {
 import { connect, accounts, projects, grants } from '@agent-cloud/db';
 import { generateToken, hashToken } from './auth.js';
 import { readConfig } from './config.js';
+import { openControlFence } from './control-fence.js';
 
 const bootstrapSchema = credentialsSchema.extend({
   accountId: accountIdSchema,
@@ -52,6 +53,9 @@ export async function bootstrap() {
   }
   const saved = bootstrapSchema.parse(JSON.parse(await readFile(path, 'utf8')));
   const connection = connect(config.databaseUrl);
+  const fence = await openControlFence(connection, config.controlGenerationFile, {
+    onLost: () => process.exit(1),
+  });
   try {
     await connection.db.transaction(async (tx) => {
       const [existing] = await tx.select().from(grants).where(eq(grants.id, saved.grantId));
@@ -86,6 +90,7 @@ export async function bootstrap() {
         '\n',
     );
   } finally {
+    await fence?.close();
     await connection.pool.end();
   }
 }

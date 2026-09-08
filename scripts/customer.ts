@@ -13,6 +13,7 @@ import {
 } from '../apps/control/src/customer-login.js';
 import { readPrivateFile } from '../apps/control/src/private-file.js';
 import { readConfig } from '../apps/control/src/config.js';
+import { openControlFence } from '../apps/control/src/control-fence.js';
 
 const [command, argument, ...extra] = process.argv.slice(2);
 if (!argument || extra.length || !['admit', 'renew', 'inspect', 'disable'].includes(command ?? ''))
@@ -21,6 +22,12 @@ if (!argument || extra.length || !['admit', 'renew', 'inspect', 'disable'].inclu
   );
 const config = readConfig();
 const connection = connect(config.databaseUrl);
+const fence =
+  command === 'inspect'
+    ? undefined
+    : await openControlFence(connection, config.controlGenerationFile, {
+        onLost: () => process.exit(1),
+      });
 try {
   if (command === 'admit' || command === 'renew') {
     const common = z.strictObject({
@@ -71,5 +78,6 @@ try {
     process.stdout.write(JSON.stringify(identity) + '\n');
   }
 } finally {
+  await fence?.close();
   await connection.pool.end();
 }

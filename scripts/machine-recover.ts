@@ -8,6 +8,7 @@ import { connect } from '../packages/db/dist/index.js';
 import { HetznerInventory } from '../packages/hetzner/dist/index.js';
 import { readPrivateFile } from '../apps/control/dist/private-file.js';
 import { SimulatedProvider } from '../apps/control/dist/simulated-provider.js';
+import { openControlFence, openControlRecoveryFence } from '../apps/control/dist/control-fence.js';
 import {
   applyOperatorRecovery,
   inspectOperatorRecovery,
@@ -15,15 +16,24 @@ import {
 
 async function main() {
   const [command, argument, ...extra] = process.argv.slice(2);
-  if (!['inspect', 'apply'].includes(command ?? '') || !argument || extra.length)
+  if (!['inspect', 'apply', 'apply-recovered'].includes(command ?? '') || !argument || extra.length)
     throw new CloudError(
       'invalid_input',
-      'Usage: pnpm machine:recover inspect <cleanup-operation-id> | apply <request.json>',
+      'Usage: pnpm machine:recover inspect <cleanup-operation-id> | apply|apply-recovered <request.json>',
     );
   const url = process.env.DATABASE_URL;
   if (!url)
     throw new CloudError('invalid_input', 'DATABASE_URL is required; apply migrations first.');
   const connection = connect(url);
+  const path = resolve(
+    process.env.ACLD_CONTROL_GENERATION_FILE ?? '.local/control-generation.json',
+  );
+  const fence =
+    command === 'inspect'
+      ? undefined
+      : command === 'apply-recovered'
+        ? await openControlRecoveryFence(connection, path, { onLost: () => process.exit(1) })
+        : await openControlFence(connection, path, { onLost: () => process.exit(1) });
   try {
     if (command === 'inspect')
       return await inspectOperatorRecovery(connection, operationIdSchema.parse(argument));
@@ -44,6 +54,7 @@ async function main() {
     if (!provider) throw new CloudError('invalid_input', 'Unsupported allocation provider.');
     return await applyOperatorRecovery({ connection, provider, request });
   } finally {
+    await fence?.close();
     await connection.pool.end();
   }
 }

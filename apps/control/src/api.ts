@@ -7,9 +7,13 @@ import { createCatalogRuntime } from './catalog-runtime.js';
 import { createOperatorRuntime } from './operator-runtime.js';
 import { createCustomerLogin } from './customer-login.js';
 import { readGithubConfig, githubIdentityVerifier } from './github-identity.js';
+import { openControlFence } from './control-fence.js';
 
 const config = readConfig();
 const connection = connect(config.databaseUrl);
+const fence = await openControlFence(connection, config.controlGenerationFile, {
+  onLost: () => process.exit(1),
+});
 const runtime =
   config.provider === 'hetzner' ? await createOperatorRuntime(connection, config) : undefined;
 if (runtime?.mode === 'image_factory') await runtime.checkConfiguration();
@@ -24,6 +28,7 @@ const github =
     ? await readGithubConfig(config.githubConfigFile)
     : undefined;
 const app = createApp({
+  ...(fence ? { checkControl: fence.check } : {}),
   db: connection.db,
   provider: config.provider,
   limits: config.limits,
@@ -73,7 +78,10 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
   process.once(signal, () => {
     catalog.stop();
     server.close(() => {
-      void connection.pool.end();
+      void (async () => {
+        await fence?.close();
+        await connection.pool.end();
+      })();
     });
   });
 }

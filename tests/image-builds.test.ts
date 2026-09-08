@@ -750,6 +750,7 @@ it('requires recorded sanitation and observed shutdown before a snapshot, then d
 
 it('operator CLI inspects and cancels through the real database without provider credentials', async () => {
   await admit();
+  const controlPath = await database.controlIdentity();
   const exec = promisify(execFile);
   for (const command of ['inspect', 'cancel']) {
     const result = await exec(
@@ -760,6 +761,7 @@ it('operator CLI inspects and cancels through the real database without provider
         env: {
           ...process.env,
           DATABASE_URL: database.databaseUrl,
+          ACLD_CONTROL_GENERATION_FILE: controlPath,
           HCLOUD_TOKEN_FILE: '/no-provider-token',
         },
       },
@@ -802,6 +804,7 @@ it('operator CLI replays an admission without provider credentials and rejects c
       env: {
         ...process.env,
         DATABASE_URL: database.databaseUrl,
+        ACLD_CONTROL_GENERATION_FILE: await database.controlIdentity(),
         HCLOUD_TOKEN_FILE: '/no-provider-token',
       },
     };

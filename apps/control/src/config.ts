@@ -31,6 +31,13 @@ export function readConfig(environment: NodeJS.ProcessEnv = process.env) {
     host: env.HOST,
     port: env.PORT,
     publicUrl: env.PUBLIC_URL,
+    ...(environment.ACLD_CONTROL_GENERATION_FILE || env.PROVIDER === 'hetzner'
+      ? {
+          controlGenerationFile: resolve(
+            environment.ACLD_CONTROL_GENERATION_FILE ?? '.local/control-generation.json',
+          ),
+        }
+      : {}),
     ...(environment.ACLD_BACKUP_CONFIG
       ? { backupConfigFile: resolve(environment.ACLD_BACKUP_CONFIG) }
       : {}),

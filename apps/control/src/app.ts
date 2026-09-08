@@ -92,6 +92,7 @@ export function createApp(input: {
   login?: CustomerLogin;
   hosting?: { service: HostingService; gatewayToken: string };
   backups?: BackupService;
+  checkControl?: () => Promise<void>;
 }) {
   const app = new Hono<{ Variables: { principal: Principal; requestId: string } }>();
   app.use('*', async (c, next) => {
@@ -101,6 +102,10 @@ export function createApp(input: {
     await next();
   });
   app.use('*', secureHeaders());
+  app.use('*', async (_c, next) => {
+    await input.checkControl?.();
+    await next();
+  });
   app.use(
     '*',
     bodyLimit({

@@ -74,7 +74,11 @@ it('starts explicitly, resumes publication on a real worker, and queues retained
     process.execPath,
     ['scripts/image-build.ts', 'start', f.buildId],
     {
-      env: { ...process.env, DATABASE_URL: database.databaseUrl },
+      env: {
+        ...process.env,
+        DATABASE_URL: database.databaseUrl,
+        ACLD_CONTROL_GENERATION_FILE: await database.controlIdentity(),
+      },
     },
   );
   expect(started.stderr).toBe('');

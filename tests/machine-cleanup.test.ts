@@ -1001,6 +1001,7 @@ it('runs operator inspection and explicit closure through the actual CLI with pr
   const env = {
     ...process.env,
     DATABASE_URL: fixture.databaseUrl,
+    ACLD_CONTROL_GENERATION_FILE: await fixture.controlIdentity(),
     HCLOUD_TOKEN_FILE: '/missing/provider-token',
     AGENT_CLOUD_RUNTIME: '/missing/runtime',
   };

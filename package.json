@@ -69,7 +69,9 @@
     "smoke:recipes": "pnpm build && node --import tsx recipes/smoke.mjs",
     "smoke:self-host-wal": "node scripts/self-host-smoke.mjs --restore --wal",
     "smoke:agent-instructions": "pnpm build && node scripts/smoke-agent-instructions.mjs",
-    "smoke:self-host-gateway": "node scripts/self-host-smoke.mjs --gateway"
+    "smoke:self-host-gateway": "node scripts/self-host-smoke.mjs --gateway",
+    "control:recover": "pnpm build && node --env-file-if-exists=.env apps/control/dist/control-recovery-main.js",
+    "smoke:control-recovery": "pnpm build && tsx scripts/smoke-control-recovery.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

@@ -6,9 +6,13 @@ import { SimulatedProvider } from './simulated-provider.js';
 import { createTasks } from './tasks.js';
 import { createImageTasks } from './image-tasks.js';
 import { createOperatorRuntime } from './operator-runtime.js';
+import { openControlFence } from './control-fence.js';
 
 const config = readConfig();
 const connection = connect(config.databaseUrl);
+const fence = await openControlFence(connection, config.controlGenerationFile, {
+  onLost: () => process.exit(1),
+});
 const runtime =
   config.provider === 'hetzner' ? await createOperatorRuntime(connection, config) : undefined;
 const taskList =
@@ -33,6 +37,13 @@ const taskList =
             }
           : {}),
       });
+for (const [name, task] of Object.entries(taskList)) {
+  if (task)
+    taskList[name] = async (payload, helpers) => {
+      await fence?.check();
+      return task(payload, helpers);
+    };
+}
 const runner = await run({
   pgPool: connection.pool,
   concurrency: 4,
@@ -53,5 +64,6 @@ process.stdout.write(
 try {
   await runner.promise;
 } finally {
+  await fence?.close();
   await connection.pool.end();
 }

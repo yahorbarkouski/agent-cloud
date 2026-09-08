@@ -103,6 +103,7 @@ export const effectResolutionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('confirmed'), observation: resourceObservationSchema }),
   z.object({ kind: z.literal('failed'), error: failureSchema }),
   z.strictObject({ kind: z.literal('operator_closed'), recoveryId: recoveryIdSchema }),
+  z.strictObject({ kind: z.literal('control_closed'), recoveryId: recoveryIdSchema }),
 ]);
 export type EffectResolution = z.infer<typeof effectResolutionSchema>;
 export const attemptOutcomeSchema = z.discriminatedUnion('kind', [

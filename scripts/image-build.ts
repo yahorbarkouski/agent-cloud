@@ -28,6 +28,7 @@ import { readPrivateFile } from '../apps/control/dist/private-file.js';
 import { createImageAccessStore } from '../apps/control/dist/image-access.js';
 import { requestImageRun } from '../apps/control/dist/image-scheduling.js';
 import { cleanupImageBuild } from '../apps/control/dist/advance-image-build.js';
+import { openControlFence } from '../apps/control/dist/control-fence.js';
 
 const configSchema = z.strictObject({
   id: imageBuildIdSchema,
@@ -78,6 +79,14 @@ async function main() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL is required. Apply database migrations first.');
   const connection = connect(url);
+  const fence =
+    command === 'inspect'
+      ? undefined
+      : await openControlFence(
+          connection,
+          resolve(process.env.ACLD_CONTROL_GENERATION_FILE ?? '.local/control-generation.json'),
+          { onLost: () => process.exit(1) },
+        );
   try {
     if (command === 'admit') {
       const config = configSchema.parse(await readConfiguration(argument));
@@ -164,6 +173,7 @@ async function main() {
     }
     return await inspectImageBuild(connection.db, id);
   } finally {
+    await fence?.close();
     await connection.pool.end();
   }
 }

@@ -90,7 +90,7 @@ Build the reviewed source revision with the same build command, update `ACLD_SEL
 
 ## Restore the simulated control installation
 
-These commands restore the trusted quickstart checkpoint above into a new project. Keep the source API/worker stopped during capture. They are never pointed at the target's volumes or database. Check the checksum file against your trusted offline checkpoint; checksums beside an attacker-modified archive are not authentication. Keep the recorded image available locally or export it privately before removing old images. An expired or revoked credential remains expired or revoked after restore; do not bootstrap a replacement identity to hide a failed recovery.
+These commands restore the trusted simulated quickstart checkpoint above into a new project. Keep the source API/worker stopped during capture. They are never pointed at the target's volumes or database. Check the checksum file against your trusted offline checkpoint; checksums beside an attacker-modified archive are not authentication. Keep the recorded image available locally or export it privately before removing old images. Expiry uses the current database clock, but a checkpoint can predate a revocation. Real deployments must follow [fenced control recovery](control-recovery.md) before starting the restored API or worker. Do not bootstrap a replacement identity to hide a failed recovery.
 
 ```sh
 (cd "$backup_directory" && shasum -a 256 --check SHA256SUMS)

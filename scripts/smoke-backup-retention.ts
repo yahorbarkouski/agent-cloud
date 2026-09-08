@@ -34,10 +34,13 @@ import { backupKeyringSchema } from '../apps/control/src/backup-crypto.js';
 import { createApp } from '../apps/control/src/app.js';
 import { prepareProtectedStoreFixture } from './support/backup-store-fixture.js';
 import { seedAccount, testDatabase } from '../tests/database.js';
+import { createControlRecoveryVerifiers } from '../apps/control/src/control-recovery-verifiers.js';
+import { readConfig } from '../apps/control/src/config.js';
 
 const recoveryScenario = process.env.AGENT_CLOUD_BACKUP_RECOVERY_SCENARIO === '1';
 const scratch = await mkdtemp(join(tmpdir(), 'acld-retention-cli-'));
 const database = await testDatabase();
+const controlPath = await database.controlIdentity();
 let fixture: Awaited<ReturnType<typeof prepareProtectedStoreFixture>> | undefined;
 let writer: ReturnType<typeof createBackupWriter> | undefined;
 let reader: ReturnType<typeof createBackupReader> | undefined;
@@ -224,6 +227,7 @@ try {
             {
               env: {
                 DATABASE_URL: database.databaseUrl,
+                ACLD_CONTROL_GENERATION_FILE: controlPath,
                 ...(configured ? { ACLD_BACKUP_CONFIG: fixture?.configFile } : {}),
               },
               timeout: 30_000,
@@ -269,6 +273,25 @@ try {
   const work = backupWorkSchema.parse(row.work);
   assert.equal(work.kind, 'stored');
   await reader.inspect(work.receipt);
+  const controlVerifiers = createControlRecoveryVerifiers({
+    connection: database.connection,
+    config: readConfig({
+      DATABASE_URL: database.databaseUrl,
+      ACLD_BACKUP_CONFIG: fixture.configFile,
+    }),
+  });
+  try {
+    const verified = await controlVerifiers.verifyBackup({
+      backupId: row.id,
+      accountId: row.accountId,
+      record: backupRecord(row),
+      work,
+    });
+    // The uncertain-upload scenario deliberately removed the reader credential above.
+    assert.equal(verified.ok, !recoveryScenario);
+  } finally {
+    controlVerifiers.close();
+  }
   const retainedUsage = usageResponseSchema.parse(JSON.parse(await cli(['usage']))).usage.backups;
   assert.equal(retainedUsage.reservedBytes, row.reservedBytes);
   assert.equal(retainedUsage.retainedCount, 1);
@@ -303,6 +326,7 @@ try {
         {
           env: {
             DATABASE_URL: database.databaseUrl,
+            ACLD_CONTROL_GENERATION_FILE: controlPath,
             ACLD_BACKUP_RETENTION_CONFIG: retentionConfig,
           },
           timeout: 30_000,

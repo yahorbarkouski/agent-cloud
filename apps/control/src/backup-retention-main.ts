@@ -8,6 +8,8 @@ import {
 } from '@agent-cloud/backup-store';
 import { readPrivateFile } from './private-file.js';
 import { createBackupRetention } from './backup-retention.js';
+import { resolve } from 'node:path';
+import { openControlFence } from './control-fence.js';
 
 // Deliberately independent of the API/guest/provider runtime and encryption keyring.
 const configSchema = z.strictObject({
@@ -25,6 +27,11 @@ async function main() {
     JSON.parse(await readPrivateFile(config.deleterCredentialsFile)),
   );
   const connection = connect(z.url().parse(process.env.DATABASE_URL));
+  const fence = await openControlFence(
+    connection,
+    resolve(process.env.ACLD_CONTROL_GENERATION_FILE ?? '.local/control-generation.json'),
+    { onLost: () => process.exit(1) },
+  );
   const deleter = createBackupDeleter(config.store, credentials);
   try {
     await deleter.checkProtection();
@@ -32,6 +39,7 @@ async function main() {
     process.stdout.write(JSON.stringify({ event: 'backup.retention_finished', ...result }) + '\n');
   } finally {
     deleter.close();
+    await fence?.close();
     await connection.pool.end();
   }
 }
