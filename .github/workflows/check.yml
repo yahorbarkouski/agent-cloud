@@ -1,6 +1,7 @@
 name: Check
 on:
   push:
+    branches: ['**']
   pull_request:
 permissions:
   contents: read
@@ -57,11 +58,13 @@ jobs:
         run: npm exec --yes --package=prettier@3.8.3 -- prettier --check .
       - if: needs.scope.outputs.code_changed == 'true'
         run: npm exec --yes --package=pnpm@12.3.4 -- pnpm install --frozen-lockfile
-      - if: needs.scope.outputs.code_changed == 'true'
+      - name: Validate source
+        if: needs.scope.outputs.code_changed == 'true'
         run: npm exec --yes --package=pnpm@12.3.4 -- pnpm check
       - if: needs.scope.outputs.code_changed == 'true'
         run: npm exec --yes --package=pnpm@12.3.4 -- pnpm format:check
-      - if: needs.scope.outputs.code_changed == 'true'
+      - name: Exercise CLI archive
+        if: needs.scope.outputs.code_changed == 'true'
         timeout-minutes: 3
         run: node --import tsx scripts/smoke-cli-release.ts
       - if: needs.scope.outputs.code_changed == 'true'

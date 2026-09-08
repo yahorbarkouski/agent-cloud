@@ -1,0 +1,20 @@
+# Reviewed before public source distribution on 2026-09-08.
+# Exact historical findings only; new values and locations remain subject to scanning.
+# These matches are commit IDs, a synthetic mocked OAuth secret, public-key digests,
+# lifecycle UUIDs, cryptography prose, and Node type imports. No private material.
+64768866fc6a717a1b55940f0e13a07943b8d059:docs/CONTEXT.md:generic-api-key:9
+24707e4ce2f2d24db11c8655edad7cc17b068491:tests/customer-login.test.ts:generic-api-key:316
+42a5c617207b1bcb13f12e3e6d729ac2cd727510:docs/research/m1-customer-live-key-continuity.json:generic-api-key:12
+42a5c617207b1bcb13f12e3e6d729ac2cd727510:docs/research/m1-customer-live-key-continuity.json:generic-api-key:13
+42a5c617207b1bcb13f12e3e6d729ac2cd727510:docs/research/m1-customer-live-lifecycle.json:generic-api-key:9
+42a5c617207b1bcb13f12e3e6d729ac2cd727510:docs/research/m1-customer-live-lifecycle.json:generic-api-key:39
+42a5c617207b1bcb13f12e3e6d729ac2cd727510:docs/research/m1-customer-live-lifecycle.json:generic-api-key:65
+42a5c617207b1bcb13f12e3e6d729ac2cd727510:docs/research/m1-customer-live-lifecycle.json:generic-api-key:91
+42a5c617207b1bcb13f12e3e6d729ac2cd727510:docs/research/m1-customer-live-lifecycle.json:generic-api-key:117
+224a56a09e1868b8acfa2b315e9da951560c65f4:docs/research/m1-keyscan-verification.json:generic-api-key:14
+224a56a09e1868b8acfa2b315e9da951560c65f4:docs/research/m1-keyscan-verification.json:generic-api-key:44
+224a56a09e1868b8acfa2b315e9da951560c65f4:docs/research/m1-keyscan-verification.json:generic-api-key:70
+224a56a09e1868b8acfa2b315e9da951560c65f4:docs/research/m1-keyscan-verification.json:generic-api-key:96
+224a56a09e1868b8acfa2b315e9da951560c65f4:docs/research/m1-keyscan-verification.json:generic-api-key:122
+ca03da9ef6330357559d06d65eb83dc672a6a6a3:docs/CONTEXT.md:generic-api-key:40
+d70d80f68eae9ba69482e3824b462214f3077967:packages/pki/src/tls-certificate.ts:generic-api-key:1

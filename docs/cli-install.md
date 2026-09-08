@@ -2,11 +2,29 @@
 
 The CLI release includes its JavaScript dependencies, PostgreSQL and Umami recipes, and instructions for existing agents. Use Node.js 24 on Linux or macOS. SSH and SFTP commands also need the system OpenSSH client. No npm install, repository checkout or provider credentials are needed on the customer's machine.
 
-Release artifacts have not been published publicly yet. Obtain the archive, `release.json` and `SHA256SUMS` from your cloud operator through an authenticated channel. SHA-256 detects corruption; a checksum beside an archive is not a publisher signature. `BUILD.json` records the source revision, lockfile digest and whether the build checkout had uncommitted changes. It is build metadata, not a signed provenance claim.
+The release workflow publishes developer previews on [GitHub Releases](https://github.com/yahorbarkouski/agent-cloud/releases). For a published preview, download the archive, `release.json`, `SHA256SUMS` and `provenance.jsonl` from the same release. GitHub signs its build provenance with the repository, workflow, tag and source revision. `BUILD.json` also records the lockfile digest and whether the checkout was dirty.
+
+A locally built archive has checksums and build metadata but no GitHub signature. Obtain unsigned operator builds through an authenticated channel. A checksum beside an archive only detects corruption.
 
 ## Verify and unpack
 
-Use an empty directory owned by your user. On Linux, run `sha256sum --check SHA256SUMS`; on macOS, run `shasum -a 256 --check SHA256SUMS`. Check both the archive and manifest before extracting anything. Reject a mismatch and obtain fresh artifacts from your operator.
+Use an empty directory owned by your user. For the published `cli-v0.1.0` preview, use a current GitHub CLI to download and verify the exact signing workflow and source revision:
+
+```sh
+gh release download cli-v0.1.0 --repo yahorbarkouski/agent-cloud \
+  --pattern 'agent-cloud-cli-0.1.0.tar.gz' --pattern 'release.json' \
+  --pattern 'SHA256SUMS' --pattern 'provenance.jsonl'
+revision=$(gh api repos/yahorbarkouski/agent-cloud/commits/cli-v0.1.0 --jq .sha)
+for subject in agent-cloud-cli-0.1.0.tar.gz release.json SHA256SUMS; do
+  gh attestation verify "$subject" --bundle provenance.jsonl --repo yahorbarkouski/agent-cloud \
+    --signer-workflow yahorbarkouski/agent-cloud/.github/workflows/release-cli.yml \
+    --source-ref refs/tags/cli-v0.1.0 --source-digest "$revision" --deny-self-hosted-runners
+done
+```
+
+Stop on a failed verification. The signature authenticates the build's origin; it does not certify the application or your cloud configuration. This uses [GitHub's artifact attestation verification](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations).
+
+On Linux, run `sha256sum --check SHA256SUMS`; on macOS, run `shasum -a 256 --check SHA256SUMS`. Check both the archive and manifest before extracting anything. Reject a mismatch and obtain fresh artifacts from your operator.
 
 For version0.1.0:
 
@@ -49,3 +67,11 @@ pnpm smoke:cli-release
 The output directory must be new and its parent must exist. The builder clears the four generated CLI package directories and forces a fresh TypeScript build. Do not run it alongside another build in the same checkout. Production dependency packaging then runs in an isolated temporary workspace, preserving the checkout's development dependencies. The builder copies only compiled CLI dependencies and bundled assets, rejects escaping links/private paths/native binaries/missing license texts, and writes `SHA256SUMS` last. Failed output remains for inspection; choose a new directory when retrying. Local builds do not publish or upload anything.
 
 The smoke check verifies the archive and corruption detection, unpacks it outside the checkout, removes its build input, invokes the executable through an independent symlink, installs the skill, prepares recipes and uses authenticated HTTP CLI commands against isolated PostgreSQL. It checks revocation and exact fixture cleanup. It makes no provider call and does not prove public release signing or GitHub sign-in.
+
+## Publish a preview
+
+The `Release CLI` workflow runs only on a `cli-v<package-version>` tag. Before creating that tag, push the commit and wait for the existing `Check` job on that exact revision to pass. Release builds reuse that evidence and do not rerun an equivalent comprehensive suite. Branch and pull-request checks exclude tag pushes.
+
+The build job scans tracked history, installs frozen dependencies, creates the archive from a clean checkout and exercises its offline CLI. It has no signing or publishing permission. A separate GitHub-hosted job verifies the downloaded artifact identity, signs all three release files, verifies the bundle against the exact workflow/ref/revision and uploads everything to a draft. Only then does it publish the preview. No package or archive code executes in that job. Actions and the history scanner are pinned to verified versions and checksums.
+
+Do not move a release tag or replace published assets. A failure after draft creation leaves the draft for inspection; a retry refuses to overwrite it. Inspect its exact tag, revision and uploaded files before removing an incomplete unpublished draft. GitHub's ordinary plans require a public repository for artifact attestations. No provider, signing-key or npm-publishing secret is configured for this workflow.

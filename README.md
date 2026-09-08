@@ -14,7 +14,7 @@ Manual `backup capture/wait/inspect/restore/restore-wait` commands protect Postg
 
 [PostgreSQL and Umami recipes](docs/recipes.md) prepare ordinary Compose contexts with pinned images, generated credentials and resource limits. Their local Docker checks cover SQL persistence, safe administrator setup and visitor/event collection. Native customer-site verification also passed: a browser click persisted application data and recorded the intended analytics event. Public/provider verification remains separate.
 
-The [self-host quickstart](docs/self-host.md) packages the API, worker, CLI and PostgreSQL in a pinned runtime image. Its local simulated scenario verifies persisted identity and machines across a restart. Isolated dump and encrypted WAL recovery preserve the selected CLI identity, machine and reservation history while leaving the original installation unchanged. Live customer configuration, off-host WAL storage and provider recovery fencing remain separate verification steps.
+The [self-host quickstart](docs/self-host.md) packages the API, worker, CLI and PostgreSQL in a pinned runtime image. Its local simulated scenario verifies persisted identity and machines across a restart. Isolated dump and encrypted WAL recovery preserve the selected CLI identity, machine and reservation history while leaving the original installation unchanged. The [customer Compose configuration](docs/self-host-customer.md) also packages operator admission and a shared control HTTPS gateway; its container proof covers customer CLI login and revocation. Restored real control state is [externally fenced](docs/control-recovery.md) before mutators can resume. Public ACME, off-host storage and final provider recovery remain separate verification steps.
 
 ## Connect an existing agent
 
@@ -32,7 +32,7 @@ The parent directory must already exist. Installation writes a private `SKILL.md
 
 `capabilities` calls authenticated `GET /v1/capabilities`; the SDK exposes `capabilities()`. The response separates the provider and protocol version from `configured` service flags. A configured gateway or backup service may be unhealthy, and the selected machine may lack a required guest helper. `whoami` reports the credential's policy; it is still enforced on every operation. The image factory rejects customer discovery along with all other customer API calls. No internal operator shortcuts or private service addresses appear in discovery.
 
-A standalone CLI archive can now be built with bundled dependencies, recipes, agent instructions, license notices and SHA-256 checksums. Follow [CLI installation](docs/cli-install.md) to verify and unpack it without cloning the repository. Artifacts are not published publicly yet. `pnpm smoke:cli-release` verifies extraction outside the checkout, offline assets, private login, authenticated API commands and revocation. Development uses `pnpm acld`.
+A standalone CLI archive can now be built with bundled dependencies, recipes, agent instructions, license notices and SHA-256 checksums. Follow [CLI installation](docs/cli-install.md) to verify and unpack it without cloning the repository. The release workflow publishes developer previews with GitHub build provenance; verify its signature and exact source revision before extracting a published archive. `pnpm smoke:cli-release` verifies extraction outside the checkout, offline assets, private login, authenticated API commands and revocation. Development uses `pnpm acld`.
 
 ## Run locally
 
@@ -227,3 +227,5 @@ Stop the API and worker while applying migrations from an earlier checkpoint, th
 | `docs`                   | Architecture, progress, decisions, research, and handoff context      |
 
 Read [AGENTS.md](AGENTS.md) before contributing and [docs/CONTEXT.md](docs/CONTEXT.md) for verification status. The [original plan](docs/archive/original-plan.md) is historical context. Code is licensed under [Apache 2.0](LICENSE).
+
+Contributions follow [the development guide](CONTRIBUTING.md). Report vulnerabilities through [the private security channel](SECURITY.md).
