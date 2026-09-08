@@ -9,6 +9,8 @@
 !apps/*/tsconfig.json
 !apps/*/src/
 !apps/*/src/**
+!apps/control/assets/
+!apps/control/assets/**
 !packages/
 !packages/*/
 !packages/*/package.json

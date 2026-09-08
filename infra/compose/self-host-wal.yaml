@@ -1,0 +1,34 @@
+services:
+  initialize-wal:
+    image: ${ACLD_SELF_HOST_IMAGE:?Build the runtime image}
+    pull_policy: never
+    profiles: [setup]
+    command: [initialize-wal]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.5
+    volumes: [wal-configuration:/run/agent-cloud-wal]
+  postgres:
+    image: ${ACLD_CONTROL_POSTGRES_IMAGE:?Build the control PostgreSQL image}
+    pull_policy: never
+    volumes:
+      - database-wal:/var/lib/postgresql/data
+      - wal-configuration:/run/agent-cloud-wal:ro
+      - wal-repository:/var/lib/pgbackrest
+    command:
+      - postgres
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=pgbackrest --stanza=agentcloud archive-push %p
+      - -c
+      - archive_timeout=60s
+      - -c
+      - log_min_error_statement=panic
+volumes:
+  database-wal:
+  wal-configuration:
+  wal-repository:

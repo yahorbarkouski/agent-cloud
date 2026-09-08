@@ -9,6 +9,13 @@ const [command, ...args] = process.argv.slice(2);
 const passwordFile = '/run/agent-cloud/postgres-password';
 
 async function main() {
+  if (command === 'initialize-wal') {
+    if (args.length) throw new Error('Unexpected WAL initialization argument.');
+    const { initializeControlWal } = await import('./control/dist/control-wal-config.js');
+    await initializeControlWal('/run/agent-cloud-wal/pgbackrest.conf');
+    process.stdout.write('{"initialized":true}\n');
+    return;
+  }
   if (process.env.ACLD_CONTAINER_ENV_FILE)
     Object.assign(
       process.env,

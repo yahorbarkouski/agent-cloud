@@ -66,7 +66,8 @@
     "backup:recover": "pnpm build && tsx --env-file-if-exists=.env scripts/backup-recover.ts",
     "backup:retention": "node apps/control/dist/backup-retention-main.js",
     "smoke:backup-store": "tsx packages/backup-store/src/fixture/smoke.ts",
-    "smoke:recipes": "pnpm build && node --import tsx recipes/smoke.mjs"
+    "smoke:recipes": "pnpm build && node --import tsx recipes/smoke.mjs",
+    "smoke:self-host-wal": "node scripts/self-host-smoke.mjs --restore --wal"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

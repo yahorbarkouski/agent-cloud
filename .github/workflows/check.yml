@@ -33,7 +33,7 @@ jobs:
     needs: scope
     if: ${{ !cancelled() && (needs.scope.result == 'failure' || needs.scope.outputs.run_checks == 'true') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     services:
       postgres:
         image: ${{ needs.scope.outputs.code_changed == 'true' && 'postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73' || '' }}
@@ -62,8 +62,8 @@ jobs:
       - if: needs.scope.outputs.code_changed == 'true'
         run: npm exec --yes --package=pnpm@12.3.4 -- pnpm format:check
       - if: needs.scope.outputs.code_changed == 'true'
-        timeout-minutes: 5
-        run: npm exec --yes --package=pnpm@12.3.4 -- pnpm smoke:self-host-restore
+        timeout-minutes: 8
+        run: npm exec --yes --package=pnpm@12.3.4 -- pnpm smoke:self-host-wal
       - if: needs.scope.outputs.code_changed == 'true'
         run: npm exec --yes --package=pnpm@12.3.4 -- pnpm smoke:usage
       - if: needs.scope.outputs.code_changed == 'true'

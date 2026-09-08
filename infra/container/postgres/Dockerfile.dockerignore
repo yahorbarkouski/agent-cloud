@@ -1,0 +1,10 @@
+**
+!apps/
+!apps/control/
+!apps/control/assets/
+!apps/control/assets/pgbackrest.conf
+!infra/
+!infra/container/
+!infra/container/postgres/
+!infra/container/postgres/Dockerfile
+!infra/container/postgres/entrypoint.sh

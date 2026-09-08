@@ -120,6 +120,90 @@ To remove only the test restore, use `rdco --profile setup --profile tools down 
 
 This verifies control-DB/private-identity recovery for the simulated provider. For a real provider, keep both old and restored workers, retention operators, scheduled jobs and other mutators fenced outside the database: restoring a DB also restores stale leases, intents and revocations. Do not run real customer data through this simulated quickstart or give a test restore live provider, CA-issuance or deletion credentials. A single operator must reconcile external resources against durable ownership receipts and current authority, choose the authoritative control instance, and account for changes after the checkpoint before enabling any mutator. Public routes, guest certificates and encrypted-backup keys need their separate matching recovery material. None of that external-state recovery is proven by this local fixture.
 
+## Continuous control-database WAL and point-in-time recovery
+
+The optional [WAL overlay](../infra/compose/self-host-wal.yaml) uses PostgreSQL17.11 Bookworm with pgBackRest2.59.1. The [image](../infra/container/postgres/Dockerfile) pins the official base digest and the PGDG Bookworm package version, and verifies the amd64/arm64 package checksum. Application database recipes and guest images are unchanged.
+
+Use a fresh Compose project for this setup. The overlay uses a separate `database-wal` volume, so it cannot open the existing Alpine quickstart's physical data files under glibc. To migrate an existing installation, use a verified logical dump and matching private identity/configuration, following the isolated restore procedure above. Retain the original volume until the new installation is verified.
+
+```sh
+export ACLD_SELF_HOST_IMAGE="$(docker build --quiet -f infra/container/Dockerfile .)"
+export ACLD_CONTROL_POSTGRES_IMAGE="$(docker build --quiet -f infra/container/postgres/Dockerfile .)"
+export ACLD_SELF_HOST_PORT=4320
+
+dwal() {
+  docker compose --project-name agent-cloud-wal-local \
+    -f infra/compose/self-host.yaml -f infra/compose/self-host-wal.yaml "$@"
+}
+dwal run --rm --no-deps initialize
+dwal run --rm --no-deps initialize-wal
+dwal up --detach --wait postgres
+dwal exec --user postgres postgres pgbackrest --stanza=agentcloud stanza-create
+dwal run --rm --no-deps migrate
+dwal run --rm --no-deps bootstrap
+dwal up --detach --wait api worker
+dwal exec --user postgres postgres pgbackrest --stanza=agentcloud check
+dwal exec --user postgres postgres pgbackrest --stanza=agentcloud --type=full backup
+dwal exec --user postgres postgres pgbackrest --stanza=agentcloud --output=json info
+```
+
+This remains the loopback simulated-provider installation with explicit internal identity. `check` verifies that PostgreSQL can archive a completed WAL segment; an image build or readable repository alone does not establish recovery. The full backup must succeed before relying on the archive. WAL archival continues in PostgreSQL after the operator's CLI disconnects. The 60-second archive timeout bounds quiet-period segment completion under normal conditions; it is not a guarantee during a disk/storage failure. Monitor `pg_stat_archiver.failed_count`, `last_failed_time`, `last_archived_time`, backup age and free space. A failed archive keeps WAL on the database volume, so a prolonged failure can fill it. Schedule periodic full backups through the operator's scheduler with the same backup command; the local overlay does not schedule them. Retention keeps two full backups with their required WAL.
+
+The separate `wal-repository` volume contains encrypted backup/WAL, and `wal-configuration` holds its independently generated 256-bit passphrase. Neither is mounted into the API/worker. `initialize-wal` preserves the key on retries and refuses malformed or permissive existing files. PostgreSQL validates the same packaged configuration template on startup, before opening its listener. Keep a verified encrypted off-host copy of this private configuration, separately recoverable from the control DB. Creating a new key cannot decrypt an old repository. This local named volume does not by itself protect against losing the control host or its disk.
+
+### Restore into a separate database
+
+Use the exact image and full-backup label from the recovery receipt. Keep source and restored control mutators fenced before deciding which instance is authoritative. The test proves database recovery; provider inventory, current revocations, runtime identities and backup-writer/deletion authority still require external reconciliation before a real restored control API or worker is enabled.
+
+Prepare a new Compose project containing only the matching PostgreSQL image. Its database volume must be new, its network internal, and it must have no host database port, API, worker or retention process. Mount the existing repository read-only at `/var/lib/pgbackrest`, and the recovered key directory read-only at `/run/agent-cloud-wal`. Inside that directory, `pgbackrest.conf` must be the original file, owned by UID1000, mode0600. Restore it from the independent encrypted recovery copy; do not run initialization to make a replacement. On a Linux recovery host, use a private directory and preserve this ownership when installing the recovered file.
+
+Example target `wal-restore.yaml`:
+
+```yaml
+services:
+  postgres:
+    image: ${ACLD_CONTROL_POSTGRES_IMAGE:?Use the saved image ID}
+    pull_policy: never
+    command: [postgres, -c, archive_mode=off, -c, log_min_error_statement=panic]
+    volumes:
+      - restored-data:/var/lib/postgresql/data
+      - ${ACLD_RECOVERED_WAL_DIRECTORY:?Recovered private config directory}:/run/agent-cloud-wal:ro
+      - archived-wal:/var/lib/pgbackrest:ro
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U agentcloud -d agentcloud]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 128
+volumes:
+  restored-data: {}
+  archived-wal:
+    external: true
+    name: ${ACLD_SOURCE_WAL_VOLUME:?Exact repository volume from the source receipt}
+networks:
+  default:
+    internal: true
+```
+
+Choose an unused project name, record its exact resources, and set the source volume from the saved Compose configuration and verified ownership labels. The source repository remains external to the target's cleanup. Then:
+
+```sh
+rwal() { docker compose --project-name agent-cloud-wal-recovery -f wal-restore.yaml "$@"; }
+rwal config --quiet
+rwal run --rm --no-deps -T postgres restore '<UTC-target-with-T-and-Z>' '<full-backup-label>'
+rwal up --detach --wait postgres
+rwal exec --user postgres postgres psql -X -v ON_ERROR_STOP=1 -U agentcloud -d agentcloud \
+  -c 'SELECT pg_is_in_recovery(); SHOW archive_mode;'
+```
+
+The wrapper validates the UTC timestamp and converts it to PostgreSQL's required recovery-setting spelling while preserving microseconds. It refuses missing, wrong or altered configuration, a destination locked by another restore, or a nonempty data directory. A destination directory lock remains held until pgBackRest exits, including cancellation. An interrupted restore leaves its target for inspection; it is never automatically cleared or retried over existing files. The restored database must leave recovery with archiving `off`, and the repository must remain read-only. Inspect actual business data and applied migration hashes, not just the health check. Delete only the recorded target after the drill; preserve the original repository and independent key copy.
+
+Run `pnpm smoke:self-host-wal` to exercise the combined packaging, dump restore and WAL recovery scenario. It makes actual CLI project writes on either side of a saved database timestamp after a full backup. The target must recover the earlier write and exclude the later one, with matching migrations. The source retains both writes. It also checks missing/wrong/altered configuration, competing restore locks and nonempty retries, then confirms exact cleanup. This passed locally on2026-09-08 in81.47 seconds, evidence `.local/selfhost-wal-4.log`. It does not prove off-host storage, hardware durability or provider reconciliation.
+
+Primary references: [pgBackRest guide](https://pgbackrest.org/user-guide.html), [pgBackRest restore and locking](https://pgbackrest.org/command.html#command-restore), [signed PGDG Bookworm packages](https://apt.postgresql.org/pub/repos/apt/dists/bookworm-pgdg/main/), [PostgreSQL17 continuous archiving](https://www.postgresql.org/docs/17/continuous-archiving.html).
+
 ## Connect an existing customer runtime
 
 The same image exposes commands `api`, `worker`, `migrate`, `cli`, `access-gateway`, `public-gateway` and `backup-retention`. Use a separate operator Compose configuration for the live topology; the local YAML intentionally fixes the simulated provider and internal network.
