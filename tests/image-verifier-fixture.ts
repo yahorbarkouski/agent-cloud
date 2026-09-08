@@ -147,6 +147,7 @@ export async function imageVerifierScenario(
     machineId: 'b'.repeat(32),
     bootId: randomUUID(),
     checks: {
+      customerSsh: { kind: 'ok' },
       node: { kind: 'ok', version: manifest.components.node },
       docker: { kind: 'ok', version: manifest.components.docker },
       compose: { kind: 'ok', version: manifest.components.compose },

@@ -57,7 +57,8 @@ export async function imageBuildFixture(
   directory: string,
   trust?: Parameters<typeof imageFixture>[0],
 ) {
-  const fixture = imageFixture(trust);
+  // Exercise the same capability-bearing manifest produced by build:guest.
+  const fixture = imageFixture(trust, 1);
   await mkdir(join(directory, 'artifacts'), { recursive: true });
   await mkdir(join(directory, 'systemd'), { recursive: true });
   const files = new Map(fixture.files);

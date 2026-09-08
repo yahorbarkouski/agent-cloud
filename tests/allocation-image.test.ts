@@ -182,6 +182,7 @@ it('pins the original signed release across idempotent admission and uses it for
   expect(f.render).toHaveBeenCalledTimes(1);
   const [bootstrap] = await database.connection.db.select().from(guestBootstraps);
   const spec = bootstrapSpecSchema.parse(bootstrap?.spec);
+  expect(spec.image.customerSsh).toBe(1);
   expect(spec.image.providerImage).toBe(f.release.payload.snapshot.id);
   expect(Date.parse(spec.expiresAt)).toBe(Date.parse(f.operation.createdAt) + 30 * 60_000);
   expect(await f.pinned()).toBe(false);

@@ -7,6 +7,7 @@ import { createTasks } from './tasks.js';
 import { createImageTasks } from './image-tasks.js';
 import { createOperatorRuntime } from './operator-runtime.js';
 import { openControlFence } from './control-fence.js';
+import { createWorkerLogger } from './worker-logger.js';
 
 const config = readConfig();
 const connection = connect(config.databaseUrl);
@@ -45,6 +46,7 @@ for (const [name, task] of Object.entries(taskList)) {
     };
 }
 const runner = await run({
+  logger: createWorkerLogger(),
   pgPool: connection.pool,
   concurrency: 4,
   pollInterval: 1_000,

@@ -41,6 +41,12 @@ afterEach(async () => {
 
 const scenario = () => imageVerifierScenario(database.connection, directory);
 
+it('preserves the admitted customer SSH capability in verifier bootstrap identity', async () => {
+  const f = await scenario();
+  const bootstrap = await recoverImageVerifierBootstrap(database.connection.db, f);
+  expect(bootstrap.spec.image.customerSsh).toBe(1);
+});
+
 it('keeps a valid probe credential across a retry when the host clock jumps ahead', async () => {
   const f = await scenario();
   f.probe.readIdentity.mockRejectedValueOnce(
@@ -320,6 +326,14 @@ it('SQL rejects malformed completion evidence that would prevent inspection and 
     });
   for (const runtime of [
     { ...f.runtime, extra: true },
+    {
+      ...f.runtime,
+      checks: Object.fromEntries(
+        Object.entries(f.runtime.checks).filter(([name]) => name !== 'customerSsh'),
+      ),
+    },
+    { ...f.runtime, checks: { ...f.runtime.checks, customerSsh: { kind: 'failed' } } },
+    { ...f.runtime, checks: { ...f.runtime.checks, customerSsh: { kind: 'ok', extra: true } } },
     { ...f.runtime, bootId: '11111111-1111-9111-1111-111111111111' },
     { ...f.runtime, machineId: null },
     {
