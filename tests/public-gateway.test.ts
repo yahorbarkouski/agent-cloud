@@ -79,6 +79,58 @@ function fixture() {
   };
 }
 
+it('serves the configured control hostname before any application route and isolates WSS to its exact path', () => {
+  const result = renderCaddyConfig(
+    { ...configuration, control: { hostname: 'cloud.example.test', port: 4319, accessPort: 4322 } },
+    { revision: 'empty', routes: [] },
+  );
+  expect(result.apps.tls.certificates.automate).toEqual(['cloud.example.test']);
+  expect(result.apps.http.servers.gateway?.routes[0]).toMatchObject({
+    match: [{ host: ['cloud.example.test'], path: ['/v1/ssh'] }],
+    handle: [{ upstreams: [{ dial: '127.0.0.1:4322' }] }],
+  });
+  expect(result.apps.http.servers.gateway?.routes[1]).toMatchObject({
+    match: [{ host: ['cloud.example.test'] }],
+    handle: [{ upstreams: [{ dial: '127.0.0.1:4319' }] }],
+  });
+  expect(result.apps.http.servers.redirect.routes[0]).toMatchObject({
+    handle: [{ headers: { Location: ['https://cloud.example.test:18443{http.request.uri}'] } }],
+  });
+});
+
+it('refuses application shadowing and loopback proxy cycles before changing Caddy', async () => {
+  configuration = { ...configuration, control: { hostname: 'app.example.test', port: 4319 } };
+  const f = fixture();
+  await f.gateway.start();
+  const before = f.calls.length;
+  expect(() => f.gateway.apply(first)).toThrow('cannot replace the control hostname');
+  expect(f.calls.length).toBe(before);
+  for (const control of [
+    { hostname: 'cloud.example.test', port: 18443 },
+    { hostname: 'cloud.example.test', port: 4319, accessPort: 4319 },
+    { hostname: 'cloud.example.test', port: 4319, accessPort: 18080 },
+  ])
+    expect(() => createPublicGateway({ ...configuration, control })).toThrow();
+});
+
+it('uses current operator ingress configuration when restarting retained application routes', async () => {
+  configuration = { ...configuration, control: { hostname: 'old.example.test', port: 4319 } };
+  const f = fixture();
+  await f.gateway.start();
+  await f.gateway.apply(first);
+  await f.gateway.stop();
+  const updated = createPublicGateway(
+    { ...configuration, control: { hostname: 'new.example.test', port: 4320 } },
+    f.runtime,
+  );
+  expect((await updated.start()).active).toBe(true);
+  const active = JSON.stringify(await f.runtime.readConfig());
+  expect(active).toContain('new.example.test');
+  expect(active).toContain('127.0.0.1:4320');
+  expect(active).not.toContain('old.example.test');
+  expect(active).toContain('app.example.test');
+});
+
 it('binds exact hostnames, guest address, guest TLS identity and separate mTLS credentials', () => {
   const config = renderCaddyConfig(configuration, first);
   expect(config.admin.listen).toBe(`unix/${configuration.stateDirectory}/admin.sock`);

@@ -31,6 +31,8 @@ export const publicGatewayConfigurationSchema = z
     guestCaFile: file,
     clientCertificateFile: file,
     clientKeyFile: file,
+    // Optional control HTTPS on this same gateway. The API shares its network namespace.
+    control: z.strictObject({ hostname, port, accessPort: port.optional() }).optional(),
     publicTls: z.discriminatedUnion('kind', [
       z.strictObject({ kind: z.literal('acme'), email: z.email() }),
       z.strictObject({ kind: z.literal('internal') }),
@@ -40,6 +42,16 @@ export const publicGatewayConfigurationSchema = z
     httpsPort: port.default(443),
   })
   .refine((value) => value.httpPort !== value.httpsPort, 'HTTP and HTTPS need different ports.')
+  .refine(
+    (value) => !value.control || ![value.httpPort, value.httpsPort].includes(value.control.port),
+    'The loopback API port must differ from public listener ports.',
+  )
+  .refine(
+    (value) =>
+      !value.control?.accessPort ||
+      ![value.httpPort, value.httpsPort, value.control.port].includes(value.control.accessPort),
+    'The loopback access port must differ from API and public listener ports.',
+  )
   .refine(
     (value) =>
       Buffer.byteLength(join(value.stateDirectory, 'admin.sock')) <
@@ -67,7 +79,10 @@ export function renderCaddyConfig(
 ) {
   const config = publicGatewayConfigurationSchema.parse(configuration);
   const routes = normalizePublicSnapshot(snapshot).routes;
-  const names = routes.map((route) => route.hostname);
+  const control = config.control;
+  if (control && routes.some((route) => route.hostname === control.hostname))
+    throw new Error('Application routes cannot replace the control hostname.');
+  const names = [...(control ? [control.hostname] : []), ...routes.map((route) => route.hostname)];
   const socket = (host: string, port: number) => `${isIP(host) === 6 ? `[${host}]` : host}:${port}`;
   const reject = { handle: [{ handler: 'static_response', status_code: 404 }], terminal: true };
   return {
@@ -119,15 +134,15 @@ export function renderCaddyConfig(
             listen: [socket(config.listenAddress, config.httpPort)],
             automatic_https: { disable: true },
             routes: [
-              ...routes.map((route) => ({
-                match: [{ host: [route.hostname] }],
+              ...names.map((hostname) => ({
+                match: [{ host: [hostname] }],
                 handle: [
                   {
                     handler: 'static_response',
                     status_code: 308,
                     headers: {
                       Location: [
-                        `https://${route.hostname}${config.httpsPort === 443 ? '' : `:${config.httpsPort}`}{http.request.uri}`,
+                        `https://${hostname}${config.httpsPort === 443 ? '' : `:${config.httpsPort}`}{http.request.uri}`,
                       ],
                     },
                   },
@@ -146,6 +161,44 @@ export function renderCaddyConfig(
                   strict_sni_host: true,
                   tls_connection_policies: [{ match: { sni: names }, protocol_min: 'tls1.2' }],
                   routes: [
+                    ...(control?.accessPort
+                      ? [
+                          {
+                            match: [{ host: [control.hostname], path: ['/v1/ssh'] }],
+                            handle: [
+                              {
+                                handler: 'reverse_proxy',
+                                upstreams: [{ dial: `127.0.0.1:${control.accessPort}` }],
+                                transport: {
+                                  protocol: 'http',
+                                  dial_timeout: '5s',
+                                  response_header_timeout: '10s',
+                                },
+                              },
+                            ],
+                            terminal: true,
+                          },
+                        ]
+                      : []),
+                    ...(control
+                      ? [
+                          {
+                            match: [{ host: [control.hostname] }],
+                            handle: [
+                              {
+                                handler: 'reverse_proxy',
+                                upstreams: [{ dial: `127.0.0.1:${control.port}` }],
+                                transport: {
+                                  protocol: 'http',
+                                  dial_timeout: '5s',
+                                  response_header_timeout: '30s',
+                                },
+                              },
+                            ],
+                            terminal: true,
+                          },
+                        ]
+                      : []),
                     ...routes.map((route) => ({
                       match: [{ host: [route.hostname] }],
                       handle: [

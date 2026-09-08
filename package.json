@@ -56,7 +56,7 @@
     "smoke:runs": "pnpm build:guest && AGENT_CLOUD_ACCESS_SCENARIO=1 AGENT_CLOUD_RUN_SCENARIO=1 tsx scripts/smoke-guest.ts",
     "smoke:compose": "pnpm build:guest && AGENT_CLOUD_ACCESS_SCENARIO=1 AGENT_CLOUD_COMPOSE_SCENARIO=1 tsx scripts/smoke-guest.ts",
     "smoke:login": "pnpm build && tsx scripts/smoke-customer-login.ts",
-    "customer": "pnpm build && tsx --env-file-if-exists=.env scripts/customer.ts",
+    "customer": "pnpm build && node --env-file-if-exists=.env apps/control/dist/customer-main.js",
     "smoke:hosting": "pnpm build:guest && AGENT_CLOUD_ACCESS_SCENARIO=1 AGENT_CLOUD_HOSTING_SCENARIO=1 tsx scripts/smoke-guest.ts",
     "smoke:gateway-pki": "pnpm build && tsx scripts/smoke-gateway-pki.ts",
     "setup:hosting-gateway": "pnpm build && tsx scripts/setup-hosting-gateway.ts",

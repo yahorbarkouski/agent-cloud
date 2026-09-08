@@ -213,6 +213,8 @@ Primary references: [pgBackRest guide](https://pgbackrest.org/user-guide.html), 
 
 ## Connect an existing customer runtime
 
+Use the [customer Compose topology](self-host-customer.md) for the packaged customer operator, shared API/application HTTPS and WSS ingress with separate credential mounts. Its configuration and proof boundaries are documented there.
+
 The same image exposes commands `api`, `worker`, `migrate`, `cli`, `access-gateway`, `public-gateway` and `backup-retention`. Use a separate operator Compose configuration for the live topology; the local YAML intentionally fixes the simulated provider and private database network.
 
 Mount an existing owner-only environment file read-only and set `ACLD_CONTAINER_ENV_FILE` to its absolute container path. The wrapper uses the existing private-file check and loads its values only inside the process. All private files must be mode 0600 and owned by container UID 1000; private directories should be 0700. Use container-visible absolute paths in every referenced JSON file. Do not mount a macOS executable into a Linux container.

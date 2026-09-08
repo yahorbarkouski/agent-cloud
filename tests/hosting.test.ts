@@ -84,6 +84,31 @@ const publish = (name: string, expectedVersion: number | null = null, port = 300
     expectedVersion,
   });
 
+it('refuses control hostname publication and domain claims, including claims created before reservation', async () => {
+  const hostname = 'control.example.test';
+  const earlier = await service.domains.create(owner.principal, hostname);
+  const reserved = createHosting({
+    db: fixture.connection.db,
+    config,
+    reservedHostnames: [hostname],
+  });
+  await expect(reserved.domains.create(owner.principal, hostname)).rejects.toMatchObject(
+    failure('permission_denied'),
+  );
+  await expect(reserved.domains.verify(owner.principal, earlier.id)).rejects.toMatchObject(
+    failure('permission_denied'),
+  );
+  await expect(
+    reserved.publish(
+      owner.principal,
+      routePublishSchema.parse({
+        ...publish('reserved'),
+        destination: { kind: 'custom', hostname, challengeId: earlier.id },
+      }),
+    ),
+  ).rejects.toMatchObject(failure('permission_denied'));
+});
+
 it('publishes one owned hostname, preserves working routes during failed changes, and acknowledges exact versions', async () => {
   const request = publish('application');
   const first = await service.publish(owner.principal, request);

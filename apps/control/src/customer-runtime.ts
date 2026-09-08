@@ -164,6 +164,7 @@ export async function createCustomerRuntime(input: {
     ...(config.hostingConfigFile
       ? {
           hosting: await createHostingRuntime({
+            controlOrigin: config.publicUrl,
             connection,
             provider,
             path: config.hostingConfigFile,

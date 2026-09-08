@@ -214,7 +214,8 @@ export function createPublicGateway(
       serialize(async () => {
         await prepare();
         const state = await saved();
-        const config = state?.config ?? empty;
+        // Operator configuration wins on restart, including a changed control hostname/port.
+        const config = state ? renderCaddyConfig(configuration, state.snapshot) : empty;
         await writeDurably(directory, candidate, config);
         await runtime.run(['validate', '--config', candidate]);
         const digest = state && (await credentialsDigest(state.snapshot));
@@ -226,7 +227,7 @@ export function createPublicGateway(
         if (state && digest) {
           if (digest !== (await credentialsDigest(state.snapshot)))
             throw new Error('Gateway TLS files changed during startup.');
-          await writeDurably(directory, accepted, { ...state, credentialsDigest: digest });
+          await writeDurably(directory, accepted, { ...state, config, credentialsDigest: digest });
         }
         return inspect();
       }),

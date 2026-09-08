@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { setTimeout } from 'node:timers/promises';
 
-async function listening(port: number) {
+export async function waitForSshBanner(port: number) {
   for (let count = 0; count < 30; count++) {
     const ready = await new Promise<boolean>((resolve) => {
       const socket = connect({ host: '127.0.0.1', port });
@@ -15,8 +15,16 @@ async function listening(port: number) {
         resolve(ready);
       };
       socket.setTimeout(500);
-      socket.once('connect', () => {
-        finish(true);
+      // Docker's TCP forwarding can accept before sshd has initialized its keys.
+      // Host authentication still happens separately through the scanned certificate.
+      let banner = '';
+      socket.on('data', (data: Buffer) => {
+        banner += data.toString('ascii');
+        if (banner.length > 512) finish(false);
+        else if (banner.includes('\n')) finish(/^SSH-2\.0-[^\r\n]+\r?\n/.test(banner));
+      });
+      socket.once('end', () => {
+        finish(false);
       });
       socket.once('error', () => {
         finish(false);
@@ -28,7 +36,7 @@ async function listening(port: number) {
     if (ready) return;
     await setTimeout(100);
   }
-  throw new Error('Disposable SSH server did not listen.');
+  throw new Error('Disposable SSH server did not present its SSH banner.');
 }
 
 /** Own exactly one disposable container and key directory, including uncertain docker-run outcomes. */
@@ -119,7 +127,7 @@ export async function withSshFixture<T>(
         const match = /^127\.0\.0\.1:(\d+)$/.exec(published);
         if (!match?.[1]) throw new Error('Expected a loopback-only SSH port.');
         const port = Number(match[1]);
-        await listening(port);
+        await waitForSshBanner(port);
         return port;
       },
     });

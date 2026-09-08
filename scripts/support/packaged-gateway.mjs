@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { Buffer } from 'node:buffer';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { request } from 'node:https';
@@ -13,6 +14,7 @@ export async function verifyPackagedGateway({ image, docker }) {
   const directory = await mkdtemp(join(tmpdir(), 'acld-gateway-'));
   const composeFile = join(directory, 'compose.json');
   const fixture = fileURLToPath(new URL('./gateway-container-fixture.mjs', import.meta.url));
+  const databaseUrl = 'postgres://agentcloud:gateway-fixture@postgres:5432/agentcloud';
   let admitted = false;
   let stage = 'ownership';
   const compose = (args) =>
@@ -27,8 +29,10 @@ export async function verifyPackagedGateway({ image, docker }) {
       `label=com.docker.compose.project=${project}`,
     ]);
   }
-  const state = async (mode = 'state') =>
-    JSON.parse(await compose(['exec', '-T', 'fixture', 'node', '/fixture.mjs', mode]));
+  const state = async (mode = 'state', ...arguments_) =>
+    JSON.parse(
+      await compose(['exec', '-T', 'fixture', 'node', '/fixture.mjs', mode, ...arguments_]),
+    );
   async function eventually(work) {
     let latest;
     for (let attempt = 0; attempt < 40; attempt++) {
@@ -90,13 +94,21 @@ export async function verifyPackagedGateway({ image, docker }) {
             profiles: ['setup'],
             entrypoint: ['node', '/fixture.mjs'],
             command: ['initialize'],
-            volumes: [fixtureMount, 'fixture-data:/work/.local', 'gateway-data:/run/agent-cloud'],
+            environment: { DATABASE_URL: databaseUrl },
+            volumes: [
+              fixtureMount,
+              'fixture-data:/work/.local',
+              'gateway-data:/run/agent-cloud',
+              'customer-scratch:/var/lib/agent-cloud/scratch',
+            ],
           },
           fixture: {
             ...common,
             entrypoint: ['node', '/fixture.mjs'],
             command: ['serve'],
+            environment: { DATABASE_URL: databaseUrl },
             volumes: [fixtureMount, 'fixture-data:/work/.local'],
+            extra_hosts: ['control.fixture.test:127.0.0.1'],
             ports: ['127.0.0.1::8444'],
             healthcheck: {
               test: ['CMD', 'node', '/fixture.mjs', 'state'],
@@ -113,13 +125,58 @@ export async function verifyPackagedGateway({ image, docker }) {
             volumes: ['gateway-data:/run/agent-cloud'],
             depends_on: { fixture: { condition: 'service_healthy' } },
           },
+          postgres: {
+            image:
+              'postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73',
+            environment: {
+              POSTGRES_USER: 'agentcloud',
+              POSTGRES_DB: 'agentcloud',
+              POSTGRES_PASSWORD: 'gateway-fixture',
+            },
+            volumes: ['database:/var/lib/postgresql/data'],
+            healthcheck: {
+              test: ['CMD-SHELL', 'pg_isready -U agentcloud -d agentcloud'],
+              interval: '1s',
+              timeout: '3s',
+              retries: 30,
+            },
+          },
+          migrate: {
+            ...common,
+            profiles: ['setup'],
+            command: ['migrate'],
+            environment: { DATABASE_URL: databaseUrl },
+            depends_on: { postgres: { condition: 'service_healthy' } },
+          },
+          customer: {
+            ...common,
+            profiles: ['tools'],
+            environment: {
+              DATABASE_URL: databaseUrl,
+              PROVIDER: 'simulated',
+              MAX_LIVE_MACHINES: '0',
+              PROVIDER_CURRENCY: 'EUR',
+              MAX_PROVIDER_HOURLY: '0',
+              ACLD_CONTROL_GENERATION_FILE: '/work/.local/control-generation.json',
+            },
+            volumes: ['fixture-data:/work/.local:ro'],
+            depends_on: { postgres: { condition: 'service_healthy' } },
+          },
         },
-        volumes: { 'fixture-data': {}, 'gateway-data': {} },
+        volumes: {
+          'fixture-data': {},
+          'gateway-data': {},
+          'customer-scratch': {},
+          database: {},
+        },
         networks: { default: {} },
       }) + '\n',
       { flag: 'wx', mode: 0o600 },
     );
     admitted = true;
+    stage = 'isolated PostgreSQL startup and migrations';
+    await compose(['up', '--detach', '--wait', 'postgres']);
+    await compose(['run', '--rm', 'migrate']);
     stage = 'private fixture initialization';
     await compose(['run', '--rm', '--no-deps', 'initialize']);
     stage = 'fixture startup';
@@ -178,6 +235,33 @@ export async function verifyPackagedGateway({ image, docker }) {
       });
     stage = 'trusted public HTTPS through mTLS upstream';
     await readApplication();
+    stage = 'packaged customer operator admission';
+    const admittedCustomer = JSON.parse(
+      await compose([
+        'run',
+        '--rm',
+        '-T',
+        'customer',
+        'customer',
+        'admit',
+        '/work/.local/customer-request.json',
+      ]),
+    );
+    assert.equal(admittedCustomer.githubUserId, '700000001');
+    const inspectedCustomer = JSON.parse(
+      await compose(['run', '--rm', '-T', 'customer', 'customer', 'inspect', '700000001']),
+    );
+    assert.equal(inspectedCustomer.accountId, admittedCustomer.accountId);
+    stage = 'authenticated packaged CLI through trusted control HTTPS';
+    const customer = await state('customer', Buffer.from(ca).toString('base64'));
+    assert.equal(customer.accountId, admittedCustomer.accountId);
+    assert.equal(customer.projects, 2);
+    stage = 'packaged customer disable and API rejection';
+    const disabled = JSON.parse(
+      await compose(['run', '--rm', '-T', 'customer', 'customer', 'disable', '700000001']),
+    );
+    assert.equal(disabled.githubUserId, '700000001');
+    assert.equal((await state('disabled')).disabled, true);
     const beforeForeign = (await state()).upstreamRequests;
     const foreign = await https({ hostname: 'foreign.fixture.test' });
     assert.ok([404, 421].includes(foreign.status));
@@ -207,6 +291,9 @@ export async function verifyPackagedGateway({ image, docker }) {
       authoritativeRouteHeader: true,
       foreignHostRejected: true,
       retainedAcrossRestartAndApiOutage: true,
+      authenticatedControlHttps: true,
+      packagedCustomerOperator: true,
+      disabledCustomerRejected: true,
       publicCaDigest: createHash('sha256').update(ca).digest('hex'),
       providerProof: false,
     };

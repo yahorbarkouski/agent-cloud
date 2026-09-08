@@ -61,6 +61,7 @@ async function enqueue(db: Database, hostname: string) {
 export function createHosting(input: {
   db: Database;
   config: HostingControlConfig;
+  reservedHostnames?: readonly string[];
   resolve?: typeof resolveDomain;
   applyGuest?: (route: Route) => Promise<Target | null>;
 }) {
@@ -180,6 +181,11 @@ export function createHosting(input: {
                 `${desired.name}-${machine.id.slice(3).replaceAll('-', '')}.${input.config.applicationDomain}`,
               )
             : desired.hostname;
+        if (input.reservedHostnames?.includes(hostname))
+          throw new CloudError(
+            'permission_denied',
+            'This hostname belongs to the cloud control service.',
+          );
         if (desired.kind === 'custom') {
           if (
             hostname === input.config.applicationDomain ||

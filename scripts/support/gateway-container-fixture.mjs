@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
-import { execFile } from 'node:child_process';
-import { createHash, randomBytes, timingSafeEqual, X509Certificate } from 'node:crypto';
+import { execFile, spawn } from 'node:child_process';
+import { createHash, randomBytes, randomUUID, timingSafeEqual, X509Certificate } from 'node:crypto';
 import { constants } from 'node:fs';
-import { open, readdir } from 'node:fs/promises';
+import { lstat, open, readdir, rm } from 'node:fs/promises';
 import { createServer, request } from 'node:http';
-import { createServer as createHttpsServer } from 'node:https';
+import { createServer as createHttpsServer, request as httpsRequest } from 'node:https';
 import { join } from 'node:path';
 import process from 'node:process';
 import { promisify } from 'node:util';
+import { once } from 'node:events';
 
 // This fixture runs only inside the production image, with two separately mounted volumes.
 const privateDirectory = '/work/.local';
@@ -16,6 +17,10 @@ const gatewayDirectory = '/run/agent-cloud';
 const gatewayName = 'fixture.gateway.agent-cloud.internal';
 const hostname = 'app.fixture.test';
 const serverName = 'guest.fixture.test';
+const controlHostname = 'control.fixture.test';
+const githubUserId = '700000001';
+const githubToken = 'gho_fixture_gateway_customer_01';
+const scratchDirectory = '/var/lib/agent-cloud/scratch';
 const { hostingSnapshotSchema } =
   await import('/opt/agent-cloud/public-gateway/node_modules/@agent-cloud/contracts/dist/hosting.js');
 const routes = [{ hostname, address: '127.0.0.1', serverName, version: 1 }];
@@ -27,6 +32,7 @@ const json = (value) => JSON.stringify(value) + '\n';
 const digest = (value) => createHash('sha256').update(value).digest();
 const file = (name) => join(privateDirectory, name);
 const exported = (name) => join(gatewayDirectory, name);
+const publicCaFile = file('gateway-public-root.crt');
 let stage = 'arguments';
 
 async function initialize(files) {
@@ -36,6 +42,20 @@ async function initialize(files) {
     await prepareGatewayDirectory(directory);
     assert.deepEqual(await readdir(directory), []);
   }
+  stage = 'non-root customer scratch';
+  const scratch = await lstat(scratchDirectory);
+  assert.ok(scratch.isDirectory());
+  assert.equal(scratch.uid, 1000);
+  assert.equal(scratch.mode & 0o777, 0o700);
+  const scratchProbe = join(scratchDirectory, 'fixture-write');
+  const scratchFile = await open(scratchProbe, 'wx', 0o600);
+  try {
+    await scratchFile.writeFile('ok\n');
+    await scratchFile.sync();
+  } finally {
+    await scratchFile.close();
+  }
+  await rm(scratchProbe);
   // A partial attempt requires fresh owned volumes; it must not silently replace any key.
   await writeGatewayFile(
     file('initialization.json'),
@@ -142,12 +162,44 @@ async function initialize(files) {
   await writeGatewayFile(file('hosting-token'), hostingToken, true);
   await writeGatewayFile(exported('hosting-token'), hostingToken, true);
   await writeGatewayFile(file('management-token'), randomBytes(32).toString('base64url'), true);
+  const generation = randomUUID();
+  await writeGatewayFile(file('control-generation.json'), json({ version: 1, generation }), true);
+  await writeGatewayFile(
+    file('customer-request.json'),
+    json({
+      githubUserId,
+      name: 'gateway-fixture-customer',
+      policy: {
+        capabilities: ['project:read', 'project:create'],
+        projects: { kind: 'all' },
+        sizes: ['small'],
+        regions: ['nbg1'],
+        maxMachines: 0,
+        currency: 'EUR',
+        maxHourlyMicros: 0,
+      },
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    }),
+    true,
+  );
+  const { connect, controlState } =
+    await import('/opt/agent-cloud/control/node_modules/@agent-cloud/db/dist/index.js');
+  const connection = connect(process.env.DATABASE_URL);
+  try {
+    await connection.db.insert(controlState).values({
+      id: 1,
+      state: { kind: 'ready', generation },
+    });
+  } finally {
+    await connection.pool.end();
+  }
   const { publicGatewayControllerSchema } =
     await import('/opt/agent-cloud/public-gateway/dist/controller.js');
   const configuration = publicGatewayControllerSchema.parse({
     apiUrl: 'http://127.0.0.1:4319',
     tokenFile: exported('hosting-token'),
     gateway: {
+      control: { hostname: controlHostname, port: 4319 },
       caddy: '/usr/local/bin/caddy',
       stateDirectory: exported('state'),
       guestCaFile: exported('root.crt'),
@@ -203,9 +255,41 @@ async function serve({ readGatewayFile }) {
   const managementAuth = digest(`Bearer ${await readGatewayFile(file('management-token'))}`);
   const expectedPeer = new X509Certificate(await readGatewayFile(file('expected-client.crt'))).raw;
   const stats = { acks: 0, upstreamRequests: 0, outage: false };
+  const [{ connect }, { createApp }, { createCustomerLogin }, { simulatedCatalog }, nodeServer] =
+    await Promise.all([
+      import('/opt/agent-cloud/control/node_modules/@agent-cloud/db/dist/index.js'),
+      import('/opt/agent-cloud/control/dist/app.js'),
+      import('/opt/agent-cloud/control/dist/customer-login.js'),
+      import('/opt/agent-cloud/control/node_modules/@agent-cloud/contracts/dist/index.js'),
+      import('/opt/agent-cloud/control/node_modules/@hono/node-server/dist/index.mjs'),
+    ]);
+  const connection = connect(process.env.DATABASE_URL);
+  const application = createApp({
+    db: connection.db,
+    provider: 'simulated',
+    limits: { currency: 'EUR', maxMachines: 0, maxHourlyMicros: 0 },
+    catalog: () => simulatedCatalog('EUR'),
+    login: createCustomerLogin({
+      db: connection.db,
+      clientId: 'fixture.client',
+      verify: (token) => {
+        assert.equal(token, githubToken);
+        return Promise.resolve(githubUserId);
+      },
+    }),
+  });
+  const applicationListener = nodeServer.getRequestListener(application.fetch);
   const control = createServer(
     { maxHeaderSize: 8192, requestTimeout: 5000, headersTimeout: 5000 },
     (incoming, outgoing) => {
+      if (
+        incoming.url === '/healthz' ||
+        incoming.url?.startsWith('/auth/') ||
+        incoming.url?.startsWith('/v1/')
+      ) {
+        applicationListener(incoming, outgoing);
+        return;
+      }
       void (async () => {
         const hosting = incoming.url?.startsWith('/hosting/');
         const authorization = incoming.headers.authorization;
@@ -280,6 +364,7 @@ async function serve({ readGatewayFile }) {
           }),
       ),
     );
+    await connection.pool.end();
   };
   stage = 'loopback server startup';
   try {
@@ -338,14 +423,149 @@ async function manage(mode, { readGatewayFile }) {
   process.stdout.write(json(stats));
 }
 
+async function runCli(args, input) {
+  const child = spawn(process.execPath, ['/opt/agent-cloud/entrypoint.mjs', 'cli', ...args], {
+    cwd: '/work',
+    env: {
+      PATH: '/usr/local/bin:/usr/bin:/bin',
+      LANG: 'C',
+      NODE_EXTRA_CA_CERTS: publicCaFile,
+      ACLD_CREDENTIALS: file('customer.credentials.json'),
+    },
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  let stdout = '';
+  let stderrBytes = 0;
+  child.stdout.setEncoding('utf8');
+  child.stdout.on('data', (chunk) => {
+    stdout += chunk;
+    if (stdout.length > 65_536) child.kill('SIGKILL');
+  });
+  child.stderr.on('data', (chunk) => {
+    stderrBytes += chunk.length;
+    if (stderrBytes > 65_536) child.kill('SIGKILL');
+  });
+  child.stdin.on('error', () => {});
+  child.stdin.end(input);
+  const timer = globalThis.setTimeout(() => child.kill('SIGKILL'), 20_000);
+  try {
+    const [code] = await once(child, 'exit');
+    if (code !== 0) throw new Error('Packaged CLI command failed.');
+    return JSON.parse(stdout);
+  } finally {
+    globalThis.clearTimeout(timer);
+  }
+}
+
+async function controlRequest(path, { method = 'GET', authorization, body } = {}) {
+  const ca = await open(publicCaFile, constants.O_RDONLY | constants.O_NOFOLLOW);
+  let certificate;
+  try {
+    certificate = await ca.readFile();
+  } finally {
+    await ca.close();
+  }
+  return new Promise((resolve, reject) => {
+    const encoded = body === undefined ? undefined : Buffer.from(JSON.stringify(body));
+    const call = httpsRequest(
+      {
+        protocol: 'https:',
+        hostname: controlHostname,
+        port: 8444,
+        servername: controlHostname,
+        ca: certificate,
+        path,
+        method,
+        headers: {
+          ...(authorization ? { Authorization: authorization } : {}),
+          ...(encoded
+            ? { 'Content-Type': 'application/json', 'Content-Length': String(encoded.length) }
+            : {}),
+        },
+      },
+      (response) => {
+        void readJson(response).then(
+          (value) => resolve({ status: response.statusCode, value }),
+          reject,
+        );
+      },
+    );
+    call.on('error', reject);
+    call.setTimeout(5000, () => call.destroy(new Error('Control HTTPS timed out.')));
+    call.end(encoded);
+  });
+}
+
+async function customerScenario(encodedCa, { readGatewayFile, writeGatewayFile }) {
+  stage = 'public gateway CA import';
+  assert.match(encodedCa, /^[A-Za-z0-9+/]+={0,2}$/);
+  const decoded = Buffer.from(encodedCa, 'base64');
+  assert.equal(decoded.toString('base64'), encodedCa);
+  const pem = decoded.toString('utf8');
+  const root = new X509Certificate(pem);
+  assert.ok(root.ca);
+  assert.equal(root.checkIssued(root), true);
+  await writeGatewayFile(publicCaFile, pem, true);
+  assert.equal(await readGatewayFile(publicCaFile), pem);
+  stage = 'fixture-only GitHub exchange through trusted HTTPS';
+  const cloudToken = `acld_${randomBytes(32).toString('base64url')}`;
+  const login = await controlRequest('/auth/github', {
+    method: 'POST',
+    authorization: `Bearer ${githubToken}`,
+    body: {
+      id: randomUUID(),
+      tokenHash: createHash('sha256').update(cloudToken).digest('hex'),
+    },
+  });
+  assert.equal(login.status, 200);
+  stage = 'packaged token-stdin login';
+  const authenticated = await runCli(
+    ['login', '--server', `https://${controlHostname}:8444`, '--token-stdin'],
+    `${cloudToken}\n`,
+  );
+  const whoami = await runCli(['whoami']);
+  assert.equal(authenticated.principal.accountId, whoami.principal.accountId);
+  await runCli(['project', 'create', 'gateway-control']);
+  const listed = await runCli(['project', 'list']);
+  assert.equal(listed.projects.length, 2);
+  process.stdout.write(
+    json({ accountId: whoami.principal.accountId, projects: listed.projects.length }),
+  );
+}
+
+async function disabledScenario() {
+  stage = 'disabled credential rejection';
+  let rejected = false;
+  try {
+    await runCli(['whoami']);
+  } catch {
+    rejected = true;
+  }
+  assert.equal(rejected, true);
+  const response = await controlRequest('/auth/github', {
+    method: 'POST',
+    authorization: `Bearer ${githubToken}`,
+    body: {
+      id: randomUUID(),
+      tokenHash: createHash('sha256').update('disabled').digest('hex'),
+    },
+  });
+  assert.equal(response.status, 401);
+  process.stdout.write(json({ disabled: true }));
+}
+
 try {
   process.umask(0o077);
   const [mode, ...extra] = process.argv.slice(2);
-  assert.equal(extra.length, 0);
-  assert.ok(['initialize', 'serve', 'state', 'outage', 'recover'].includes(mode));
+  assert.ok(
+    ['initialize', 'serve', 'state', 'outage', 'recover', 'customer', 'disabled'].includes(mode),
+  );
+  assert.equal(extra.length, mode === 'customer' ? 1 : 0);
   const files = await import('/opt/agent-cloud/public-gateway/dist/certificate.js');
   if (mode === 'initialize') await initialize(files);
   else if (mode === 'serve') await serve(files);
+  else if (mode === 'customer') await customerScenario(extra[0], files);
+  else if (mode === 'disabled') await disabledScenario();
   else await manage(mode, files);
 } catch {
   // Never surface child output, certificate material, tokens or configuration in Docker logs.

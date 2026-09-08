@@ -27,12 +27,18 @@ import { readPrivateFile } from './private-file.js';
 export async function createHostingRuntime(input: {
   connection: Connection;
   path: string;
+  controlOrigin: string;
   provider: MachineProvider;
   signer: () => Promise<Pick<Signer, 'issueHostingCredential'>>;
   remote?: typeof runHostingCommand;
 }) {
   const config = hostingControlConfigSchema.parse(JSON.parse(await readPrivateFile(input.path)));
-  const service = createHosting({ db: input.connection.db, config, applyGuest });
+  const service = createHosting({
+    db: input.connection.db,
+    config,
+    applyGuest,
+    reservedHostnames: [new URL(input.controlOrigin).hostname],
+  });
   async function applyGuest(route: z.infer<typeof routeSchema>) {
     const locked = await withMachineLock({
       pool: input.connection.pool,

@@ -55,6 +55,7 @@ export async function prepareHostingFixture(input: {
     { mode: 0o600 },
   );
   const runtime = await createHostingRuntime({
+    controlOrigin: input.controlUrl,
     connection: input.connection,
     provider: input.provider,
     path: configPath,

@@ -18,6 +18,14 @@ export const publicGatewayControllerSchema = z
     clientIdentity: gatewayClientIdentitySchema,
   })
   .superRefine((value, context) => {
+    if (
+      value.gateway.control &&
+      value.apiUrl.replace(/\/$/, '') !== `http://127.0.0.1:${value.gateway.control.port}`
+    )
+      context.addIssue({
+        code: 'custom',
+        message: 'A co-located control API must use the same loopback port as its HTTPS route.',
+      });
     const paths = [
       value.tokenFile,
       value.gateway.guestCaFile,

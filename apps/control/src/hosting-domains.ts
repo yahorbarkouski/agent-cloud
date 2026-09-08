@@ -42,6 +42,7 @@ export async function resolveDomain(hostname: string) {
 export function createHostingDomains(input: {
   db: Database;
   config: HostingControlConfig;
+  reservedHostnames?: readonly string[];
   resolve?: typeof resolveDomain;
 }) {
   const record = (row: typeof domainChallenges.$inferSelect) =>
@@ -55,6 +56,11 @@ export function createHostingDomains(input: {
     });
   async function create(principal: Principal, value: string) {
     const hostname = hostnameSchema.parse(value);
+    if (input.reservedHostnames?.includes(hostname))
+      throw new CloudError(
+        'permission_denied',
+        'This hostname belongs to the cloud control service.',
+      );
     if (
       hostname === input.config.applicationDomain ||
       hostname.endsWith(`.${input.config.applicationDomain}`)
@@ -109,6 +115,11 @@ export function createHostingDomains(input: {
       .from(domainChallenges)
       .where(and(eq(domainChallenges.id, id), eq(domainChallenges.accountId, principal.accountId)));
     if (!challenge) throw new CloudError('not_found', 'Domain challenge not found.');
+    if (input.reservedHostnames?.includes(challenge.hostname))
+      throw new CloudError(
+        'permission_denied',
+        'This hostname belongs to the cloud control service.',
+      );
     const now = await databaseTime(input.db);
     if (challenge.expiresAt <= now)
       throw new CloudError(

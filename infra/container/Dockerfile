@@ -26,9 +26,9 @@ COPY --from=build /output /opt/agent-cloud
 COPY --from=build --chmod=0755 /build/.local/tools/step-0.30.6 /usr/local/bin/step
 COPY --from=caddy --chmod=0755 /usr/bin/caddy /usr/local/bin/caddy
 COPY infra/container/entrypoint.mjs /opt/agent-cloud/entrypoint.mjs
-RUN mkdir -p /work/.local /run/agent-cloud /run/agent-cloud-wal \
- && chown -R node:node /work /run/agent-cloud /run/agent-cloud-wal \
- && chmod 0700 /work/.local /run/agent-cloud /run/agent-cloud-wal
+RUN mkdir -p /work/.local /run/agent-cloud /run/agent-cloud-wal /var/lib/agent-cloud/scratch \
+ && chown -R node:node /work /run/agent-cloud /run/agent-cloud-wal /var/lib/agent-cloud \
+ && chmod 0700 /work/.local /run/agent-cloud /run/agent-cloud-wal /var/lib/agent-cloud/scratch
 USER node
 WORKDIR /work
 ENTRYPOINT ["node", "/opt/agent-cloud/entrypoint.mjs"]

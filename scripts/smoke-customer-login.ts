@@ -102,11 +102,10 @@ try {
     }),
     { mode: 0o600 },
   );
-  await execute(
-    process.execPath,
-    ['--import', 'tsx', 'scripts/customer.ts', 'admit', admissionFile],
-    { env: environment, timeout: 20_000 },
-  );
+  await execute(process.execPath, ['apps/control/dist/customer-main.js', 'admit', admissionFile], {
+    env: environment,
+    timeout: 20_000,
+  });
   process.stdout.write(
     JSON.stringify({ event: 'customer_login.ready', endpoint, githubUserId, allocationLimit: 0 }) +
       '\n',

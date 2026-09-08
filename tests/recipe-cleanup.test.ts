@@ -27,7 +27,7 @@ if (args[0] === ${JSON.stringify(kind)}) process.stdout.write('pre-existing-fixt
           {
             // This subprocess needs only executables, not inherited worker hooks or credentials.
             env: { PATH: `${scratch}:${process.env.PATH ?? ''}` },
-            timeout: 30_000,
+            timeout: 10_000,
             maxBuffer: 65_536,
           },
           (error, stdout, stderr) => {

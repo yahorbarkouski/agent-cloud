@@ -1,0 +1,155 @@
+name: agent-cloud-customer
+x-runtime: &runtime
+  image: ${ACLD_CUSTOMER_IMAGE:?Set the verified immutable runtime image ID}
+  pull_policy: never
+  init: true
+  read_only: true
+  user: '1000:1000'
+  tmpfs: ['/tmp:size=128m,mode=1777']
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  pids_limit: 128
+  mem_limit: 512m
+  cpus: 1
+  logging:
+    driver: local
+    options: { max-size: 5m, max-file: '2' }
+x-control: &control
+  <<: *runtime
+  environment:
+    ACLD_CONTAINER_ENV_FILE: /run/agent-cloud/control/control.env
+  volumes:
+    - type: bind
+      source: ${ACLD_CUSTOMER_DIRECTORY:?Set the absolute private configuration directory}/control
+      target: /run/agent-cloud/control
+      read_only: true
+      bind: { create_host_path: false }
+    - type: bind
+      source: ${ACLD_CUSTOMER_DIRECTORY}/generation
+      target: /run/agent-cloud/generation
+      read_only: true
+      bind: { create_host_path: false }
+    - type: bind
+      source: ${ACLD_CUSTOMER_DIRECTORY}/identity
+      target: /run/agent-cloud/identity
+      bind: { create_host_path: false }
+    - scratch:/var/lib/agent-cloud/scratch
+  networks: [database, egress]
+services:
+  postgres:
+    image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    environment:
+      POSTGRES_USER: agentcloud
+      POSTGRES_DB: agentcloud
+      POSTGRES_PASSWORD_FILE: /run/database/password
+    volumes:
+      - database:/var/lib/postgresql/data
+      - type: bind
+        source: ${ACLD_CUSTOMER_DIRECTORY}/database
+        target: /run/database
+        read_only: true
+        bind: { create_host_path: false }
+    networks: [database]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U agentcloud -d agentcloud]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 128
+    logging:
+      driver: local
+      options: { max-size: 5m, max-file: '2' }
+  api:
+    <<: *control
+    command: [api]
+    ports: ['80:80', '443:443']
+    sysctls: { net.ipv4.ip_unprivileged_port_start: '0' }
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          'fetch("http://127.0.0.1:4319/healthz").then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))',
+        ]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    depends_on:
+      postgres: { condition: service_healthy }
+  worker:
+    <<: *control
+    command: [worker]
+    depends_on:
+      api: { condition: service_healthy }
+  public-gateway:
+    <<: *runtime
+    command: [public-gateway]
+    network_mode: service:api
+    environment:
+      ACLD_PUBLIC_GATEWAY_CONFIG: /run/agent-cloud/gateway/controller.json
+    volumes:
+      - type: bind
+        source: ${ACLD_CUSTOMER_DIRECTORY}/gateway
+        target: /run/agent-cloud/gateway
+        bind: { create_host_path: false }
+    depends_on:
+      api: { condition: service_healthy }
+  access-gateway:
+    <<: *runtime
+    command: [access-gateway]
+    network_mode: service:api
+    environment:
+      ACLD_GATEWAY_CONFIG: /run/agent-cloud/access/config.json
+    volumes:
+      - type: bind
+        source: ${ACLD_CUSTOMER_DIRECTORY}/access
+        target: /run/agent-cloud/access
+        read_only: true
+        bind: { create_host_path: false }
+    depends_on:
+      api: { condition: service_healthy }
+  operator:
+    <<: *runtime
+    profiles: [operator]
+    command: [customer]
+    environment:
+      ACLD_CONTAINER_ENV_FILE: /run/agent-cloud/operator/operator.env
+    volumes:
+      - type: bind
+        source: ${ACLD_CUSTOMER_DIRECTORY}/operator
+        target: /run/agent-cloud/operator
+        read_only: true
+        bind: { create_host_path: false }
+      - type: bind
+        source: ${ACLD_CUSTOMER_DIRECTORY}/generation
+        target: /run/agent-cloud/generation
+        read_only: true
+        bind: { create_host_path: false }
+    networks: [database]
+  retention:
+    <<: *runtime
+    profiles: [retention]
+    command: [backup-retention]
+    environment:
+      ACLD_CONTAINER_ENV_FILE: /run/agent-cloud/retention/retention.env
+    volumes:
+      - type: bind
+        source: ${ACLD_CUSTOMER_DIRECTORY}/retention
+        target: /run/agent-cloud/retention
+        read_only: true
+        bind: { create_host_path: false }
+      - type: bind
+        source: ${ACLD_CUSTOMER_DIRECTORY}/generation
+        target: /run/agent-cloud/generation
+        read_only: true
+        bind: { create_host_path: false }
+    networks: [database, egress]
+volumes:
+  database:
+  scratch:
+networks:
+  database: { internal: true }
+  egress: {}

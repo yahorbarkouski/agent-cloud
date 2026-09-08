@@ -56,6 +56,12 @@ let stage = 'configuration';
 let passed = false;
 const results = [];
 try {
+  const recipes = process.argv.length === 2 ? ['postgres', 'umami'] : process.argv.slice(2);
+  assert.ok(recipes.every((recipe) => ['postgres', 'umami'].includes(recipe)));
+  const projects = recipes.map((recipe) => ({ recipe, project: `acld-recipe-${randomUUID()}` }));
+  stage = 'project ownership';
+  // Refuse collisions before packaging; recheck each project immediately before its mutation scope.
+  for (const { project } of projects) await requireUnusedProject(project);
   stage = 'production CLI packaging';
   const cli = await packageCli(directory);
   const installed = async (args) =>
@@ -71,10 +77,7 @@ try {
     ['postgres', 'umami'],
   );
   assert.ok(catalog.every((recipe) => recipe.version === '1.0.0'));
-  const recipes = process.argv.length === 2 ? ['postgres', 'umami'] : process.argv.slice(2);
-  assert.ok(recipes.every((recipe) => ['postgres', 'umami'].includes(recipe)));
-  for (const recipe of recipes) {
-    const project = `acld-recipe-${randomUUID()}`;
+  for (const { recipe, project } of projects) {
     const context = join(directory, recipe);
     const listener = createServer();
     await new Promise((resolve) => listener.listen(0, '127.0.0.1', resolve));
