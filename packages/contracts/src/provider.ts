@@ -40,6 +40,7 @@ export const providerCommandSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('reboot'), serverId: z.string() }),
   z.object({ kind: z.literal('power_off'), serverId: z.string() }),
   z.object({ kind: z.literal('power_on'), serverId: z.string() }),
+  z.object({ kind: z.literal('enable_backup'), serverId: z.string() }),
   z.object({ kind: z.literal('resize'), serverId: z.string(), serverType: z.string() }),
   z.object({ kind: z.literal('destroy'), serverId: z.string() }),
 ]);
@@ -75,6 +76,7 @@ export const providerServerSchema = z.object({
   labels: z.record(z.string(), z.string()),
   ipv4: z.string().nullable(),
   primaryIpId: z.string().nullable(),
+  backupStatus: z.enum(['unknown', 'disabled', 'enabled']).default('unknown'),
 });
 export type ProviderServer = z.infer<typeof providerServerSchema>;
 export const providerPrimaryIpSchema = z.object({

@@ -100,10 +100,14 @@ async function advance(work: CleanupWork) {
   for (const attempt of history.filter(pending)) {
     const command = providerCommandSchema.parse(attempt.command);
     const target = resources.find((resource) =>
-      targets(attempt, resource.kind, resource.providerId),
+      command.kind === 'delete_primary_ip'
+        ? resource.kind === 'primary_ip' && resource.providerId === command.primaryIpId
+        : 'serverId' in command &&
+          resource.kind === 'server' &&
+          resource.providerId === command.serverId,
     );
-    if (deletion(command) && !target)
-      throw new CloudError('permission_denied', 'Deletion has no retained owned resource.');
+    if ((deletion(command) || command.kind === 'enable_backup') && !target)
+      throw new CloudError('permission_denied', 'Cleanup effect has no retained owned resource.');
     await resolveEffect({
       ...work,
       attempt,

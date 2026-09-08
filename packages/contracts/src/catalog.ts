@@ -9,6 +9,11 @@ export const architectureSchema = z.enum(['x86', 'arm']);
 export type Size = z.infer<typeof sizeSchema>;
 export type Region = z.infer<typeof regionSchema>;
 
+export const providerBackupsSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('disabled') }),
+  z.strictObject({ kind: z.literal('daily'), hourlyMicros: microsSchema }),
+]);
+
 export const catalogItemSchema = z
   .object({
     size: sizeSchema,
@@ -23,11 +28,17 @@ export const catalogItemSchema = z
     priceBasis: z.enum(['simulated', 'account_gross', 'legacy_estimate']),
     serverHourlyMicros: microsSchema,
     ipv4HourlyMicros: microsSchema,
+    // Historical offers predate provider backup admission and did not reserve it.
+    providerBackups: providerBackupsSchema.default({ kind: 'disabled' }),
     hourlyMicros: microsSchema,
   })
   .refine(
-    (item) => item.hourlyMicros === item.serverHourlyMicros + item.ipv4HourlyMicros,
-    'Hourly reservation must include the VM and IPv4.',
+    (item) =>
+      item.hourlyMicros ===
+      item.serverHourlyMicros +
+        item.ipv4HourlyMicros +
+        (item.providerBackups.kind === 'daily' ? item.providerBackups.hourlyMicros : 0),
+    'Hourly reservation must include the VM, IPv4 and enabled provider backups.',
   );
 export type CatalogItem = z.infer<typeof catalogItemSchema>;
 
@@ -109,6 +120,7 @@ export function simulatedCatalog(currency = 'EUR'): Catalog {
         priceBasis: 'simulated',
         serverHourlyMicros: type.hourlyMicros - 1200,
         ipv4HourlyMicros: 1200,
+        providerBackups: { kind: 'disabled' },
       })),
     ),
   });

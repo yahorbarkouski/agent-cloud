@@ -12,9 +12,13 @@ import {
   operationSchema,
   newId,
   simulatedCatalog,
+  catalogResponseSchema,
+  providerCommandSchema,
+  providerServerSchema,
   attemptOutcomeSchema,
   type Operation,
   type MachineAction,
+  type MachineProvider,
 } from '../packages/contracts/src/index.js';
 import {
   allocations,
@@ -141,6 +145,302 @@ async function act(operation: Operation, command: MachineAction) {
   expect((await readOperation(action)).progress.kind).toBe('succeeded');
   return action;
 }
+
+describe('provider automatic backup admission and recovery', () => {
+  const backedCatalog = () => {
+    const base = simulatedCatalog();
+    return catalogResponseSchema.parse({
+      ...base,
+      items: base.items.map((item) => ({
+        ...item,
+        providerBackups: { kind: 'daily', hourlyMicros: 1680 },
+        hourlyMicros: item.hourlyMicros + 1680,
+      })),
+    });
+  };
+  beforeEach(() => {
+    app = createApp({
+      db: fixture.connection.db,
+      provider: 'simulated',
+      catalog: backedCatalog,
+      limits,
+    });
+  });
+
+  it('reserves backup cost before allocation and resolves a lost enable response without resubmission', async () => {
+    class LostBackupReply extends SimulatedProvider {
+      override submit(input: Parameters<MachineProvider['submit']>[0]) {
+        return input.command.kind === 'enable_backup'
+          ? new SimulatedProvider({
+              db: this.db,
+              catalog: this.catalog,
+              fault: { kind: 'lose_response', visibilityDelayMs: 0 },
+            }).submit(input)
+          : super.submit(input);
+      }
+    }
+    const provider = new LostBackupReply({ db: fixture.connection.db, catalog: backedCatalog });
+    const operation = await create();
+    const [reserved] = await fixture.connection.db.select().from(allocations);
+    expect(reserved?.hourlyMicros).toBe(11280);
+    await settle(operation, provider);
+    expect((await readMachine(operation)).state).toMatchObject({
+      kind: 'allocated',
+      backupStatus: 'enabled',
+    });
+    const history = await fixture.connection.db.select().from(attempts);
+    expect(
+      history.filter((row) => providerCommandSchema.parse(row.command).kind === 'enable_backup'),
+    ).toHaveLength(1);
+    const enabled = history.find(
+      (row) => providerCommandSchema.parse(row.command).kind === 'enable_backup',
+    );
+    expect(enabled?.outcome).toMatchObject({ kind: 'unknown' });
+    expect(enabled?.resolution).toMatchObject({ kind: 'confirmed' });
+    await tick(operation, provider);
+    const machine = await readMachine(operation);
+    await act(operation, {
+      kind: 'destroy',
+      expectedVersion: machine.version,
+      allowDataLoss: true,
+    });
+    expect(
+      usageResponseSchema.parse(await (await request('/v1/usage')).json()).usage.hourlyMicros,
+    ).toBe(0);
+    expect(await provider.findServers({ labels: {} })).toHaveLength(0);
+    expect(await provider.findPrimaryIps({ labels: {} })).toHaveLength(0);
+  });
+
+  it('refuses a grant limit that covers the VM and IP but not the backup surcharge', async () => {
+    await fixture.connection.db
+      .update(grants)
+      .set({ policy: { ...account.principal.policy, maxHourlyMicros: 10000 } })
+      .where(eq(grants.id, account.principal.grantId));
+    const response = await request(`/v1/projects/${account.projectId}/machines`, {
+      name: 'over-budget',
+      size: 'small',
+      region: 'nbg1',
+    });
+    expect(response.status).toBe(409);
+    expect(await fixture.connection.db.select().from(allocations)).toHaveLength(0);
+    expect(await fixture.connection.db.select().from(attempts)).toHaveLength(0);
+  });
+
+  it('rechecks revocation before enabling backups on the new owned server', async () => {
+    const provider = new SimulatedProvider({ db: fixture.connection.db, catalog: backedCatalog });
+    const operation = await create();
+    await submitVm(operation, provider);
+    await tick(operation, provider); // Confirm the create without submitting its next effect.
+    await fixture.connection.db
+      .update(grants)
+      .set({ revokedAt: new Date() })
+      .where(eq(grants.id, account.principal.grantId));
+    for (let i = 0; i < 10; i++) await tick(operation, provider);
+    const history = await fixture.connection.db.select().from(attempts);
+    expect(
+      history.filter((row) => providerCommandSchema.parse(row.command).kind === 'enable_backup'),
+    ).toHaveLength(0);
+    expect((await readOperation(operation)).progress.kind).toBe('failed');
+    expect(await provider.findServers({ labels: {} })).toHaveLength(1);
+    expect((await fixture.connection.db.select().from(allocations))[0]?.retiredAt).toBeNull();
+  });
+
+  it('refuses a higher backup quote after VM creation without increasing the reservation', async () => {
+    let increased = false;
+    const provider = new SimulatedProvider({
+      db: fixture.connection.db,
+      catalog: () => {
+        const original = backedCatalog();
+        return increased
+          ? catalogResponseSchema.parse({
+              ...original,
+              items: original.items.map((item) => ({
+                ...item,
+                providerBackups: { kind: 'daily', hourlyMicros: 2680 },
+                hourlyMicros: item.hourlyMicros + 1000,
+              })),
+            })
+          : original;
+      },
+    });
+    const operation = await create();
+    await submitVm(operation, provider);
+    await tick(operation, provider);
+    increased = true;
+    await tick(operation, provider);
+    expect((await readOperation(operation)).progress).toMatchObject({
+      kind: 'failed',
+      error: { code: 'budget_exceeded' },
+    });
+    const history = await fixture.connection.db.select().from(attempts);
+    expect(
+      history.filter((row) => providerCommandSchema.parse(row.command).kind === 'enable_backup'),
+    ).toHaveLength(0);
+    expect((await fixture.connection.db.select().from(allocations))[0]?.hourlyMicros).toBe(11280);
+  });
+
+  it.each(['unknown-status', 'foreign-labels'])(
+    'refuses backup enablement for %s',
+    async (fault) => {
+      const provider = new SimulatedProvider({ db: fixture.connection.db, catalog: backedCatalog });
+      const operation = await create();
+      await submitVm(operation, provider);
+      await tick(operation, provider);
+      const [row] = await fixture.connection.db.select().from(simulatedServers);
+      if (!row) throw new Error('Missing fixture server.');
+      const server = providerServerSchema.parse(row.value);
+      await fixture.connection.db
+        .update(simulatedServers)
+        .set({
+          value: {
+            ...server,
+            ...(fault === 'unknown-status'
+              ? { backupStatus: 'unknown' }
+              : { labels: { managed_by: 'another-account' } }),
+          },
+        })
+        .where(eq(simulatedServers.id, row.id));
+      await tick(operation, provider);
+      expect((await readOperation(operation)).progress).toMatchObject({
+        kind: 'blocked',
+        reason: 'provider_resource_mismatch',
+      });
+      const history = await fixture.connection.db.select().from(attempts);
+      expect(
+        history.filter((row) => providerCommandSchema.parse(row.command).kind === 'enable_backup'),
+      ).toHaveLength(0);
+    },
+  );
+
+  it('enables backups during a newly priced resize of a historical machine', async () => {
+    let daily = false;
+    const catalog = () => (daily ? backedCatalog() : simulatedCatalog());
+    app = createApp({ db: fixture.connection.db, provider: 'simulated', catalog, limits });
+    const provider = new SimulatedProvider({ db: fixture.connection.db, catalog });
+    const operation = await create();
+    await settle(operation, provider);
+    expect((await readMachine(operation)).state).toMatchObject({ backupStatus: 'disabled' });
+    const created = await readMachine(operation);
+    await act(operation, { kind: 'power_off', expectedVersion: created.version });
+    const poweredOff = await readMachine(operation);
+    daily = true;
+    const response = await request(`/v1/machines/${operation.machineId}/actions`, {
+      kind: 'resize',
+      size: 'medium',
+      expectedVersion: poweredOff.version,
+    });
+    expect(response.status).toBe(202);
+    await settle(operationResponseSchema.parse(await response.json()).operation, provider);
+    expect((await readMachine(operation)).state).toMatchObject({
+      kind: 'allocated',
+      backupStatus: 'enabled',
+    });
+    expect((await fixture.connection.db.select().from(allocations))[0]?.hourlyMicros).toBe(16080);
+  });
+
+  it('does not enable backups on a costlier old VM when a cheaper equal-disk resize fails', async () => {
+    let daily = false;
+    const catalog = () => {
+      const base = simulatedCatalog();
+      return catalogResponseSchema.parse({
+        ...base,
+        items: base.items.map((item) => {
+          const serverHourlyMicros = item.size === 'small' ? 9000 : 8000;
+          const backup = daily ? serverHourlyMicros / 5 : 0;
+          return {
+            ...item,
+            diskGb: 40,
+            serverHourlyMicros,
+            ipv4HourlyMicros: 1000,
+            hourlyMicros: serverHourlyMicros + 1000 + backup,
+            providerBackups: daily ? { kind: 'daily', hourlyMicros: backup } : { kind: 'disabled' },
+          };
+        }),
+      });
+    };
+    await fixture.connection.db
+      .update(grants)
+      .set({ policy: { ...account.principal.policy, maxHourlyMicros: 11000 } })
+      .where(eq(grants.id, account.principal.grantId));
+    app = createApp({ db: fixture.connection.db, provider: 'simulated', catalog, limits });
+    class RefusedResize extends SimulatedProvider {
+      override submit(input: Parameters<MachineProvider['submit']>[0]) {
+        return input.command.kind === 'resize'
+          ? Promise.resolve({
+              kind: 'rejected',
+              error: {
+                code: 'provider_rejected',
+                message: 'Target type refused.',
+                retryable: false,
+              },
+            } satisfies Awaited<ReturnType<MachineProvider['submit']>>)
+          : super.submit(input);
+      }
+    }
+    const provider = new RefusedResize({ db: fixture.connection.db, catalog });
+    const operation = await create();
+    await settle(operation, provider);
+    const created = await readMachine(operation);
+    await act(operation, { kind: 'power_off', expectedVersion: created.version });
+    const poweredOff = await readMachine(operation);
+    daily = true;
+    const response = await request(`/v1/machines/${operation.machineId}/actions`, {
+      kind: 'resize',
+      size: 'medium',
+      expectedVersion: poweredOff.version,
+    });
+    expect(response.status).toBe(202);
+    await settle(
+      operationResponseSchema.parse(await response.json()).operation,
+      provider,
+      'failed',
+    );
+    const history = await fixture.connection.db.select().from(attempts);
+    expect(
+      history.filter((row) => providerCommandSchema.parse(row.command).kind === 'enable_backup'),
+    ).toHaveLength(0);
+    const [server] = await provider.findServers({ labels: {} });
+    expect(server).toMatchObject({ serverType: 'cx23', backupStatus: 'disabled' });
+    expect((await fixture.connection.db.select().from(allocations))[0]?.hourlyMicros).toBe(10600);
+  });
+
+  it('retains the full reservation when backup enablement is uncertain and permits owned destruction', async () => {
+    class UnknownBackup extends SimulatedProvider {
+      override submit(input: Parameters<MachineProvider['submit']>[0]) {
+        return input.command.kind === 'enable_backup'
+          ? Promise.resolve({
+              kind: 'unknown',
+              reason: 'Backup request reply unavailable.',
+            } satisfies Awaited<ReturnType<MachineProvider['submit']>>)
+          : super.submit(input);
+      }
+    }
+    const provider = new UnknownBackup({ db: fixture.connection.db, catalog: backedCatalog });
+    const operation = await create();
+    for (let i = 0; i < 12; i++) await tick(operation, provider);
+    const history = await fixture.connection.db.select().from(attempts);
+    expect(
+      history.filter((row) => providerCommandSchema.parse(row.command).kind === 'enable_backup'),
+    ).toHaveLength(1);
+    expect((await readOperation(operation)).progress.kind).not.toBe('succeeded');
+    expect(
+      usageResponseSchema.parse(await (await request('/v1/usage')).json()).usage.hourlyMicros,
+    ).toBe(11280);
+    const machine = await readMachine(operation);
+    const response = await request(`/v1/machines/${machine.id}/actions`, {
+      kind: 'destroy',
+      expectedVersion: machine.version,
+      allowDataLoss: true,
+    });
+    expect(response.status).toBe(202);
+    await settle(operation, provider, 'cancelled');
+    expect(await provider.findServers({ labels: {} })).toHaveLength(0);
+    expect(await provider.findPrimaryIps({ labels: {} })).toHaveLength(0);
+    expect(
+      usageResponseSchema.parse(await (await request('/v1/usage')).json()).usage.hourlyMicros,
+    ).toBe(0);
+  });
+});
 
 describe('durable admission and API isolation', () => {
   it('deduplicates concurrent reordered bodies and rejects reuse with a different body', async () => {

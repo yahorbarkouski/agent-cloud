@@ -33,6 +33,7 @@ const serverSchema = z.object({
   server_type: z.object({ name: z.string() }),
   location: z.object({ name: z.string() }),
   labels: z.record(z.string(), z.string()),
+  backup_window: z.string().min(1).nullable().optional(),
   public_net: z.object({ ipv4: z.object({ id: numericId, ip: z.string() }).nullable() }),
 });
 
@@ -86,6 +87,12 @@ function serverRecord(value: z.infer<typeof serverSchema>): ProviderServer {
     labels: value.labels,
     ipv4: value.public_net.ipv4?.ip ?? null,
     primaryIpId: value.public_net.ipv4 ? String(value.public_net.ipv4.id) : null,
+    backupStatus:
+      value.backup_window === undefined
+        ? 'unknown'
+        : value.backup_window === null
+          ? 'disabled'
+          : 'enabled',
   };
 }
 
@@ -375,6 +382,9 @@ export class HetznerProvider extends HetznerInventory implements MachineProvider
           break;
         case 'power_off':
           path = `/servers/${id}/actions/shutdown`;
+          break;
+        case 'enable_backup':
+          path = `/servers/${id}/actions/enable_backup`;
           break;
         case 'resize':
           path = `/servers/${id}/actions/change_type`;

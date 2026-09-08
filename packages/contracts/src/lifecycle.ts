@@ -139,6 +139,7 @@ export const machineStateSchema = z.discriminatedUnion('kind', [
     serverId: z.string(),
     power: powerSchema,
     guest: guestVerificationSchema,
+    backupStatus: z.enum(['unknown', 'disabled', 'enabled']).default('unknown'),
   }),
   z.object({ kind: z.literal('failed'), error: failureSchema }),
   z.object({ kind: z.literal('destroyed'), destroyedAt: z.iso.datetime() }),

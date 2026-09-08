@@ -34,6 +34,46 @@ function provider(
   });
 }
 
+it('enables provider backups on the exact server and distinguishes enabled, disabled and unreported status', async () => {
+  const calls: Request[] = [];
+  for (const backupWindow of [undefined, null, '22-02']) {
+    const source = provider((input, init) => {
+      const request = new Request(input, init);
+      calls.push(request);
+      return Promise.resolve(
+        Response.json(
+          request.method === 'POST'
+            ? { action: { id: 71, status: 'running' } }
+            : {
+                server: {
+                  id: 42,
+                  name: 'owned',
+                  status: 'running',
+                  server_type: { name: 'cpx12' },
+                  location: { name: 'nbg1' },
+                  labels: { managed_by: 'agent-cloud' },
+                  public_net: { ipv4: null },
+                  ...(backupWindow === undefined ? {} : { backup_window: backupWindow }),
+                },
+              },
+        ),
+      );
+    });
+    const server = await source.getServer({ serverId: '42' });
+    expect(server?.backupStatus).toBe(
+      backupWindow === undefined ? 'unknown' : backupWindow === null ? 'disabled' : 'enabled',
+    );
+    expect(
+      await source.submit({
+        attemptId: newId.attempt(),
+        command: { kind: 'enable_backup', serverId: '42' },
+      }),
+    ).toEqual({ kind: 'accepted', resource: { kind: 'server', id: '42' }, actionId: '71' });
+    expect(calls.at(-1)?.url).toBe('https://api.hetzner.cloud/v1/servers/42/actions/enable_backup');
+    expect(await calls.at(-1)?.text()).toBe('');
+  }
+});
+
 it('creates explicitly owned IPv4, attaches it without automatic IPv6, and accepts bodyless deletion', async () => {
   const requests: Request[] = [];
   const source = provider((input, init) => {

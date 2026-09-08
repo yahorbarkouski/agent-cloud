@@ -136,6 +136,7 @@ async function scenario() {
       return Response.json({
         pricing: {
           currency: 'USD',
+          server_backup: { percentage: '20.0000000000' },
           server_types: [{ name: 'cpx12', prices: [price('0.026568')] }],
           primary_ips: [{ type: 'ipv4', prices: [price('0.00123')] }],
           image: { price_per_gb_month: { gross: '0.024477' } },

@@ -163,6 +163,7 @@ export class SimulatedProvider implements MachineProvider {
           power: 'starting',
           ipv4: primaryIp?.ipv4 ?? null,
           primaryIpId: primaryIp?.id ?? null,
+          backupStatus: 'disabled',
         };
         await tx.insert(simulatedServers).values({ id: serverId, value: server, visibleAt });
         if (this.fault.kind === 'duplicate_create') {
@@ -246,6 +247,12 @@ export class SimulatedProvider implements MachineProvider {
               await tx
                 .update(simulatedServers)
                 .set({ value: { ...server, serverType: command.serverType } })
+                .where(eq(simulatedServers.id, row.serverId));
+              break;
+            case 'enable_backup':
+              await tx
+                .update(simulatedServers)
+                .set({ value: { ...server, backupStatus: 'enabled' } })
                 .where(eq(simulatedServers.id, row.serverId));
               break;
             case 'create':

@@ -6,6 +6,8 @@ Account and credential limits both constrain admission. `limits.effective` takes
 
 A powered-off VM remains reserved. Resize admission holds the larger of the previous and requested rate until the product verifies the provider outcome. Unknown or failed operations retain their reservation whenever owned infrastructure may remain. Only authoritative cleanup retires it. An admitted create rejected before any provider effect records both admission and release, even though it created no billed VM.
 
+New Hetzner offers include the quoted automated-backup surcharge in `hourlyMicros`; `providerBackups` identifies the setting and its hourly portion. Historical offers keep their recorded rate. Provider backups are part of the VM reservation, while protected application objects use the separate retained-byte allowance. Provider snapshots disappear with the VM; protected application backups survive its destruction.
+
 `usage.backups` includes pending and blocked captures, retained objects and pending purges. Admission initially reserves the configured maximum capture size; verified stored objects reserve their actual encrypted size. Object Lock expiry alone does not release storage. A successful exact-version purge does. Destroying a VM preserves its off-machine backups. Backup limits are `null` when the API has no configured backup service; persisted usage remains visible. This does not mean unlimited storage or zero usage.
 
 ## Reservation history
@@ -23,6 +25,6 @@ Existing allocations receive a `baseline` at the migration timestamp. Their earl
 
 ## Verification
 
-`pnpm smoke:usage` starts an isolated simulated API, Graphile worker and database and invokes the actual CLI. It creates, powers off, resizes and destroys a machine across disconnected CLI processes, verifies rates9600→14400→0, inspects history, then removes its exact database/private files. No provider credentials or paid resources are used.
+`pnpm smoke:usage` starts an isolated simulated API, Graphile worker and database and invokes the actual CLI. Its catalog includes a synthetic 20% backup fee. It creates, powers off, resizes and destroys a machine across disconnected CLI processes, verifies backups enabled before readiness and rates11280→17040→0, inspects history, then removes its exact database/private files. No provider credentials or paid resources are used.
 
 The backup-retention smoke verifies retained bytes, pending purge and released capacity through the same CLI after actual encrypted MinIO storage. Database tests cover project/account isolation, parent revocation, missing capability, bounded cursors, concurrent changes, rollback, append-only history and migration-time baselines. Existing lifecycle tests cover provider uncertainty and cleanup; these usage changes do not alter lifecycle admission or provider effects.

@@ -11,6 +11,7 @@ import { run, Logger } from 'graphile-worker';
 import type { z } from 'zod';
 import {
   simulatedCatalog,
+  catalogResponseSchema,
   operationResponseSchema,
   machineResponseSchema,
   usageResponseSchema,
@@ -24,6 +25,23 @@ import { testDatabase, seedAccount } from '../tests/database.js';
 const fixture = await testDatabase();
 const scratch = await mkdtemp(join(tmpdir(), 'acld-usage-cli-'));
 const limits = { maxMachines: 2, currency: 'EUR', maxHourlyMicros: 30_000 };
+// Synthetic provider pricing exercises the same mandatory backup admission and journal as Hetzner.
+const catalog = () => {
+  const base = simulatedCatalog();
+  return catalogResponseSchema.parse({
+    ...base,
+    items: base.items.map((item) => {
+      const hourlyMicros = Math.ceil(item.serverHourlyMicros / 5);
+      return {
+        ...item,
+        providerBackups: { kind: 'daily', hourlyMicros },
+        hourlyMicros: item.hourlyMicros + hourlyMicros,
+      };
+    }),
+  });
+};
+const smallRate = 11280;
+const mediumRate = 17040;
 let server: ReturnType<typeof serve> | undefined;
 let runner: Awaited<ReturnType<typeof run>> | undefined;
 try {
@@ -31,7 +49,7 @@ try {
   const app = createApp({
     db: fixture.connection.db,
     provider: 'simulated',
-    catalog: simulatedCatalog,
+    catalog,
     limits,
   });
   server = serve({ fetch: app.fetch, hostname: '127.0.0.1', port: 0 });
@@ -50,7 +68,7 @@ try {
     concurrency: 2,
     taskList: createTasks({
       connection: fixture.connection,
-      provider: new SimulatedProvider({ db: fixture.connection.db }),
+      provider: new SimulatedProvider({ db: fixture.connection.db, catalog }),
       limits,
     }),
     logger: new Logger(() => () => {}),
@@ -85,9 +103,11 @@ try {
   await wait(operation.id);
   const inspect = () => cli(['machine', 'inspect', operation.machineId], machineResponseSchema);
   let { machine } = await inspect();
+  assert.equal(machine.state.kind, 'allocated');
+  assert.equal(machine.state.backupStatus, 'enabled');
   const created = (await cli(['usage'], usageResponseSchema)).usage;
   assert.equal(created.activeReservations, 1);
-  assert.equal(created.hourlyMicros, 9600);
+  assert.equal(created.hourlyMicros, smallRate);
   // Each CLI invocation exits; the API/worker and persisted reservation remain independent.
   let action = await cli(
     [
@@ -122,8 +142,10 @@ try {
     operationResponseSchema,
   );
   await wait(action.operation.id);
-  assert.equal((await cli(['usage'], usageResponseSchema)).usage.hourlyMicros, 14400);
+  assert.equal((await cli(['usage'], usageResponseSchema)).usage.hourlyMicros, mediumRate);
   ({ machine } = await inspect());
+  assert.equal(machine.state.kind, 'allocated');
+  assert.equal(machine.state.backupStatus, 'enabled');
   action = await cli(
     [
       'machine',
@@ -147,8 +169,8 @@ try {
     history.history.map(({ kind, hourlyMicros }) => ({ kind, hourlyMicros })),
     [
       { kind: 'released', hourlyMicros: 0 },
-      { kind: 'changed', hourlyMicros: 14400 },
-      { kind: 'admitted', hourlyMicros: 9600 },
+      { kind: 'changed', hourlyMicros: mediumRate },
+      { kind: 'admitted', hourlyMicros: smallRate },
     ],
   );
   console.log(
@@ -158,6 +180,8 @@ try {
       verified: [
         'CLI/API/Graphile worker',
         'limits',
+        'provider automatic backups enabled before ready',
+        'backup surcharge reserved before allocation and after resize',
         'disconnected power-off remains reserved',
         'resize history',
         'verified destruction releases reservation',

@@ -80,7 +80,8 @@ export async function journalEffect(input: {
   const monetary =
     command.kind === 'create_primary_ip' ||
     isServerCreateCommand(command) ||
-    command.kind === 'resize';
+    command.kind === 'resize' ||
+    command.kind === 'enable_backup';
   if (monetary) {
     const [stored] = await db.select().from(operations).where(eq(operations.id, operation.id));
     const offer = catalogItemSchema.parse(stored?.offer);
@@ -262,10 +263,10 @@ async function evaluate(input: {
   const { attempt, provider, expectedLabels } = input;
   const command = providerCommandSchema.parse(attempt.command);
   const outcome = attemptOutcomeSchema.parse(attempt.outcome);
-  // Deletion cannot recreate a resource. Exact absence settles even a lost action response.
+  // Deletion and enabling backups on an exact server cannot recreate it. Its absence settles cleanup.
   if (
     input.recovering &&
-    command.kind === 'destroy' &&
+    (command.kind === 'destroy' || command.kind === 'enable_backup') &&
     !(await provider.getServer({ serverId: command.serverId }))
   )
     return verified({ kind: 'absent', resource: { kind: 'server', id: command.serverId } });
@@ -394,6 +395,9 @@ async function evaluate(input: {
       break;
     case 'resize':
       if (server.serverType !== command.serverType) return pending();
+      break;
+    case 'enable_backup':
+      if (server.backupStatus !== 'enabled') return pending();
       break;
     case 'power_off':
       if (server.power !== 'off') return pending();

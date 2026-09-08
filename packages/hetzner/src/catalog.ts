@@ -5,6 +5,7 @@ import {
   currencySchema,
   decimalPriceSchema,
   decimalToMicros,
+  microsSchema,
   regionSchema,
   sizeSchema,
   CloudError,
@@ -17,6 +18,7 @@ const priceSchema = z.object({
 const pricingSchema = z.object({
   pricing: z.object({
     currency: currencySchema,
+    server_backup: z.object({ percentage: decimalPriceSchema }),
     server_types: z.array(z.object({ name: z.string(), prices: z.array(priceSchema) })),
     primary_ips: z.array(
       z.object({ type: z.enum(['ipv4', 'ipv6']), prices: z.array(priceSchema) }),
@@ -47,6 +49,16 @@ export const offerConfigurationSchema = z.object({
   currency: currencySchema,
 });
 export type OfferConfiguration = z.infer<typeof offerConfigurationSchema>;
+
+/** Multiply validated decimal strings exactly; reserve the final fractional micro-unit upward. */
+function backupHourlyMicros(gross: string, percentage: string) {
+  const decimalPlaces =
+    (gross.split('.')[1]?.length ?? 0) + (percentage.split('.')[1]?.length ?? 0);
+  const numerator =
+    BigInt(gross.replace('.', '')) * BigInt(percentage.replace('.', '')) * 1_000_000n;
+  const denominator = 100n * 10n ** BigInt(decimalPlaces);
+  return microsSchema.parse(Number((numerator + denominator - 1n) / denominator));
+}
 
 /** Explicit type mapping only: capacity loss never selects a more expensive substitute. */
 export async function readHetznerCatalog(input: {
@@ -86,7 +98,7 @@ export async function readHetznerCatalog(input: {
   const items = sizeSchema.options.flatMap((size) => {
     const type = types.find((candidate) => candidate.name === configuration.serverTypes[size]);
     if (!type) return [];
-    // VM, IP and denomination come from one account-price response.
+    // VM, IP, backup percentage and denomination come from one account-price response.
     const priceEntries = pricing.server_types.filter((entry) => entry.name === type.name);
     const entry = priceEntries[0];
     if (!entry || priceEntries.length !== 1) return [];
@@ -99,6 +111,10 @@ export async function readHetznerCatalog(input: {
       if (!price || !ipPrice || prices.length !== 1 || ipPrices.length !== 1) return [];
       const serverHourlyMicros = decimalToMicros(price.price_hourly.gross);
       const ipv4HourlyMicros = decimalToMicros(ipPrice.price_hourly.gross);
+      const backupMicros = backupHourlyMicros(
+        price.price_hourly.gross,
+        pricing.server_backup.percentage,
+      );
       return [
         {
           size,
@@ -116,7 +132,8 @@ export async function readHetznerCatalog(input: {
           priceBasis: 'account_gross',
           serverHourlyMicros,
           ipv4HourlyMicros,
-          hourlyMicros: serverHourlyMicros + ipv4HourlyMicros,
+          providerBackups: { kind: 'daily', hourlyMicros: backupMicros },
+          hourlyMicros: serverHourlyMicros + ipv4HourlyMicros + backupMicros,
         },
       ];
     });

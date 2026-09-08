@@ -14,6 +14,7 @@ import {
   operationResponseSchema,
   newId,
   providerCommandSchema,
+  catalogResponseSchema,
 } from '../packages/contracts/dist/index.js';
 import { allocations, attempts, operations } from '../packages/db/dist/index.js';
 import {
@@ -87,7 +88,7 @@ async function scenario() {
     DATABASE_URL: database.databaseUrl,
     PROVIDER: 'hetzner',
     PROVIDER_CURRENCY: 'USD',
-    MAX_PROVIDER_HOURLY: '0.03',
+    MAX_PROVIDER_HOURLY: '0.04',
     MAX_LIVE_MACHINES: '1',
     PUBLIC_URL: 'https://control.example.test',
     HCLOUD_TOKEN_FILE: join(directory, 'token'),
@@ -129,6 +130,7 @@ async function scenario() {
   const ipSchema = z.object({ name: z.string(), labels: z.record(z.string(), z.string()) });
   let ip: z.infer<typeof ipSchema> | undefined;
   let server: { name: string; labels: Record<string, string> } | undefined;
+  let backupsEnabled = false;
   let bootData = '';
   const ipResponse = () => ({
     ...ip,
@@ -144,6 +146,7 @@ async function scenario() {
     ...server,
     id: 42,
     status: 'running',
+    backup_window: backupsEnabled ? '22-02' : null,
     server_type: { name: 'cpx12' },
     location: { name: 'nbg1' },
     public_net: { ipv4: { id: 23, ip: '192.0.2.23' } },
@@ -179,6 +182,7 @@ async function scenario() {
       return Response.json({
         pricing: {
           currency: 'USD',
+          server_backup: { percentage: '20.0000000000' },
           server_types: [
             { name: 'cpx12', prices: [{ location: 'nbg1', price_hourly: { gross: '0.026568' } }] },
           ],
@@ -224,9 +228,14 @@ async function scenario() {
       return Response.json({ server: serverResponse(), action: { id: 61, status: 'success' } });
     }
     if (path === '/v1/servers') return list('servers', server ? [serverResponse()] : []);
+    if (path === '/v1/servers/42/actions/enable_backup' && request.method === 'POST') {
+      backupsEnabled = true;
+      return Response.json({ action: { id: 62, status: 'success' } });
+    }
     if (path === '/v1/servers/42')
       return server ? Response.json({ server: serverResponse() }) : absent();
     if (path === '/v1/actions/61') return Response.json({ action: { id: 61, status: 'success' } });
+    if (path === '/v1/actions/62') return Response.json({ action: { id: 62, status: 'success' } });
     throw new Error(`Unexpected fixture request ${request.method} ${path}`);
   };
   const create = () =>
@@ -237,7 +246,15 @@ async function scenario() {
     createApp({
       db: database.connection.db,
       provider: 'hetzner',
-      catalog: () => f.catalog,
+      catalog: () =>
+        catalogResponseSchema.parse({
+          ...f.catalog,
+          items: f.catalog.items.map((item) => ({
+            ...item,
+            providerBackups: { kind: 'daily', hourlyMicros: 5314 },
+            hourlyMicros: item.hourlyMicros + 5314,
+          })),
+        }),
       limits: config.limits,
       enrollment: runtime.enrollment,
       renewal: runtime.renewal,
@@ -310,6 +327,7 @@ it('starts without I/O, preflights a renewal-capable retained release, and rende
   expect(journal.map((row) => providerCommandSchema.parse(row.command).kind)).toEqual([
     'create_primary_ip',
     'create_guest',
+    'enable_backup',
   ]);
 });
 

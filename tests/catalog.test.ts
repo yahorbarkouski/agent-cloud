@@ -1,10 +1,12 @@
 import { expect, it } from 'vitest';
+import type { z } from 'zod';
 import {
   decimalToMicros,
   decimalLimitToMicros,
   selectOffer,
   simulatedCatalog,
   catalogResponseSchema,
+  catalogItemSchema,
 } from '../packages/contracts/src/index.js';
 import { readHetznerCatalog, type OfferConfiguration } from '../packages/hetzner/src/index.js';
 import { readConfig } from '../apps/control/src/config.js';
@@ -28,6 +30,7 @@ const type = (name: string) => ({
 const pricing = {
   pricing: {
     currency: 'USD',
+    server_backup: { percentage: '20.0000000000' },
     server_types: [{ name: 'cpx12', prices: [price('0.0265680000000000')] }],
     primary_ips: [{ type: 'ipv4', prices: [price('0.0012300000000000')] }],
   },
@@ -57,7 +60,7 @@ it('requires explicit live currency and budget, rejecting the obsolete EUR-only 
   ).toEqual({ currency: 'USD', maxHourlyMicros: 30000, maxMachines: 2 });
 });
 
-it('reads all catalog pages and reserves the account gross VM price plus IPv4', async () => {
+it('reads all catalog pages and reserves the account gross VM, IPv4 and daily backups', async () => {
   const paths: string[] = [];
   const catalog = await readHetznerCatalog({
     configuration,
@@ -79,9 +82,10 @@ it('reads all catalog pages and reserves the account gross VM price plus IPv4', 
   ]);
   expect(selectOffer({ catalog, size: 'small', region: 'nbg1' })).toMatchObject({
     currency: 'USD',
-    hourlyMicros: 27798,
+    hourlyMicros: 33112,
     serverHourlyMicros: 26568,
     ipv4HourlyMicros: 1230,
+    providerBackups: { kind: 'daily', hourlyMicros: 5314 },
     serverType: 'cpx12',
   });
   expect(() => selectOffer({ catalog, size: 'medium', region: 'nbg1' })).toThrow('no capacity');
@@ -160,7 +164,149 @@ it('uses VM and IP prices from the response declaring their currency when later 
         path === '/pricing' ? pricing : page([{ ...type('cpx12'), prices: [price('0.00001')] }]),
       ),
   });
-  expect(selectOffer({ catalog, size: 'small', region: 'nbg1' }).hourlyMicros).toBe(27798);
+  expect(selectOffer({ catalog, size: 'small', region: 'nbg1' }).hourlyMicros).toBe(33112);
+});
+
+it('rounds the exact decimal backup surcharge upward without rounding its inputs first', async () => {
+  for (const [gross, percentage, surcharge] of [
+    ['0.0000011', '90.0000000000', 1],
+    ['0.0000000000001', '0.0000000001', 1],
+    ['1.000001', '0.0001', 2],
+    ['0.01', '20.0000000000000000000000000001', 2001],
+    ['0.01', '0.0000000000', 0],
+  ] satisfies Array<[string, string, number]>) {
+    const catalog = await readHetznerCatalog({
+      configuration,
+      request: ({ path }) =>
+        Promise.resolve(
+          path === '/pricing'
+            ? {
+                pricing: {
+                  ...pricing.pricing,
+                  server_backup: { percentage },
+                  server_types: [{ name: 'cpx12', prices: [price(gross)] }],
+                  primary_ips: [{ type: 'ipv4', prices: [price('0')] }],
+                },
+              }
+            : page([type('cpx12')]),
+        ),
+    });
+    expect(selectOffer({ catalog, size: 'small', region: 'nbg1' })).toMatchObject({
+      serverHourlyMicros: decimalToMicros(gross),
+      providerBackups: { kind: 'daily', hourlyMicros: surcharge },
+      hourlyMicros: decimalToMicros(gross) + surcharge,
+    });
+  }
+});
+
+it('fails closed when the account backup percentage is missing, malformed or ambiguous', async () => {
+  for (const serverBackup of [
+    undefined,
+    null,
+    {},
+    [{ percentage: '20' }],
+    ...[
+      undefined,
+      null,
+      20,
+      ['20', '30'],
+      '',
+      '20%',
+      '-20',
+      'NaN',
+      'Infinity',
+      '2e1',
+      ' 20',
+      '020',
+      '9'.repeat(41),
+    ].map((percentage) => ({ percentage })),
+  ]) {
+    const paths: string[] = [];
+    await expect(
+      readHetznerCatalog({
+        configuration,
+        request: ({ path }) => {
+          paths.push(path);
+          return Promise.resolve(
+            path === '/pricing'
+              ? {
+                  pricing: { ...pricing.pricing, server_backup: serverBackup },
+                }
+              : page([type('cpx12')]),
+          );
+        },
+      }),
+    ).rejects.toThrow();
+    expect(paths).toEqual(['/pricing']);
+  }
+});
+
+it('rejects a backup surcharge or total reservation exceeding integer-micro storage', async () => {
+  for (const [gross, percentage] of [
+    ['1', '999999999999999999999999'],
+    ['2147', '20'],
+  ] satisfies Array<[string, string]>) {
+    await expect(
+      readHetznerCatalog({
+        configuration,
+        request: ({ path }) =>
+          Promise.resolve(
+            path === '/pricing'
+              ? {
+                  pricing: {
+                    ...pricing.pricing,
+                    server_backup: { percentage },
+                    server_types: [{ name: 'cpx12', prices: [price(gross)] }],
+                  },
+                }
+              : page([type('cpx12')]),
+          ),
+      }),
+    ).rejects.toThrow();
+  }
+});
+
+it('keeps the backup surcharge in the account response currency', async () => {
+  const catalog = await readHetznerCatalog({
+    configuration: { ...configuration, currency: 'EUR' },
+    request: ({ path }) =>
+      Promise.resolve(
+        path === '/pricing'
+          ? {
+              pricing: { ...pricing.pricing, currency: 'EUR' },
+            }
+          : page([type('cpx12')]),
+      ),
+  });
+  expect(selectOffer({ catalog, size: 'small', region: 'nbg1' })).toMatchObject({
+    currency: 'EUR',
+    providerBackups: { kind: 'daily', hourlyMicros: 5314 },
+    hourlyMicros: 33112,
+  });
+  expect(catalogResponseSchema.safeParse({ ...catalog, currency: 'USD' }).success).toBe(false);
+});
+
+it('parses historical offers as backups disabled and validates the complete reservation', () => {
+  const offer = simulatedCatalog().items[0];
+  expect(offer).toBeDefined();
+  if (!offer) throw new Error('Missing simulated offer.');
+  const legacy: z.input<typeof catalogItemSchema> = { ...offer };
+  delete legacy.providerBackups;
+  expect(catalogItemSchema.parse(legacy)).toEqual({
+    ...offer,
+    providerBackups: { kind: 'disabled' },
+  });
+  const daily = { ...offer, providerBackups: { kind: 'daily', hourlyMicros: 100 } };
+  expect(catalogItemSchema.safeParse(daily).success).toBe(false);
+  expect(
+    catalogItemSchema.safeParse({ ...daily, hourlyMicros: offer.hourlyMicros + 100 }).success,
+  ).toBe(true);
+  expect(
+    catalogItemSchema.safeParse({
+      ...offer,
+      providerBackups: { kind: 'disabled', hourlyMicros: 100 },
+    }).success,
+  ).toBe(false);
 });
 
 it('rejects legacy or simulated item prices inside a catalog claiming account gross prices', () => {

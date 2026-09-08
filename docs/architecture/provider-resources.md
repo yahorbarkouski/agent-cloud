@@ -18,17 +18,25 @@ Submission receipts are generalized to a discriminated resource reference, `serv
 
 ## Create and cleanup
 
-1. Admission reserves the selected gross VM-plus-IPv4 price and stores the exact offer.
+1. Admission reserves the selected gross VM, IPv4 and automated-backup price and stores the exact offer.
 2. Check current authorization, offer, and limits; journal and submit Primary IP creation with allocation/operation/attempt labels.
 3. Reconcile the IP result. One matching resource can be adopted. Zero inventory does not prove absence; multiple matches block for operator resolution. Never blindly repeat an uncertain create.
 4. Recheck before the VM effect. Journal creation with the owned IP ID, image, firewall and SSH identity. Record the returned VM and its attached IP IDs.
-5. Verify the returned resource IDs, labels, region, server type, attached IP, and power. The guest readiness controller then verifies pinned identity and runtime evidence. Live customer boot remains unverified.
+5. Verify the returned resource IDs, labels, region, server type, attached IP, and power. Journal the separately priced backup-enablement action and observe it on the exact owned VM before readiness. The guest readiness controller then verifies pinned identity and runtime evidence. Live customer boot remains unverified.
 
 If no VM effect was submitted, or the provider definitively rejected that request, a revoked credential or rejected offer can stop provisioning and compensate the confirmed unassigned IP. Cleanup is part of the admitted operation and must not be blocked by a lowered spending ceiling. An uncertain VM outcome must be reconciled before touching its IP. A confirmed VM with possible data retains its allocation for explicit authorized deletion. An error after submission cannot start compensation using stale history. The controller reloads attempts and keeps an unresolved effect blocked. A receipt is saved before the ownership claim so an ownership conflict cannot erase the provider result.
 
 Deletion journals the VM request and observes VM absence, then observes the Primary IP. Auto-delete is useful but is not proof that cleanup completed. If an owned IP remains unassigned, journal its deletion and observe absence. An IP assigned elsewhere or with mismatched ownership must block cleanup. Release the reservation only after every billable resource owned by the allocation is confirmed absent.
 
 ## Hetzner transport
+
+New Hetzner catalog offers include daily provider backups. The adapter reads `server_backup.percentage` from the same current pricing response as the gross VM rate, calculates the surcharge with exact decimal arithmetic and rounds a fractional millionth upward. A missing or malformed quote refuses the offer. The read-only account quote on 8 September 2026 returned 20%; that observation is not a fixed pricing rule. IPv4 is not included in the surcharge base. Historical offers without a backup field parse as disabled and keep their original reservation.
+
+Hetzner requires a separate `enable_backup` server action. It uses the existing journal, fresh authority and price checks, machine lock and retained ownership. Lost replies are reconciled without submitting another enable action. Readiness requires the owned server to report a non-null backup window. Machine `backupStatus` is the last observed provider setting, not evidence that a snapshot completed or that PostgreSQL can be restored. An unknown or failed action can leave an owned, billable VM; explicit destruction settles the action after exact server absence and releases the reservation only after IP cleanup too.
+
+A resize to a new offer includes its backup fee. If the historical VM has backups disabled, enablement follows confirmed resize. Enabling before resize could charge the fee on a more expensive old type than the reservation covers. Rejected resize leaves the old backup setting unchanged. The reservation holds the larger original or target total until verified completion.
+
+Provider backups follow the VM's lifecycle and are deleted with it. Use the separate protected application backup flow for recovery points that must survive source destruction. Provider backup enablement has transport, lifecycle and actual CLI/API/worker simulator proof; live Hetzner activation is still pending.
 
 The official spec saved during this run says Primary IP creation without an assignee may omit its `action`. A successful Primary IP delete returns HTTP 204 without a JSON body. The shared HTTP transport now accepts that bodyless success. Absence requires a resource-specific 404 with `not_found`; authorization errors and malformed responses do not prove absence.
 
@@ -40,4 +48,4 @@ Provider credentials stay in the control plane. Shared firewall/key/image config
 
 The persistent simulator has faults scoped by resource kind. `tests/resources.test.ts` covers exits after IP creation/deletion, delayed inventory, duplicate IPs, revocation between effects, rejected and uncertain VM creation, foreign/assigned IPs, lost delete responses, conflicting receipts, reservation retention, immutable resolutions, and tenant ownership constraints. The original VM crash test still uses a separate exiting process. `tests/hetzner-transport.test.ts` checks outgoing IP/VM requests, HTTP 204, assignment consistency, pagination, error classification, and uncertain responses. Upgrade tests exercise queued, prepared, accepted, and completed create/resize operations from M0. None of these fixtures proves live provider behavior.
 
-After guest and operator recovery support is ready, run a bounded inexpensive live test with a cleanup deadline and known resources. Current pricing evidence is USD 0.027798/hour for CPX12 plus IPv4, including VAT, but refresh it before provisioning. The separate [image factory drill](../research/m1-hetzner-durability-drill.json) created and removed paid resources. Its snapshot proof does not establish customer lifecycle behavior.
+The [internal reference deployment](../reference-deployment-verification.json) verified Hetzner provisioning, application operation and exact cleanup. Final customer activation, including automated backups, still needs a bounded live run with a cleanup deadline. Refresh the complete quote before provisioning. The separate [image factory drill](../research/m1-hetzner-durability-drill.json) establishes image readiness, not customer lifecycle behavior.

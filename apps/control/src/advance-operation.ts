@@ -23,6 +23,7 @@ import {
   type BootstrapReference,
   type ProviderCommand,
   type GuestVerification,
+  type CatalogItem,
 } from '@agent-cloud/contracts';
 import {
   operations,
@@ -166,6 +167,12 @@ async function complete(input: {
       const [stored] = await tx.select().from(operations).where(eq(operations.id, operation.id));
       if (!stored) throw new CloudError('internal_error', 'Operation disappeared while verifying.');
       const command = lifecycleCommandSchema.parse(stored.command);
+      if (
+        (command.kind === 'create' || command.kind === 'resize') &&
+        catalogItemSchema.parse(stored.offer).providerBackups.kind === 'daily' &&
+        server.backupStatus !== 'enabled'
+      )
+        throw new CloudError('provider_rejected', 'The admitted provider backups are not enabled.');
       const size = command.kind === 'resize' ? command.size : machine.spec.size;
       const guestVerification: GuestVerification =
         machine.provider === 'simulated'
@@ -195,6 +202,7 @@ async function complete(input: {
             serverId: server.id,
             power: server.power,
             guest: guestVerification,
+            backupStatus: server.backupStatus,
           },
         })
         .where(eq(machines.id, machine.id));
@@ -259,6 +267,40 @@ async function verifyRuntime(work: Work) {
       return;
   }
 }
+async function ensureProviderBackups(work: Work, server: ProviderServer, offer: CatalogItem) {
+  if (offer.providerBackups.kind === 'disabled') return server;
+  const resource = work.resources.find(
+    (row) => row.kind === 'server' && row.providerId === server.id && !row.absentAt,
+  );
+  const observed = await work.provider.getServer({ serverId: server.id });
+  if (
+    !resource ||
+    !observed ||
+    observed.id !== server.id ||
+    !matchesLabels(observed.labels, ownedLabels(resource))
+  ) {
+    await setProgress(work.db, work.operation, {
+      kind: 'blocked',
+      reason: 'provider_resource_mismatch',
+    });
+    return null;
+  }
+  if (observed.backupStatus === 'enabled') return observed;
+  if (observed.backupStatus === 'unknown' || effectOf(work.history, 'enable_backup')) {
+    await setProgress(work.db, work.operation, {
+      kind: 'blocked',
+      reason: 'provider_resource_mismatch',
+    });
+    return null;
+  }
+  await journalEffect({
+    ...work,
+    command: { kind: 'enable_backup', serverId: server.id },
+    authorization: 'fresh',
+  });
+  return null;
+}
+
 function effectOf(history: Attempt[], kind: string) {
   return history.find((row) => {
     const command = providerCommandSchema.parse(row.command);
@@ -484,6 +526,8 @@ async function advanceLocked(
       const resolution = effectResolutionSchema.parse(create.resolution);
       if (resolution.kind !== 'confirmed' || resolution.observation.kind !== 'server')
         throw new CloudError('internal_error', 'Create has no verified server.');
+      const backedUp = await ensureProviderBackups(work, resolution.observation.server, offer);
+      if (!backedUp) return;
       if (provider.kind === 'hetzner') {
         const [identity] = await db
           .select()
@@ -501,7 +545,7 @@ async function advanceLocked(
         await verifyRuntime(work);
         return;
       }
-      await complete({ ...work, server: resolution.observation.server });
+      await complete({ ...work, server: backedUp });
       return;
     }
     const serverResource = resources.find(
@@ -529,7 +573,19 @@ async function advanceLocked(
             stage: 'runtime',
           });
           await verifyRuntime(work);
-        } else await complete({ ...work, server: resolution.observation.server });
+        } else {
+          // A historical VM may cost more than its target type. Enable only after resize,
+          // when the target offer covers the surcharge; a failed resize leaves old backups unchanged.
+          const verifiedServer =
+            lifecycle.kind === 'resize'
+              ? await ensureProviderBackups(
+                  work,
+                  resolution.observation.server,
+                  catalogItemSchema.parse(row.offer),
+                )
+              : resolution.observation.server;
+          if (verifiedServer) await complete({ ...work, server: verifiedServer });
+        }
       } else throw new CloudError('internal_error', 'Machine operation has no verified server.');
       return;
     }
