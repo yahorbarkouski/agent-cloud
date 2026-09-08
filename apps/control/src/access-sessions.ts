@@ -268,16 +268,19 @@ export function createAccessService(input: {
           AND (admitted_at > ${new Date(now.getTime() - 300_000)} OR hard_deadline > ${now})
       `);
       const reservations = counts.rows[0];
-      if (
-        !reservations ||
-        reservations.recent >= 20 ||
-        reservations.grant_recent >= 10 ||
-        reservations.reserved >= 20 ||
-        reservations.grant_reserved >= 4
-      )
+      if (!reservations)
+        throw new CloudError('internal_error', 'SSH admission counts unavailable.');
+      if (reservations.recent >= 60 || reservations.grant_recent >= 30)
         throw new CloudError(
           'quota_exceeded',
-          'SSH session rate or concurrent reservation limit reached.',
+          'SSH session rate reached: 30 per grant or 60 per account in five minutes. Wait for the rolling window before retrying.',
+          true,
+        );
+      if (reservations.reserved >= 20 || reservations.grant_reserved >= 4)
+        throw new CloudError(
+          'quota_exceeded',
+          'SSH concurrent reservation limit reached: 4 per grant or 20 per account. Close active sessions or wait for unused reservations to expire.',
+          true,
         );
       const session: AccessSessionRecord = {
         id: newId.accessSession(),

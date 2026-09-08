@@ -34,20 +34,29 @@ export const domainChallengeSchema = z.strictObject({
   verifiedAt: z.iso.datetime().nullable(),
 });
 export const domainCreateSchema = z.strictObject({ hostname: hostnameSchema });
-export const routePublishSchema = z.strictObject({
-  commandId: hostingCommandIdSchema,
-  machineId: machineIdSchema,
-  destination: z.discriminatedUnion('kind', [
-    z.strictObject({ kind: z.literal('generated'), name: routeNameSchema }),
-    z.strictObject({
-      kind: z.literal('custom'),
-      hostname: hostnameSchema,
-      challengeId: z.uuidv4(),
-    }),
-  ]),
-  port: applicationPortSchema,
-  expectedVersion: z.int().positive().nullable(),
-});
+export const routePublishSchema = z
+  .strictObject({
+    commandId: hostingCommandIdSchema,
+    machineId: machineIdSchema,
+    destination: z.discriminatedUnion('kind', [
+      z.strictObject({ kind: z.literal('generated'), name: routeNameSchema }),
+      z.strictObject({
+        kind: z.literal('custom'),
+        hostname: hostnameSchema,
+        challengeId: z.uuidv4(),
+      }),
+      z.strictObject({ kind: z.literal('existing'), hostname: hostnameSchema }),
+    ]),
+    port: applicationPortSchema,
+    expectedVersion: z.int().positive().nullable(),
+  })
+  .refine(
+    (request) => request.destination.kind !== 'existing' || request.expectedVersion !== null,
+    {
+      path: ['expectedVersion'],
+      message: 'Moving an existing route requires its explicit current version.',
+    },
+  );
 export const routeRemoveSchema = z.strictObject({
   commandId: hostingCommandIdSchema,
   expectedVersion: z.int().positive(),

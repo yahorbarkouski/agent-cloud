@@ -34,6 +34,7 @@ import { createEnrollmentService } from '../apps/control/src/guest-enrollment.js
 import { createGuestReadiness } from '../apps/control/src/guest-readiness.js';
 import { advanceOperation } from '../apps/control/src/advance-operation.js';
 import { readPrivateFile } from '../apps/control/src/private-file.js';
+import { atomicWrite } from '../packages/guestctl/src/files.js';
 import { testDatabase } from '../tests/database.js';
 import { prepareEnrollmentFixture } from './support/enrollment-fixture.js';
 import { prepareBackupTargetFixture } from './support/backup-target-fixture.js';
@@ -46,6 +47,7 @@ const ownerSchema = z.object({
   builderId: z.uuid(),
   architecture: z.literal('amd64'),
   distribution: z.literal('ubuntu:noble'),
+  vmId: z.string().min(1).nullable().default(null),
 });
 const infoSchema = z.object({
   record: z.object({
@@ -117,6 +119,10 @@ async function runningInfo(name: string) {
 }
 const info = await runningInfo(owner.name);
 assert.equal(info.record.name, owner.name);
+if (owner.vmId === null) {
+  owner.vmId = info.record.id;
+  await atomicWrite(ownershipPath, JSON.stringify(owner) + '\n', 0o600);
+} else assert.equal(info.record.id, owner.vmId, 'Owned guest VM identity changed.');
 const vm = (args: string[], timeout?: number) =>
   command('orb', ['run', '-m', owner.name, '-u', 'root', '-w', '/tmp', ...args], timeout);
 const scratch = await mkdtemp(resolve('.local/guest-smoke-'));
@@ -654,7 +660,12 @@ try {
       }) + '\n',
     );
   }
+  const cleanupInfo = z
+    .object({ record: infoSchema.shape.record })
+    .parse(JSON.parse(await command('orb', ['info', owner.name, '--format', 'json'])));
+  assert.equal(cleanupInfo.record.id, owner.vmId, 'Refusing deletion of a replaced guest VM.');
   await command('orb', ['delete', '--force', owner.name], 60_000);
+  assert.ok(!(await command('orb', ['list', '--quiet'])).trim().split('\n').includes(owner.name));
   await rm(ownershipPath);
 } finally {
   if (server) {

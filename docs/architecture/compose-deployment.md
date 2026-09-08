@@ -35,7 +35,11 @@ Builds use distinct tags for each release and service. The worker pulls non-buil
 
 Recovery copies a previously succeeded runtime configuration, verifies its digest and retained image IDs, and applies it as a new release. It does not rebuild or fetch a newer mutable tag. Existing named volumes are reattached. Missing images or a changed runtime file fail recovery instead of falling back to new content. Retain source files: Compose bind mounts, configs and secrets can refer to the original release directory.
 
-Recovery changes code/configuration and can interrupt service. **It does not reverse database migrations or restore database contents.** Run migrations explicitly through durable commands and inspect an uncertain outcome before doing anything again. Use a protected backup and isolated restore when data itself needs recovery. Those features are a separate unfinished capability.
+Recovery changes code/configuration and can interrupt service. **It does not reverse database migrations or restore database contents.** Run migrations explicitly through durable commands and inspect an uncertain outcome before doing anything again. Use a protected backup and isolated restore when data itself needs recovery. See [protected backups and isolated restore](protected-backups.md) for the supported PostgreSQL/file recovery path.
+
+## Promote a verified restore
+
+`acld compose promote <machine> <app> --release <new-uuid> --expected-release <isolated-release>` creates a new release from the current successful isolated configuration. It uses the retained image IDs and data mounts, replaces the internal default network with a distinct ordinary bridge, and forces container recreation. Published ports must remain on `127.0.0.1`; host networking and foreign networks are refused. The application gains egress and loopback ports. Route publication/movement and source-write fencing are separate authorized operations. Inspect and wait with the retained release ID after a lost reply.
 
 ## Interrupted operations and limits
 

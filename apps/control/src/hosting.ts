@@ -99,6 +99,15 @@ export function createHosting(input: {
       | { kind: 'publish'; request: RoutePublish }
       | { kind: 'remove'; hostname: string; request: RouteRemove },
   ) {
+    if (
+      command.kind === 'publish' &&
+      command.request.destination.kind === 'existing' &&
+      command.request.expectedVersion === null
+    )
+      throw new CloudError(
+        'invalid_input',
+        'Moving an existing route requires its explicit current version.',
+      );
     const requestHash = digest(command);
     return input.db.transaction(async (tx) => {
       await tx.execute(
@@ -211,6 +220,12 @@ export function createHosting(input: {
           'This hostname remains reserved to another account. Its operator must resolve ownership before reassignment.',
         );
       const previous = existing ? routeRecord(existing) : undefined;
+      if (
+        !previous &&
+        command.kind === 'publish' &&
+        command.request.destination.kind === 'existing'
+      )
+        throw new CloudError('not_found', 'Only a retained account-owned route can be moved.');
       if (previous) authorize(authority.principal, 'route:publish', previous.projectId);
       if ((previous?.version ?? null) !== command.request.expectedVersion)
         throw new CloudError('version_conflict', 'Route changed; inspect its current version.');

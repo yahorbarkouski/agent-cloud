@@ -136,6 +136,25 @@ export function registerCompose(input: {
       });
     });
   compose
+    .command('promote <machine> <app>')
+    .description(
+      'Enable egress and loopback ports for the current isolated restore; routes are unchanged.',
+    )
+    .requiredOption('--release <uuid>', 'New promotion release ID; retain it after a lost reply')
+    .requiredOption('--expected-release <uuid>', 'Current verified isolated release')
+    .option('--wait-seconds <seconds>', 'Guest service health deadline', '120')
+    .action(async (machine: string, app: string, raw: unknown) => {
+      const args = options.extend({ expectedRelease: composeReleaseIdSchema }).parse(raw);
+      await invoke(machine, {
+        kind: 'promote',
+        app,
+        releaseId: args.release,
+        expectedReleaseId: args.expectedRelease,
+        fromReleaseId: args.expectedRelease,
+        waitSeconds: args.waitSeconds,
+      });
+    });
+  compose
     .command('recover <machine> <app>')
     .requiredOption(
       '--from <uuid>',

@@ -23,7 +23,10 @@ export async function exerciseCompose(input: {
   ) => Promise<{ code: number; stdout: string; stderr: string }>;
   vm: (args: string[], timeout?: number) => Promise<string>;
   initialOnly?: boolean;
+  hostname?: string;
+  serveHttp?: boolean;
 }) {
+  const hostname = input.hostname ?? 'customer.localhost';
   const source = join(input.scratch, 'application source');
   await mkdir(source, { mode: 0o700 });
   const pointer = z
@@ -42,17 +45,18 @@ export async function exerciseCompose(input: {
   );
   await writeFile(
     join(source, 'Caddyfile'),
-    'customer.localhost {\n tls internal\n handle /api/* {\n reverse_proxy backend:3000\n }\n handle {\n root * /srv\n file_server\n }\n}\nhttp://:8080 {\n respond /ready 200\n}\n',
+    `${input.serveHttp ? '{\n auto_https disable_redirects\n}\n' : ''}(application) {\n handle /api/* {\n reverse_proxy backend:3000\n }\n handle {\n root * /srv\n file_server\n }\n}\n${hostname} {\n tls internal\n import application\n}\nhttp://:8080 {\n respond /ready 200\n}\n${input.serveHttp ? 'http://:80 {\n import application\n}\n' : ''}`,
   );
   async function prepare(revision: '1' | '2', broken = false) {
     const recipe = referenceRecipe({
       releaseId: randomUUID(),
       expectedReleaseId: null,
       revision,
-      hostname: 'customer.localhost',
+      hostname,
     });
     recipe.name = 'ignored-source-name';
     recipe.secrets.database_password.file = './database-password';
+    if (input.serveHttp) recipe.services.frontend.ports.push('127.0.0.1:30080:80');
     if (broken) recipe.services.backend.healthcheck.test = ['CMD', 'node', '-e', 'process.exit(1)'];
     await writeFile(join(source, 'compose.json'), JSON.stringify(recipe));
     await writeFile(join(source, 'index.html'), referenceFrontend(revision));
@@ -89,11 +93,11 @@ export async function exerciseCompose(input: {
         {
           hostname: input.address,
           port: 443,
-          servername: 'customer.localhost',
+          servername: hostname,
           ca,
           path,
           method,
-          headers: { Host: 'customer.localhost', Origin: 'https://customer.localhost' },
+          headers: { Host: hostname, Origin: `https://${hostname}` },
           timeout: 10_000,
         },
         (response) => {

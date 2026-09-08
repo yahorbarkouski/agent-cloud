@@ -15,6 +15,7 @@ import {
   restoreGuestStateSchema,
   composeApplySchema,
   composeRecoverSchema,
+  composePromoteSchema,
   composeReleaseIdSchema,
   composeReleaseSchema,
   composePathSchema,
@@ -46,7 +47,7 @@ import {
 type CaptureCommand = Extract<BackupGuestCommand, { kind: 'capture' }>;
 type Capture = z.infer<typeof backupGuestStateSchema>;
 type Restore = z.infer<typeof restoreGuestStateSchema>;
-const sourceRequest = z.union([composeApplySchema, composeRecoverSchema]);
+const sourceRequest = z.union([composeApplySchema, composeRecoverSchema, composePromoteSchema]);
 const metadataSchema = z.strictObject({
   version: z.literal(1),
   backupId: backupIdSchema,

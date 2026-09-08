@@ -73,6 +73,32 @@ export function registerHosting(input: {
       );
     });
   route
+    .command('move <hostname> <machine>')
+    .description('Move a retained hostname to another verified machine.')
+    .requiredOption('--port <number>', 'Loopback application port on the destination')
+    .requiredOption('--expected-version <number>', 'Current version of the retained route')
+    .requiredOption('--key <uuid>', 'Stable command ID; reuse after an uncertain response')
+    .action(async (hostname: string, machine: string, raw: unknown) => {
+      const options = z
+        .object({
+          port: z.coerce.number().int(),
+          expectedVersion: z.coerce.number().int().positive(),
+          key: hostingCommandIdSchema,
+        })
+        .parse(raw);
+      input.output(
+        await (
+          await input.client()
+        ).publishRoute({
+          commandId: options.key,
+          machineId: machineIdSchema.parse(machine),
+          destination: { kind: 'existing', hostname: hostnameSchema.parse(hostname) },
+          port: options.port,
+          expectedVersion: options.expectedVersion,
+        }),
+      );
+    });
+  route
     .command('remove <hostname>')
     .requiredOption('--expected-version <number>')
     .requiredOption('--key <uuid>')

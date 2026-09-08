@@ -6,10 +6,17 @@ import { afterEach, expect, it, vi } from 'vitest';
 import {
   composeApplySchema,
   composeRecoverSchema,
+  composePromoteSchema,
   composeBundleSchema,
 } from '../packages/contracts/src/compose.js';
-import { createComposeDeployments } from '../packages/guestctl/src/compose.js';
-import type { ComposeSystem } from '../packages/guestctl/src/compose-system.js';
+import {
+  createComposeDeployments,
+  promoteRestoreNetwork,
+} from '../packages/guestctl/src/compose.js';
+import {
+  composeConfigSchema,
+  type ComposeSystem,
+} from '../packages/guestctl/src/compose-system.js';
 import { readComposeBundle } from '../apps/cli/src/compose.js';
 import * as files from '../packages/guestctl/src/files.js';
 import { Readable } from 'node:stream';
@@ -211,6 +218,80 @@ it('recovers a previous runtime without pulling, rebuilding or deleting persiste
     await readFile(join(f.release(f.command.releaseId), 'runtime.json'), 'utf8'),
   );
   expect(f.system.compose.mock.calls.flatMap((call) => call[2])).not.toContain('down');
+});
+
+const isolated = () => ({
+  services: {
+    database: {
+      image: 'postgres',
+      volumes: [{ type: 'volume', source: 'data', target: '/data' }],
+      networks: { default: null },
+    },
+    web: {
+      image: 'web',
+      networks: { default: null },
+      ports: [{ target: 80, published: '30080', host_ip: '127.0.0.1' }],
+    },
+  },
+  volumes: { data: { name: 'acld-test_data' } },
+  networks: { default: { internal: true, name: 'acld-test_default', ipam: {} } },
+});
+
+it('promotes the verified isolation network while retaining pinned images, data mounts and replay identity', async () => {
+  const f = await fixture();
+  f.system.compose.mockResolvedValueOnce(JSON.stringify(isolated()));
+  await f.deployment.command(f.command);
+  await f.deployment.work();
+  const before = f.system.compose.mock.calls.length;
+  const original = composeConfigSchema.parse(
+    JSON.parse(await readFile(join(f.release(f.command.releaseId), 'runtime.json'), 'utf8')),
+  );
+  const promotion = composePromoteSchema.parse({
+    kind: 'promote',
+    app: 'test',
+    releaseId: randomUUID(),
+    expectedReleaseId: f.command.releaseId,
+    fromReleaseId: f.command.releaseId,
+  });
+  await expect(
+    f.deployment.command({ ...promotion, fromReleaseId: randomUUID() }),
+  ).rejects.toBeDefined();
+  await f.deployment.command(promotion);
+  await f.deployment.work();
+  expect(await f.deployment.current('test')).toMatchObject({
+    phase: 'succeeded',
+    id: promotion.releaseId,
+  });
+  const runtime = composeConfigSchema.parse(
+    JSON.parse(await readFile(join(f.release(promotion.releaseId), 'runtime.json'), 'utf8')),
+  );
+  expect(runtime).toEqual({
+    ...original,
+    networks: { default: { name: `acld-test_promoted_${promotion.releaseId}` } },
+  });
+  const commands = f.system.compose.mock.calls.slice(before).map((call) => call[2]);
+  expect(commands).toHaveLength(1);
+  expect(commands[0]).toContain('--force-recreate');
+  expect(commands[0]).toContain('--no-build');
+  expect(commands.flat()).not.toContain('down');
+  const replay = await f.deployment.command(promotion);
+  expect(replay.release?.phase).toBe('succeeded');
+  expect(f.system.compose.mock.calls.length).toBe(before + 1);
+  expect(await readFile(join(f.release(f.command.releaseId), 'runtime.json'), 'utf8')).toBe(
+    JSON.stringify(original) + '\n',
+  );
+});
+
+it('refuses promotion with public ports, foreign networks or an already connected network', () => {
+  const config = isolated();
+  config.services.web.ports[0] = { target: 80, published: '30080', host_ip: '0.0.0.0' };
+  expect(() => promoteRestoreNetwork(config, 'acld-test', randomUUID())).toThrow();
+  const foreign = isolated();
+  foreign.networks.default.name = 'other-production-network';
+  expect(() => promoteRestoreNetwork(foreign, 'acld-test', randomUUID())).toThrow();
+  const connected = isolated();
+  connected.networks.default.internal = false;
+  expect(() => promoteRestoreNetwork(connected, 'acld-test', randomUUID())).toThrow();
 });
 
 it('marks interrupted work without replay and refuses corrupted retained configuration', async () => {

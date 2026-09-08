@@ -1,7 +1,9 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import {
+  failureSchema,
   accessSessionResponseSchema,
   guestImageSchema,
   type Principal,
@@ -111,7 +113,13 @@ async function fixture() {
     Promise.resolve({
       kind: 'issued',
       certificate: 'Local service protocol fixture, not a cryptographic certificate.',
-      expiresAt: new Date(input.authority.checkedAt.getTime() + 60_000).toISOString(),
+      expiresAt: new Date(
+        Math.min(
+          input.authority.checkedAt.getTime() + 60_000,
+          input.authority.expiresAt.getTime(),
+          Date.parse(input.session.hardDeadline),
+        ),
+      ).toISOString(),
     }),
   );
   const gatewayToken = `aclg_${randomBytes(32).toString('base64url')}`;
@@ -303,6 +311,60 @@ it('lets an exec-only issuing grant retrieve its own session without granting an
   expect(
     (await f.request(`/v1/access-sessions/${ownerSession.session.id}`, child.token)).status,
   ).toBe(403);
+});
+
+it('permits sequential recovery commands, serializes the final rate slot and bounds the whole account', async () => {
+  const f = await fixture();
+  async function complete(principal = f.account.principal, request = makeRequest()) {
+    const { session } = await f.admit(request, principal);
+    await f.service.issue(session.id);
+    const claim = {
+      ticket: request.ticket,
+      gatewayInstanceId: randomUUID(),
+      connectionId: randomUUID(),
+    };
+    await f.service.claim(claim);
+    await f.service.close({
+      sessionId: session.id,
+      gatewayInstanceId: claim.gatewayInstanceId,
+      connectionId: claim.connectionId,
+      reason: 'client_closed',
+    });
+    return session;
+  }
+  const original = makeRequest();
+  const first = await complete(f.account.principal, original);
+  for (let index = 1; index < 29; index++) await complete();
+  const attempts = await Promise.allSettled([complete(), complete()]);
+  expect(attempts.filter((value) => value.status === 'fulfilled')).toHaveLength(1);
+  const rejected = attempts.find((value) => value.status === 'rejected');
+  const error: unknown = rejected?.reason;
+  const refusal = z.object({ failure: failureSchema }).parse(error);
+  expect(['resource_busy', 'quota_exceeded']).toContain(refusal.failure.code);
+  expect(refusal.failure.retryable).toBe(true);
+  // Same-machine competitors can be refused by the nonblocking machine lock first.
+  // Once the winning command closes, the remaining refusal must be the rolling rate.
+  await expect(complete()).rejects.toMatchObject({
+    failure: { code: 'quota_exceeded', retryable: true },
+  });
+  expect((await f.admit(original)).session.id).toBe(first.id);
+  const child = await issueGrant(database.connection.db, {
+    principal: f.account.principal,
+    name: 'second-operator',
+    policy: f.account.principal.policy,
+    expiresAt: new Date(Date.now() + 60_000),
+  });
+  const principal = { ...f.account.principal, grantId: child.id };
+  for (let index = 0; index < 30; index++) await complete(principal);
+  const third = await issueGrant(database.connection.db, {
+    principal: f.account.principal,
+    name: 'third-operator',
+    policy: f.account.principal.policy,
+    expiresAt: new Date(Date.now() + 60_000),
+  });
+  await expect(f.admit(makeRequest(), { ...principal, grantId: third.id })).rejects.toMatchObject({
+    failure: { code: 'quota_exceeded', retryable: true },
+  });
 });
 
 it('denies pending and connected access when authority expires or the owned provider address changes', async () => {

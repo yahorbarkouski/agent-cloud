@@ -29,6 +29,8 @@ An agent needs `route:publish` for the target project and `machine:read` for ins
 
 Custom domains require an account-bound, random TXT challenge at `_agent-cloud-challenge.<hostname>`. All resolved A/AAAA addresses must point to configured gateway addresses. Challenges expire after 30 minutes; verification is checked again during publication. An unverified name does not reserve global ownership. Removed names remain reserved to their original account to prevent dangling-domain takeover. Cross-account reassignment requires an explicit operator resolution; it is not an automatic consequence of a changed TXT record.
 
+`acld route move <hostname> <machine> --port <port> --expected-version <version> --key <uuid>` retargets a retained account-owned hostname. It preserves generated hostnames across replacement VMs. The caller needs authority for both projects, and an unfinished restore target is refused. Movement cannot claim an unregistered or foreign hostname. A retained custom name keeps its account ownership; moving it does not require a new domain claim. Use publication and a fresh challenge when claiming a new custom name. Fence source writes and verify the restored application before moving production traffic.
+
 Accounts can reserve 100 names, submit 100 route commands per hour and request 20 DNS challenges per hour. Each desired version has at most five persisted guest-apply attempts. Reconciliation cannot reset that bound. A blocked version requires diagnosis and an explicit new command using the current version. Route/domain admission is audited without storing credentials or application content.
 
 ## Updates and recovery

@@ -93,7 +93,7 @@ export async function exerciseCustomerAccess(input: {
     checkNetwork: async () => {},
   });
   const hosting =
-    process.env.AGENT_CLOUD_HOSTING_SCENARIO === '1'
+    process.env.AGENT_CLOUD_HOSTING_SCENARIO === '1' || input.nativeTarget
       ? await prepareHostingFixture({
           connection: input.connection,
           provider: f.provider,
@@ -278,6 +278,9 @@ export async function exerciseCustomerAccess(input: {
         vm: input.vm,
         cli,
         rotateWrappingKey: () => backup.rotateWrappingKey(),
+        ...(hosting
+          ? { hosting: { gatewayState: hosting.gatewayState, httpsPort: hosting.httpsPort } }
+          : {}),
       });
       await input.nativeTarget.cleanup();
       return;

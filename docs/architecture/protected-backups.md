@@ -2,7 +2,7 @@
 
 The implemented path captures one supported Compose application with PostgreSQL 17 and explicitly declared regular files. The control worker encrypts it outside the guest and stores one exact, retained S3 object version. Restore provisions a new machine through the existing budget and ownership checks. It never overwrites the source machine or changes a route.
 
-The manual capture/isolated-restore path is native verified. The customer CLI/API/worker scenario in `.local/backup-native-5.log` restored count `1` and identical declared-file contents on a second Ubuntu VM after wrapping-key rotation. It verified quarantine, idempotent admission, unchanged source, zero reservations after destruction and backup availability after source destruction. Both exact-owned VMs were removed. API/worker recovery checks and real local MinIO protection checks also pass. Hetzner Object Storage has not been verified or provisioned. Explicit network promotion for public cutover, scheduled capture, automatic retention pruning, provider automated backups and a customer purge command remain part of the pending scope.
+The manual capture/isolated-restore path is native verified. The customer CLI/API/worker scenario in `.local/backup-native-5.log` restored count `1` and identical declared-file contents on a second Ubuntu VM after wrapping-key rotation. It verified quarantine, idempotent admission, unchanged source, zero reservations after destruction and backup availability after source destruction. Both exact-owned VMs were removed. API/worker recovery checks and real local MinIO protection checks also pass. Hetzner Object Storage has not been verified or provisioned. Network promotion and existing-hostname movement passed the combined native scenario in `.local/restore-cutover-native-4.log`: source writes fenced, count `1` restored, the same public HTTPS hostname moved, count `2` written/read, route removed, both allocations destroyed with zero reservations, and both exact-owned physical VMs deleted. This is local MinIO/native VM proof, not Hetzner provider proof. Scheduled capture, automatic retention pruning, provider automated backups and a customer purge command remain pending.
 
 ## Customer commands
 
@@ -43,9 +43,24 @@ The worker downloads the exact object version, verifies its bytes and retention 
 
 The target accepts a bounded archive of fixed regular-file entries, rejecting links, duplicate entries and path traversal. Its Compose configuration uses a new project namespace and new local volumes. External volumes/networks, privileged services, devices, sockets and host namespace sharing are rejected. Published ports are confined to loopback. Declared files live under `/var/lib/agent-customer/restores/<restore-uuid>/`, and captured customer bind mounts are rebased there. PostgreSQL starts alone, imports roles and data, then the full application starts and its service health is checked. Source files, source volumes and public routes are unchanged.
 
-The internal restore network currently has no active host-port mappings. Inspect a restored service's private container address through authenticated SSH and check the application from that VM. Docker permits host access to containers on ordinary internal bridge networks; the separate `isolated` gateway mode would remove that access. See [Docker's network modes](https://docs.docker.com/engine/network/port-publishing/). The native scenario checks the restored frontend this way. Do not publish a route to an inactive host port. Explicit network promotion before public cutover remains to be implemented.
+The internal restore network has no active host-port mappings. Inspect a restored service's private container address through authenticated SSH and check the application from that VM. Docker permits host access to containers on ordinary internal bridge networks. See [Docker's network modes](https://docs.docker.com/engine/network/port-publishing/).
 
-After application inspection and network promotion, route cutover must be a separate authorized mutation. Fence old application writes before a deliberate cutover. Destroying either VM is a separate data-loss-authorized operation; protected off-machine backup records remain accessible after source destruction.
+Within the customer's cutover authorization, fence source writes and close its old application/database connections before activating the replacement. Stopping the source Compose application is sufficient for the reference app. Then promote the verified target and move the retained hostname:
+
+```sh
+acld compose promote <new-machine> recovered --release <promotion-uuid> \
+  --expected-release <restore-uuid>
+acld compose wait <new-machine> recovered
+acld route move <existing-hostname> <new-machine> --port 30080 \
+  --expected-version <current-route-version> --key <move-uuid>
+acld route wait <existing-hostname>
+```
+
+Promotion creates a new durable Compose release, verifies the current isolated release and its pinned images, and recreates containers on a distinct ordinary bridge network. It preserves volumes, captured file binds, image IDs and loopback-only published ports. It enables egress; a published application port must already exist in the captured configuration. It does not create a public route. An uncertain promotion is inspected/recovered through ordinary Compose release commands, without minting a replacement ID blindly.
+
+Route movement requires current authority for both the old and target projects, an existing account-owned hostname and its current version. Generated hostnames survive replacement machines. New or foreign names cannot be claimed through movement. Inspect the application over its public HTTPS hostname after cutover, including an application-specific write/read check. A route acknowledgement alone does not prove application health.
+
+Writes after the selected backup are absent from the restored copy unless separately transferred. Once the replacement accepts writes, switching back can lose those new writes. Destroying either VM remains a separate data-loss-authorized operation; protected off-machine backup records remain accessible after source destruction.
 
 ## Operator configuration
 
@@ -77,6 +92,8 @@ Set `ACLD_BACKUP_CONFIG` to an owner-only JSON file on customer API/worker hosts
 Each credential file contains `{ "accessKeyId": "...", "secretAccessKey": "..." }` and must use a different storage identity. The keyring shape is `{ "current": "v1", "keys": { "v1": "<base64-encoded random 32-byte key>" } }`. Provision and preserve keys independently from the bucket. Runtime reads secrets lazily so a missing storage credential does not disable ordinary machine cleanup.
 
 The bucket must have versioning and Object Lock enabled. On Hetzner, Object Lock must be selected when creating the bucket. Use a separate storage project/credentials and preferably another EU location. Ordinary writer access needs `PutObject`, `PutObjectRetention`, `GetObjectVersion`, `GetObjectRetention`, `ListBucketVersions`, `GetBucketVersioning` and `GetBucketObjectLockConfiguration` within the configured bucket/prefix. The reader needs the read subset, without listing, writing, deleting or bypass permissions. Neither runtime API implements deletion or retention bypass. Verify actual provider enforcement before claiming protection; local MinIO evidence is insufficient for that claim.
+
+Hetzner keys have broad access to buckets in their own project by default. Put runtime writer/reader keys in a different project from the protected bucket and its administrator key. Grant each exact runtime principal only its required actions through the bucket policy. Hetzner identifies a key as `arn:aws:iam:::user/p<credential-project-id>:<access-key>`. Keep the bucket administrator key out of the API and worker. Separate key files alone do not restrict provider permissions. See [Hetzner's per-key access policy](https://docs.hetzner.com/storage/object-storage/faq/s3-credentials/#how-do-i-restrict-access-per-key).
 
 An existing exact version remains readable after its promised retention ends. This does not claim continuing deletion protection. Seven days of retention is a configured protection interval, not evidence that daily backups are already scheduled.
 

@@ -10,6 +10,7 @@ import {
   composeReleaseSchema,
   composeApplySchema,
   composeRecoverSchema,
+  composePromoteSchema,
   composeResponseSchema,
   type ComposeCommand,
   type ComposeRelease,
@@ -17,10 +18,39 @@ import {
 import { atomicWrite, ensureDirectory, isMissing, readOwnedFile, syncDirectory } from './files.js';
 import { composeConfigSchema, composePsSchema, type ComposeSystem } from './compose-system.js';
 
-const requestSchema = z.union([composeApplySchema, composeRecoverSchema]);
+const requestSchema = z.union([composeApplySchema, composeRecoverSchema, composePromoteSchema]);
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 const terminal = (release: ComposeRelease) =>
   ['succeeded', 'failed', 'interrupted'].includes(release.phase);
+
+/** Give a verified isolated app egress and loopback ports without changing images or data mounts. */
+export function promoteRestoreNetwork(value: unknown, project: string, release: string) {
+  const config = composeConfigSchema.parse(value);
+  const networks = z
+    .strictObject({
+      default: z.strictObject({
+        internal: z.literal(true),
+        name: z.string().optional(),
+        ipam: z.strictObject({}).optional(),
+      }),
+    })
+    .parse(config['networks']);
+  if (networks.default.name && networks.default.name !== `${project}_default`)
+    throw new CloudError('invalid_input', 'Promotion requires the isolated project network.');
+  for (const service of Object.values(config.services)) {
+    if (service['network_mode'])
+      throw new CloudError('invalid_input', 'Promotion does not permit host networking.');
+    z.union([
+      z.tuple([z.literal('default')]),
+      z.strictObject({ default: z.record(z.string(), z.unknown()).nullable() }),
+    ]).parse(service['networks']);
+    if (service['ports'])
+      z.array(z.looseObject({ host_ip: z.literal('127.0.0.1') })).parse(service['ports']);
+  }
+  // A distinct network avoids deleting the connected isolation network during replacement.
+  config['networks'] = { default: { name: `${project}_promoted_${release}` } };
+  return config;
+}
 
 /** Guest diagnostics belong to this machine's root-capable customer, never billing authority. */
 export function createComposeDeployments(input: { directory: string; system: ComposeSystem }) {
@@ -146,10 +176,12 @@ export function createComposeDeployments(input: { directory: string; system: Com
         'invalid_input',
         'The selected Compose file is missing from the source bundle.',
       );
-    if (command.kind === 'recover') {
+    if (command.kind === 'recover' || command.kind === 'promote') {
       const source = await readRelease(command.app, command.fromReleaseId);
       if (source.phase !== 'succeeded')
         throw new CloudError('invalid_input', 'Recovery requires a previously succeeded release.');
+      if (command.kind === 'promote' && command.fromReleaseId !== command.expectedReleaseId)
+        throw new CloudError('invalid_input', 'Promote the current verified isolated release.');
     }
     await ensureDirectory(input.directory, 0o700);
     await syncDirectory(dirname(input.directory));
@@ -219,10 +251,10 @@ export function createComposeDeployments(input: { directory: string; system: Com
     )
       throw new Error('Saved deployment input integrity differs.');
     const runtimePath = join(directory, 'runtime.json');
-    if (request.kind === 'recover') {
+    if (request.kind === 'recover' || request.kind === 'promote') {
       const original = await readRelease(app, request.fromReleaseId);
       if (original.phase !== 'succeeded') throw new Error('Recovery source is not successful.');
-      const runtime = await readOwnedFile(
+      let runtime = await readOwnedFile(
         join(releasePath(app, original.id), 'runtime.json'),
         'private',
         16_777_216,
@@ -233,8 +265,12 @@ export function createComposeDeployments(input: { directory: string; system: Com
         if ((await input.system.imageId(image)) !== image)
           throw new Error('Recovery image differs.');
       }
+      if (request.kind === 'promote')
+        runtime =
+          JSON.stringify(promoteRestoreNetwork(JSON.parse(runtime), project(app), release.id)) +
+          '\n';
       await atomicWrite(runtimePath, runtime, 0o600);
-      return { request, configDigest: original.configDigest, images: original.images };
+      return { request, configDigest: digest(runtime), images: original.images };
     }
     const source = join(directory, 'source');
     await ensureDirectory(source, 0o700);
@@ -368,6 +404,7 @@ export function createComposeDeployments(input: { directory: string; system: Com
             '--wait-timeout',
             String(prepared.request.waitSeconds),
             '--remove-orphans',
+            ...(prepared.request.kind === 'promote' ? ['--force-recreate'] : []),
             '--no-build',
             '--pull',
             'never',

@@ -45,9 +45,16 @@ export const composeRecoverSchema = z.strictObject({
   ...mutation,
   fromReleaseId: composeReleaseIdSchema,
 });
+export const composePromoteSchema = z.strictObject({
+  kind: z.literal('promote'),
+  ...mutation,
+  expectedReleaseId: composeReleaseIdSchema,
+  fromReleaseId: composeReleaseIdSchema,
+});
 export const composeCommandSchema = z.discriminatedUnion('kind', [
   composeApplySchema,
   composeRecoverSchema,
+  composePromoteSchema,
   z.strictObject({ kind: z.literal('inspect'), app: composeAppSchema }),
   z.strictObject({
     kind: z.literal('logs'),

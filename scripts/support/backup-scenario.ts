@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { request } from 'node:https';
+import { setTimeout } from 'node:timers/promises';
 import { z } from 'zod';
 import {
   backupResponseSchema,
@@ -9,6 +11,8 @@ import {
   machineResponseSchema,
   operationResponseSchema,
   usageResponseSchema,
+  routeResponseSchema,
+  composeResponseSchema,
 } from '../../packages/contracts/dist/index.js';
 import { exerciseCompose } from './compose-scenario.js';
 
@@ -25,6 +29,7 @@ export async function exerciseBackups(input: {
     credentials: string,
   ) => Promise<{ code: number; stdout: string; stderr: string }>;
   rotateWrappingKey: () => Promise<void>;
+  hosting?: { gatewayState: string; httpsPort: number };
 }) {
   const progress = (phase: string) =>
     process.stdout.write(JSON.stringify({ phase, cloudResourcesCreated: 0 }) + '\n');
@@ -33,8 +38,86 @@ export async function exerciseBackups(input: {
     assert.equal(result.code, 0, result.stderr.slice(0, 1500) + result.stdout.slice(0, 2000));
     return result.stdout;
   };
+  const route = input.hosting
+    ? routeResponseSchema.parse(
+        JSON.parse(
+          await cli([
+            'route',
+            'publish',
+            input.machine,
+            '--name',
+            'recovery',
+            '--port',
+            '30080',
+            '--key',
+            randomUUID(),
+          ]),
+        ),
+      ).route
+    : undefined;
+  if (route) await cli(['route', 'wait', route.hostname]);
+  const hostname = route?.hostname ?? 'customer.localhost';
   progress('deploying source reference application through customer Compose CLI');
-  const source = await exerciseCompose({ ...input, initialOnly: true });
+  const source = await exerciseCompose({
+    ...input,
+    initialOnly: true,
+    hostname,
+    serveHttp: Boolean(route),
+  });
+  const publicRequest = async (method = 'GET') => {
+    const hosting = input.hosting;
+    assert.ok(hosting && route);
+    let ca = '';
+    for (let attempt = 0; attempt < 20; attempt++) {
+      try {
+        ca = await readFile(
+          join(hosting.gatewayState, 'certificates/pki/authorities/local/root.crt'),
+          'utf8',
+        );
+        break;
+      } catch (error) {
+        if (attempt === 19) throw error;
+        await setTimeout(500);
+      }
+    }
+    return new Promise<unknown>((resolve, reject) => {
+      const req = request(
+        {
+          hostname: '127.0.0.1',
+          port: hosting.httpsPort,
+          servername: hostname,
+          ca,
+          path: '/api/visits',
+          method,
+          headers: { Host: hostname, Origin: `https://${hostname}` },
+          timeout: 10000,
+        },
+        (response) => {
+          let body = '';
+          response.on('data', (chunk: Buffer) => {
+            body += chunk.toString();
+            if (body.length > 65536)
+              response.destroy(new Error('Oversized restored application reply.'));
+          });
+          response.once('error', reject);
+          response.once('end', () => {
+            try {
+              assert.equal(response.statusCode, 200);
+              resolve(JSON.parse(body));
+            } catch (error) {
+              reject(
+                error instanceof Error ? error : new Error('Invalid restored application reply.'),
+              );
+            }
+          });
+        },
+      );
+      req.once('error', reject);
+      req.once('timeout', () => req.destroy(new Error('Restored public application timed out.')));
+      req.end();
+    });
+  };
+  if (route) assert.deepEqual(await publicRequest(), { revision: '1', count: '1' });
   const declared = join(input.scratch, 'declared.txt');
   const content = `declared backup data ${randomUUID()}\n`;
   await writeFile(declared, content, { mode: 0o600 });
@@ -136,8 +219,8 @@ export async function exerciseBackups(input: {
     '--silent',
     '--insecure',
     '--resolve',
-    `customer.localhost:443:${frontendAddress}`,
-    'https://customer.localhost/api/visits',
+    `${hostname}:443:${frontendAddress}`,
+    `https://${hostname}/api/visits`,
   ];
   // The restored private Caddy uses a fresh local CA. Public trusted HTTPS is verified separately by routing.
   assert.deepEqual(JSON.parse(await cli(check)), { revision: '1', count: '1' });
@@ -160,6 +243,81 @@ export async function exerciseBackups(input: {
   ).backup;
   assert.equal(inspected.state.kind, 'captured');
   assert.equal(inspected.state.validation, 'restore_verified');
+  if (route) {
+    progress(
+      'fencing source writes, promoting verified restore and moving its existing HTTPS route',
+    );
+    await cli([
+      'ssh',
+      input.machine,
+      '--',
+      '/usr/bin/sudo',
+      '-n',
+      '--',
+      'docker',
+      'compose',
+      '--project-name',
+      'acld-sample',
+      '--file',
+      `/var/lib/agent-cloud/compose/sample/releases/${source.releaseId}/runtime.json`,
+      'stop',
+      '--timeout',
+      '10',
+    ]);
+    const stopped = composeResponseSchema.parse(
+      JSON.parse(await cli(['compose', 'inspect', input.machine, 'sample'])),
+    );
+    assert.ok(
+      stopped.containers.length === 3 &&
+        stopped.containers.every((container) => container.state === 'exited'),
+    );
+    const promotionId = randomUUID();
+    const promote = [
+      'compose',
+      'promote',
+      restore.machineId,
+      'recovered',
+      '--release',
+      promotionId,
+      '--expected-release',
+      restoreId,
+    ];
+    await cli(promote);
+    assert.equal(
+      composeResponseSchema.parse(
+        JSON.parse(await cli(['compose', 'wait', restore.machineId, 'recovered'])),
+      ).release?.phase,
+      'succeeded',
+    );
+    assert.equal(
+      composeResponseSchema.parse(JSON.parse(await cli(promote))).release?.id,
+      promotionId,
+    );
+    const move = [
+      'route',
+      'move',
+      hostname,
+      restore.machineId,
+      '--port',
+      '30080',
+      '--expected-version',
+      '1',
+      '--key',
+      randomUUID(),
+    ];
+    await cli(move);
+    await cli(['route', 'wait', hostname]);
+    assert.equal(
+      routeResponseSchema.parse(JSON.parse(await cli(move))).route.machineId,
+      restore.machineId,
+    );
+    assert.deepEqual(await publicRequest(), { revision: '1', count: '1' });
+    assert.deepEqual(await publicRequest('POST'), { revision: '1', count: '2' });
+    assert.deepEqual(await publicRequest(), { revision: '1', count: '2' });
+    await cli(['route', 'remove', hostname, '--expected-version', '2', '--key', randomUUID()]);
+    await cli(['route', 'wait', hostname]);
+    await assert.rejects(publicRequest);
+  }
   progress(
     'destroying product-owned source and restore allocations while retaining the protected backup',
   );
@@ -213,6 +371,10 @@ export async function exerciseBackups(input: {
       duplicateAdmissionOneTarget: true,
       reservationsAfterDestroy: 0,
       backupSurvivesSourceDestroy: true,
+      networkPromotion: Boolean(route),
+      publicHttpsCutover: Boolean(route),
+      sourceWritesFenced: Boolean(route),
+      restoredWritesVerified: Boolean(route),
       providerProof: false,
     }) + '\n',
   );
