@@ -12,9 +12,9 @@ Managed routing uses `acld route publish/wait/inspect/remove` and `acld domain a
 
 Manual `backup capture/wait/inspect/restore/restore-wait` commands protect PostgreSQL 17 and declared application files off the VM, then restore them onto a separate machine. The native customer scenario verified data, files and wrapping-key rotation through local Object Lock storage, fenced the source, promoted the restored network, moved its existing HTTPS hostname, persisted a new write and cleaned up both VMs. See [protected backups](docs/architecture/protected-backups.md) for configuration, supported data and retry boundaries. Use `backup schedule` with the same recipe flags for daily capture after disconnect; inspect or disable it through the CLI. Hetzner Object Storage enforcement is not yet verified.
 
-[PostgreSQL and Umami recipes](docs/recipes.md) prepare ordinary Compose contexts with pinned images, generated credentials and resource limits. Their local Docker checks cover SQL persistence, safe administrator setup and visitor/event collection. Customer-site analytics instrumentation still needs deployment verification.
+[PostgreSQL and Umami recipes](docs/recipes.md) prepare ordinary Compose contexts with pinned images, generated credentials and resource limits. Their local Docker checks cover SQL persistence, safe administrator setup and visitor/event collection. Native customer-site verification also passed: a browser click persisted application data and recorded the intended analytics event. Public/provider verification remains separate.
 
-The [self-host quickstart](docs/self-host.md) packages the API, worker, CLI and PostgreSQL in a pinned runtime image. Its local simulated scenario verifies persisted identity and machines across a restart. Live customer configuration and control disaster recovery remain separate verification steps.
+The [self-host quickstart](docs/self-host.md) packages the API, worker, CLI and PostgreSQL in a pinned runtime image. Its local simulated scenario verifies persisted identity and machines across a restart. An isolated restore also preserves the CLI identity, machine and reservation history while leaving the original installation unchanged. Live customer configuration, WAL archival and provider recovery fencing remain separate verification steps.
 
 ## Run locally
 

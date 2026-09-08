@@ -63,7 +63,7 @@ jobs:
         run: npm exec --yes --package=pnpm@12.3.4 -- pnpm format:check
       - if: needs.scope.outputs.code_changed == 'true'
         timeout-minutes: 5
-        run: npm exec --yes --package=pnpm@12.3.4 -- pnpm smoke:self-host
+        run: npm exec --yes --package=pnpm@12.3.4 -- pnpm smoke:self-host-restore
       - if: needs.scope.outputs.code_changed == 'true'
         run: npm exec --yes --package=pnpm@12.3.4 -- pnpm smoke:usage
       - if: needs.scope.outputs.code_changed == 'true'

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { exerciseAnalytics } from './analytics-scenario.js';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -76,6 +77,7 @@ export async function exerciseHosting(input: {
     const id = randomUUID();
     const recipe = referenceRecipe({ releaseId: id, expectedReleaseId: null, revision, hostname });
     recipe.secrets.database_password.file = './database-password';
+    recipe.services.backend.environment.APP_HOSTNAME = `${hostname}:${input.httpsPort}`;
     recipe.services.frontend.ports = ['127.0.0.1:30080:80', '127.0.0.1:30081:80'];
     await writeFile(join(source, 'compose.json'), JSON.stringify(recipe));
     await writeFile(join(source, 'index.html'), referenceFrontend(revision));
@@ -127,7 +129,7 @@ export async function exerciseHosting(input: {
           method,
           headers: {
             Host: host,
-            Origin: `https://${hostname}`,
+            Origin: `https://${hostname}:${input.httpsPort}`,
             'X-Agent-Cloud-Route-Version': version,
           },
           timeout: 10_000,
@@ -187,18 +189,36 @@ export async function exerciseHosting(input: {
   ]);
   await cli(['route', 'wait', hostname]);
   await ready('1');
-  await deploy('2', first);
+  const second = await deploy('2', first);
   await ready('2');
-  input.apiAvailable(false);
-  try {
-    await setTimeout(6000);
-    await ready('2');
-    await input.restartGateway();
-    await ready('2');
-    await input.reboot();
-    await ready('2');
-  } finally {
-    input.apiAvailable(true);
+  if (process.env.AGENT_CLOUD_ANALYTICS_SCENARIO !== '1') {
+    input.apiAvailable(false);
+    try {
+      await setTimeout(6000);
+      await ready('2');
+      await input.restartGateway();
+      await ready('2');
+      await input.reboot();
+      await ready('2');
+    } finally {
+      input.apiAvailable(true);
+    }
+  }
+  if (process.env.AGENT_CLOUD_ANALYTICS_SCENARIO === '1') {
+    await exerciseAnalytics({
+      machine: input.machine,
+      scratch: input.scratch,
+      siteHostname: hostname,
+      siteSource: source,
+      siteRelease: second,
+      httpsPort: input.httpsPort,
+      ca,
+      cli,
+    });
+    assert.deepEqual(JSON.parse((await application('/api/visits')).body), {
+      revision: '2',
+      count: '2',
+    });
   }
   const inspected = routeResponseSchema.parse(await cli(['route', 'inspect', hostname]));
   assert.equal(inspected.route.gatewayAppliedVersion, 2);
@@ -220,9 +240,9 @@ export async function exerciseHosting(input: {
       routeUpdate: true,
       cliDisconnected: true,
       applicationUpdatePreservedData: true,
-      apiOutage: true,
-      gatewayRestart: true,
-      guestReboot: true,
+      apiOutage: process.env.AGENT_CLOUD_ANALYTICS_SCENARIO !== '1',
+      gatewayRestart: process.env.AGENT_CLOUD_ANALYTICS_SCENARIO !== '1',
+      guestReboot: process.env.AGENT_CLOUD_ANALYTICS_SCENARIO !== '1',
       removed: true,
     }) + '\n',
   );

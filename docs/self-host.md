@@ -49,9 +49,12 @@ The complete disposable packaging proof is:
 
 ```sh
 node scripts/self-host-smoke.mjs
+node scripts/self-host-smoke.mjs --restore
 ```
 
 It builds a unique local image, uses fresh uniquely named volumes, verifies refused unscoped/public bootstrap and unauthenticated API access, authenticates the packaged CLI, creates a simulated machine, restarts PostgreSQL/API/worker, verifies the same identity and machine, then destroys it. It refuses any pre-existing project or image before mutation. Its `finally` removes that exact Compose project's containers, network, volumes and image tag and verifies no owned resources remain. Shared Docker build/base-image caches remain. It neither uses nor stops the normal development database/CA.
+
+`--restore` adds a second isolated project. It quiesces the source API/worker, saves a bounded custom-format database dump and matching private configuration/credential, and records their SHA-256 hashes with the exact image ID and applied migration hashes. The temporary directory is 0700, files are 0600, and files/directories are synced. A damaged dump, missing credential and mismatched image are rejected before any target service exists. The target receives the saved files directly, without initialization or bootstrap. After transactional database restoration, its API/CLI verify the same principal, machine, usage and reservation history before the target worker starts. A new power-off operation affects only the restored copy; the original machine and history remain inspectable and unchanged. Both projects and private copies are removed. The fixture bounds the dump/transfer at 32 MiB and each private file at 16 KiB; it is an acceptance test for this small simulated installation, not a general backup utility.
 
 ## Update and back up before migration
 
@@ -61,16 +64,61 @@ Migrations run explicitly, never as an API startup side effect. Back up PostgreS
 umask 077
 mkdir -p .local/self-host-backups
 backup_directory="$(mktemp -d .local/self-host-backups/checkpoint.XXXXXX)"
+docker inspect --format '{{.Image}}' "$(dco ps --all --quiet api)" > "$backup_directory/image-id"
+dco run --rm --no-deps cli cli whoami > "$backup_directory/principal.json"
+dco run --rm --no-deps cli cli usage history > "$backup_directory/reservation-history.json"
 dco stop api worker
 dco exec -T postgres pg_dump -U agentcloud -d agentcloud --format=custom > "$backup_directory/control.dump"
+dco exec -T postgres psql -U agentcloud -d agentcloud -At -c "SELECT coalesce(json_agg(json_build_object('hash',hash,'createdAt',created_at::text) ORDER BY id),'[]'::json)::text FROM drizzle.__drizzle_migrations" > "$backup_directory/migrations.json"
 dco run --rm --no-deps --entrypoint tar initialize -C /run/agent-cloud -czf - . > "$backup_directory/configuration.tar.gz"
 dco run --rm --no-deps --entrypoint tar bootstrap -C /work/.local -czf - . > "$backup_directory/operator.tar.gz"
 dco exec -T postgres pg_restore --list < "$backup_directory/control.dump" > /dev/null
+(cd "$backup_directory" && shasum -a 256 control.dump configuration.tar.gz operator.tar.gz image-id migrations.json principal.json reservation-history.json > SHA256SUMS)
+sync
 ```
 
 The command creates a new private backup directory for each checkpoint. Move a verified, encrypted copy off the control host using your operator backup process. Preserve the current image ID and source revision with it. For a real deployment also back up runtime identity metadata, bootstrap encryption key, signer identities, configuration receipts, and the independent backup decryption keyring. These are not recoverable from the control DB alone.
 
-Build the reviewed source revision with the same build command, update `ACLD_SELF_HOST_IMAGE` to its ID, run `dco run --rm --no-deps migrate`, then `dco up --detach --wait --force-recreate api worker`. Re-run CLI authentication and inspect a known machine. Applied migration files are immutable. Do not assume that an older image can use a migrated database; rehearse restoration of the saved dump and matching configuration/image in a separate isolated project. Before enabling real provider workers after restoring old control state, reconcile outstanding provider intents and ownership so recovery cannot repeat an uncertain create. Control-DB disaster recovery is not proven by this simulated restart check.
+Build the reviewed source revision with the same build command, update `ACLD_SELF_HOST_IMAGE` to its ID, run `dco run --rm --no-deps migrate`, then `dco up --detach --wait --force-recreate api worker`. Re-run CLI authentication and inspect a known machine. Applied migration files are immutable. Do not assume that an older image can use a migrated database; restore the saved dump with its matching configuration/image first, then perform an explicit upgrade.
+
+## Restore the simulated control installation
+
+These commands restore the trusted quickstart checkpoint above into a new project. Keep the source API/worker stopped during capture. They are never pointed at the target's volumes or database. Check the checksum file against your trusted offline checkpoint; checksums beside an attacker-modified archive are not authentication. Keep the recorded image available locally or export it privately before removing old images. An expired or revoked credential remains expired or revoked after restore; do not bootstrap a replacement identity to hide a failed recovery.
+
+```sh
+(cd "$backup_directory" && shasum -a 256 --check SHA256SUMS)
+export ACLD_SELF_HOST_IMAGE="$(cat "$backup_directory/image-id")"
+docker image inspect "$ACLD_SELF_HOST_IMAGE" --format '{{.Id}}'
+restore_project="agent-cloud-restore-$(uuidgen | tr '[:upper:]' '[:lower:]')"
+export ACLD_SELF_HOST_PORT=4320
+rdco() { docker compose -p "$restore_project" -f infra/compose/self-host.yaml "$@"; }
+test -z "$(docker container ls --all --filter "label=com.docker.compose.project=$restore_project" --quiet)" &&
+test -z "$(docker volume ls --filter "label=com.docker.compose.project=$restore_project" --quiet)" &&
+test -z "$(docker network ls --filter "label=com.docker.compose.project=$restore_project" --quiet)"
+```
+
+Stop on any failed command or collision; choose an unused loopback port. Inspect `rdco config --quiet`. Extract only trusted configuration archives created by the capture steps, which contain the small private files for this installation. Do not invoke `initialize-local`, `bootstrap-internal` or `migrate` on the restore target. The commands below reuse the setup services' volume mounts but replace their entrypoint with `tar`; they do not generate a password or identity.
+
+```sh
+rdco run --rm --no-deps -T --entrypoint tar initialize --extract --gzip --file=- --directory=/run/agent-cloud --no-same-owner < "$backup_directory/configuration.tar.gz"
+rdco run --rm --no-deps -T --entrypoint tar bootstrap --extract --gzip --file=- --directory=/work/.local --no-same-owner < "$backup_directory/operator.tar.gz"
+rdco up --detach --wait postgres
+rdco exec -T postgres pg_restore -U agentcloud -d agentcloud --exit-on-error --single-transaction --no-owner --no-privileges < "$backup_directory/control.dump"
+rdco exec -T postgres psql -U agentcloud -d agentcloud -At -c "SELECT coalesce(json_agg(json_build_object('hash',hash,'createdAt',created_at::text) ORDER BY id),'[]'::json)::text FROM drizzle.__drizzle_migrations" > "$backup_directory/restored-migrations.json"
+cmp "$backup_directory/migrations.json" "$backup_directory/restored-migrations.json"
+rdco up --detach --wait api
+rdco run --rm --no-deps cli cli whoami > "$backup_directory/restored-principal.json"
+rdco run --rm --no-deps cli cli usage history > "$backup_directory/restored-reservation-history.json"
+cmp "$backup_directory/principal.json" "$backup_directory/restored-principal.json"
+cmp "$backup_directory/reservation-history.json" "$backup_directory/restored-reservation-history.json"
+rdco run --rm --no-deps cli cli machine inspect <saved-machine-id>
+```
+
+PostgreSQL's [single-transaction restore](https://www.postgresql.org/docs/17/app-pgrestore.html) rolls back on a restore error. Leave target API/worker stopped if archive validation, SQL restoration or migration comparison fails; leave its worker stopped if identity or history checks fail. A fresh empty target avoids mixing the checkpoint with unrelated data. Only after those checks pass, start `rdco up --detach --wait worker` and exercise a new simulated operation there. Resume the original quickstart using its original image/port settings and `dco up --detach --wait api worker`; inspect the original machine and reservation history to confirm it remains unchanged.
+
+To remove only the test restore, use `rdco --profile setup --profile tools down --volumes --remove-orphans` and verify no resources carry its Compose project label. Keep the original project's volumes and your private checkpoint unless you intend to delete them. The disposable `--restore` smoke performs exact cleanup of both projects because it owns both from creation.
+
+This verifies control-DB/private-identity recovery for the simulated provider. For a real provider, keep both old and restored workers, retention operators, scheduled jobs and other mutators fenced outside the database: restoring a DB also restores stale leases, intents and revocations. Do not run real customer data through this simulated quickstart or give a test restore live provider, CA-issuance or deletion credentials. A single operator must reconcile external resources against durable ownership receipts and current authority, choose the authoritative control instance, and account for changes after the checkpoint before enabling any mutator. Public routes, guest certificates and encrypted-backup keys need their separate matching recovery material. None of that external-state recovery is proven by this local fixture.
 
 ## Connect an existing customer runtime
 

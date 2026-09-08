@@ -26,6 +26,7 @@
     "dev": "pnpm build && node --env-file=.env apps/control/dist/api.js",
     "worker": "pnpm build && node --env-file=.env apps/control/dist/worker.js",
     "acld": "node --env-file-if-exists=.env apps/cli/dist/index.js",
+    "smoke:self-host-restore": "node scripts/self-host-smoke.mjs --restore",
     "smoke:self-host": "node scripts/self-host-smoke.mjs",
     "smoke:usage": "pnpm build && tsx scripts/smoke-usage.ts",
     "smoke:local": "pnpm build && tsx scripts/smoke-local.ts",
@@ -71,6 +72,7 @@
     "@hono/node-server": "2.1.1",
     "@types/node": "24.13.3",
     "@types/pg": "8.23.1",
+    "@types/ws": "8.18.1",
     "drizzle-kit": "0.31.10",
     "drizzle-orm": "0.45.2",
     "esbuild": "0.28.2",
@@ -78,13 +80,13 @@
     "graphile-worker": "0.17.3",
     "hono": "4.13.7",
     "pg": "8.23.0",
+    "playwright-core": "1.63.0",
     "prettier": "3.8.3",
     "tsx": "4.23.13",
     "typescript": "6.0.3",
     "typescript-eslint": "8.69.0",
     "vitest": "5.0.0",
-    "zod": "4.5.4",
-    "@types/ws": "8.18.1",
-    "ws": "8.21.3"
+    "ws": "8.21.3",
+    "zod": "4.5.4"
   }
 }
