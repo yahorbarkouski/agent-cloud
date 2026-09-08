@@ -2,7 +2,7 @@
 
 The implemented path captures one supported Compose application with PostgreSQL 17 and explicitly declared regular files. The control worker encrypts it outside the guest and stores one exact, retained S3 object version. Restore provisions a new machine through the existing budget and ownership checks. It never overwrites the source machine or changes a route.
 
-The manual capture/isolated-restore path is native verified. The customer CLI/API/worker scenario in `.local/backup-native-5.log` restored count `1` and identical declared-file contents on a second Ubuntu VM after wrapping-key rotation. It verified quarantine, idempotent admission, unchanged source, zero reservations after destruction and backup availability after source destruction. Both exact-owned VMs were removed. API/worker recovery checks and real local MinIO protection checks also pass. Hetzner Object Storage has not been verified or provisioned. Network promotion and existing-hostname movement passed the combined native scenario in `.local/restore-cutover-native-4.log`: source writes fenced, count `1` restored, the same public HTTPS hostname moved, count `2` written/read, route removed, both allocations destroyed with zero reservations, and both exact-owned physical VMs deleted. This is local MinIO/native VM proof, not Hetzner provider proof. Daily capture is implemented through the existing worker. Its real cron/native scenario passed `.local/backup-schedules-native-1.log`: the CLI exited, the minute cron admitted capture, the encrypted backup restored on a separate VM, public HTTPS cutover preserved and accepted data, and both VMs were removed. The 24-hour admission policy and outage/revocation/quota cases are database-time integration checks; this proof did not wait a real day. Automatic retention pruning, provider automated backups and a customer purge command remain pending.
+The manual capture/isolated-restore path is native verified. The customer CLI/API/worker scenario in `.local/backup-native-5.log` restored count `1` and identical declared-file contents on a second Ubuntu VM after wrapping-key rotation. It verified quarantine, idempotent admission, unchanged source, zero reservations after destruction and backup availability after source destruction. Both exact-owned VMs were removed. API/worker recovery checks and real local MinIO protection checks also pass. Hetzner Object Storage has not been verified or provisioned. Network promotion and existing-hostname movement passed the combined native scenario in `.local/restore-cutover-native-4.log`: source writes fenced, count `1` restored, the same public HTTPS hostname moved, count `2` written/read, route removed, both allocations destroyed with zero reservations, and both exact-owned physical VMs deleted. This is local MinIO/native VM proof, not Hetzner provider proof. Daily capture is implemented through the existing worker. Its real cron/native scenario passed `.local/backup-schedules-native-1.log`: the CLI exited, the minute cron admitted capture, the encrypted backup restored on a separate VM, public HTTPS cutover preserved and accepted data, and both VMs were removed. The 24-hour admission policy and outage/revocation/quota cases are database-time integration checks; this proof did not wait a real day. Retention pruning and customer purge are locally verified through CLI/API, a separate operator process and real MinIO. Provider automated backups and Hetzner Object Storage enforcement remain pending.
 
 ## Customer commands
 
@@ -37,7 +37,7 @@ acld backup schedule-list <machine>
 acld backup schedule-disable <schedule-uuid>
 ```
 
-The CLI can exit after configuration. The worker's minute reconciliation admits the first capture when next available, then one capture every 24 hours. After an outage it admits one current capture; it does not replay missed daily jobs. The API returns the last attempt, its live backup state, the latest successful backup and the next due time. Inspect the backup's actual timestamp and retention deadline. A failed capture or storage refusal leaves prior recovery points intact; no pruning is currently automatic.
+The CLI can exit after configuration. The worker's minute reconciliation admits the first capture when next available, then one capture every 24 hours. After an outage it admits one current capture; it does not replay missed daily jobs. The API returns the last attempt, its live backup state, the latest successful backup and the next due time. Inspect the backup's actual timestamp and retention deadline. A failed capture or storage refusal leaves prior recovery points intact. The separately configured retention operator can prune expired scheduled points only when seven newer successful UTC days remain.
 
 A schedule pins both the original VM allocation and the exact recipe release. After deploying a new release, disable the old schedule and create a new schedule UUID with the successful release ID. Reusing an existing schedule UUID with different inputs conflicts. A disabled schedule stays disabled on replay. Source replacement never silently transfers a schedule. Only one enabled schedule per machine/app is permitted, with ten active schedules and thirty new schedule admissions per account per hour.
 
@@ -46,6 +46,24 @@ The admitting grant must remain valid with `backup:create` for the source projec
 Storage reservations and capture limits are identical to manual capture. An exhausted allowance refuses the new daily admission and reports it without deleting a previous backup. The service does not promise continuous protection when authority, storage or the pinned source recipe is unavailable. Check `lastAttempt` and `lastSuccessfulBackup`; their timestamps expose degraded protection.
 
 The API provides `POST/GET /v1/machines/:machineId/backup-schedules` and `GET/DELETE /v1/backup-schedules/:id`. Schedule creation and first capture are separate admissions. The schedule, each run's backup ID and next due time survive worker restarts in PostgreSQL.
+
+## Retention and explicit purge
+
+The separate retention operator can prune scheduled backups after their protection interval expires. It keeps at least seven newer successful UTC capture days for the same machine and data recipe. Multiple captures on one day do not replace another daily recovery point. The app, PostgreSQL service/database/user and declared files must match; deployment release and schedule IDs may change. Failed captures never count, and manual captures are retained until explicitly purged. Changing the recipe can therefore leave old backups requiring an explicit decision. Retention waits for active or unresolved restores and source staging cleanup.
+
+To permanently remove a specific recovery point within the customer's authorization:
+
+```sh
+acld backup purge <backup-uuid> --id <purge-uuid> --allow-data-loss
+acld backup purge-inspect <purge-uuid>
+acld backup inspect <backup-uuid>
+```
+
+This requires `backup:purge` for the source project and explicit data-loss acknowledgement. Acceptance changes the backup to `purge_pending`, preventing new restores. The operation is irreversible and survives CLI exit, credential expiry and revocation, like an already accepted VM destruction. An unfinished restore blocks admission until it finishes or its owned target is destroyed. Reuse the same UUID after a lost reply. Purging may explicitly remove the final backup; automatic retention never does.
+
+`waiting` reports the protection deadline. `blocked` reports unconfirmed deletion and the next retry. Neither releases storage. The worker checks the actual object retention, including extensions, persists intent before deleting only the recorded version, and confirms exact-version absence before atomically recording `purged` and releasing reserved bytes. Lost replies retry the same version; permission failures and network errors never establish absence. Another version at the same key is untouched. Database/audit records and encrypted key envelopes remain as ownership evidence; the ciphertext object is removed. Unresolved uploads require operator recovery before purge.
+
+API: `POST /v1/backups/:id/purge` with `{ "id": "<uuid>", "allowDataLoss": true }`, then `GET /v1/backup-purges/:id`. API responses omit storage identities, object receipts and encryption keys.
 
 ## Capture and recovery guarantees
 
@@ -119,9 +137,37 @@ Hetzner keys have broad access to buckets in their own project by default. Put r
 
 An existing exact version remains readable after its promised retention ends. This does not claim continuing deletion protection. Seven days of retention is a configured protection interval, not evidence that daily backups are already scheduled.
 
+### Separate retention operator
+
+Run `node apps/control/dist/backup-retention-main.js` with `DATABASE_URL` and `ACLD_BACKUP_RETENTION_CONFIG` pointing to an absolute, owner-only JSON file:
+
+```json
+{
+  "version": 1,
+  "store": {
+    "endpoint": "https://fsn1.your-objectstorage.com",
+    "region": "fsn1",
+    "bucket": "your-protected-backups",
+    "keyPrefix": "protected",
+    "maxBytes": 1073741824,
+    "requestTimeoutMs": 15000
+  },
+  "deleterCredentialsFile": "/run/secrets/backup-deleter.json",
+  "pruneScheduled": true,
+  "maxObjects": 20,
+  "maxRunSeconds": 60
+}
+```
+
+The store endpoint/region/bucket/prefix must match capture configuration. This process uses a distinct deletion identity and does not load the ordinary runtime, provider keys, writer/reader credentials or wrapping keyring. Use a separate OS identity or container, and mount its credential only there. Do not add deletion privileges to the API, capture worker or guest. The bucket administrator stays separate from all runtime identities.
+
+Run the command periodically, for example hourly from an operator timer. It performs one bounded pass and exits. `pruneScheduled: false` processes only explicit pending purges. It admits and advances at most `maxObjects` per pass and stops starting work at `maxRunSeconds`; an in-flight S3 operation finishes within its per-request timeouts. Five-minute retries preserve storage reservations on uncertainty. Processes share the existing backup-worker lock, so deletion cannot overlap capture/restore scratch work. Run it again after a busy pass. Without this process, purge requests remain pending and automated retention does not execute.
+
+The deleter needs bucket protection reads, object-version metadata/retention reads, and deletion restricted to the configured prefix and an explicit version. `ListBucket` lets a missing HEAD return404 instead of403. The pinned MinIO fixture requires both `DeleteObject` and `DeleteObjectVersion`, conditioned on a nonempty, non-null lowercase `s3:versionid`; the policy is in `packages/backup-store/src/fixture/policies.ts`. It denies unversioned deletion, writes, retention changes and bypass. This is tested MinIO policy, not a verified Hetzner IAM recipe. Verify equivalent provider restrictions before deployment.
+
 ## Verification and failure lessons
 
-`pnpm smoke:backup-store` uses a pinned, network-isolated local MinIO fixture to verify exact-version reads, both retention modes, denied protected deletion and separate writer/reader permissions. It creates no provider bucket. `pnpm smoke:backups` exercises customer CLI/API/worker, source Compose/PostgreSQL, encrypted local S3 storage, wrapping-key rotation and a second native Ubuntu guest. These VM fixtures run sequentially with other VM smokes and retain exact ownership records after a failure.
+`pnpm smoke:backup-store` uses a pinned, network-isolated local MinIO fixture to verify exact-version reads, both retention modes, denied protected deletion and separate writer/reader permissions. It also verifies expired exact-version deletion, extension handling, preserved newer versions and denied writer/deleter operations. `pnpm smoke:backup-retention` exercises real CLI capture/purge/inspection, encryption, local S3 and a separately spawned retention process without writer/reader/keyring files. Its short Object Lock interval is fixture-only; production capture requires at least one day. Neither creates a provider bucket. `pnpm smoke:backups` exercises customer CLI/API/worker, source Compose/PostgreSQL, encrypted local S3 storage, wrapping-key rotation and a second native Ubuntu guest. These VM fixtures run sequentially with other VM smokes and retain exact ownership records after a failure.
 
 The first native run exposed an image sanitation allowlist that omitted `/var/lib/agent-backup`, although the installer recorded that new service home. Sanitation must cover every newly installed service home before image publication; the source schema was corrected and a new immutable guest bundle built. No guest or published bundle is patched in place to bypass this check.
 

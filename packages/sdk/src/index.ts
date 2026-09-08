@@ -3,6 +3,9 @@ export { loginConfiguration, exchangeGithubLogin, readLoginJson } from './login.
 import { z } from 'zod';
 import {
   backupCaptureRequestSchema,
+  backupPurgeIdSchema,
+  backupPurgeRequestSchema,
+  backupPurgeResponseSchema,
   backupScheduleIdSchema,
   backupScheduleRequestSchema,
   backupScheduleResponseSchema,
@@ -215,6 +218,20 @@ export class CloudClient {
     return this.request({
       path: `/v1/backups/${backupIdSchema.parse(id)}`,
       schema: backupResponseSchema,
+    });
+  }
+  purgeBackup(input: { backupId: string; request: z.input<typeof backupPurgeRequestSchema> }) {
+    return this.request({
+      path: `/v1/backups/${backupIdSchema.parse(input.backupId)}/purge`,
+      method: 'POST',
+      body: backupPurgeRequestSchema.parse(input.request),
+      schema: backupPurgeResponseSchema,
+    });
+  }
+  backupPurge(id: string) {
+    return this.request({
+      path: `/v1/backup-purges/${backupPurgeIdSchema.parse(id)}`,
+      schema: backupPurgeResponseSchema,
     });
   }
   restoreBackup(request: z.input<typeof restoreRequestSchema>) {

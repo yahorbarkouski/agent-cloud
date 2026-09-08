@@ -114,6 +114,8 @@ export const backupSummarySchema = z.strictObject({
   state: z.discriminatedUnion('kind', [
     z.strictObject({ kind: z.literal('pending') }),
     z.strictObject({ kind: z.literal('blocked'), reason: z.string().max(256) }),
+    z.strictObject({ kind: z.literal('purge_pending'), purgeId: z.uuidv4() }),
+    z.strictObject({ kind: z.literal('purged'), purgeId: z.uuidv4(), purgedAt: z.iso.datetime() }),
     z.strictObject({
       kind: z.literal('captured'),
       bytes: z.int().positive(),

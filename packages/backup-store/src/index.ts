@@ -1,4 +1,5 @@
 import {
+  DeleteObjectCommand,
   GetBucketVersioningCommand,
   GetObjectCommand,
   GetObjectLockConfigurationCommand,
@@ -7,6 +8,7 @@ import {
   ListObjectVersionsCommand,
   PutObjectCommand,
   S3Client,
+  S3ServiceException,
   type HeadObjectCommandOutput,
 } from '@aws-sdk/client-s3';
 import type { FileHandle } from 'node:fs/promises';
@@ -129,6 +131,7 @@ function store(value: BackupStoreConfiguration, credentials: BackupStoreCredenti
       (requireCurrentRetention && retained.RetainUntilDate.getTime() <= Date.now())
     )
       throw new Error('Object retention does not meet its recorded protection.');
+    return retained.RetainUntilDate.toISOString();
   }
   function checkMetadata(
     value: Pick<
@@ -374,6 +377,49 @@ export function createBackupReader(
           await s3.readVersion(receipt, file, false);
           return receipt;
         });
+      }),
+    close: () => {
+      s3.client.destroy();
+    },
+  };
+}
+
+/** Separate operator credentials only. The caller persists purge intent before invoking this API. */
+export function createBackupDeleter(
+  config: BackupStoreConfiguration,
+  credentials: BackupStoreCredentials,
+) {
+  const s3 = store(config, credentials);
+  return {
+    checkProtection: () => sanitized('protection', s3.checkProtection),
+    purge: (
+      value: BackupObjectReceipt,
+    ): Promise<{ kind: 'absent' } | { kind: 'retained'; retainUntil: string }> =>
+      sanitized('purge', async () => {
+        const receipt = s3.receipt(value);
+        const target = { ...s3.bucket, Key: receipt.key, VersionId: receipt.versionId };
+        await s3.checkProtection();
+        async function exists() {
+          let head: HeadObjectCommandOutput;
+          try {
+            head = await s3.client.send(new HeadObjectCommand(target), s3.signal());
+          } catch (error) {
+            // A permission error, missing retention response or failed DELETE is not absence.
+            if (error instanceof S3ServiceException && error.$metadata.httpStatusCode === 404)
+              return false;
+            throw error;
+          }
+          s3.checkMetadata(head, receipt);
+          return true;
+        }
+        if (!(await exists())) return { kind: 'absent' };
+        const retainUntil = await s3.checkRetention(receipt, false);
+        if (Date.parse(retainUntil) > Date.now()) return { kind: 'retained', retainUntil };
+        // Never issue an unversioned delete or request governance bypass. Repeating this
+        // exact version after an uncertain reply cannot affect a replacement version.
+        await s3.client.send(new DeleteObjectCommand(target), s3.signal());
+        if (await exists()) throw new Error('Backup version absence is not verified.');
+        return { kind: 'absent' };
       }),
     close: () => {
       s3.client.destroy();

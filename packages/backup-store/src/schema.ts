@@ -85,7 +85,8 @@ export class BackupStoreError extends Error {
     | 'upload'
     | 'recover'
     | 'inspect'
-    | 'download';
+    | 'download'
+    | 'purge';
   constructor(operation: BackupStoreError['operation']) {
     super(
       operation === 'upload'

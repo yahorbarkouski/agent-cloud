@@ -44,7 +44,7 @@ export function createTasks(input: {
             await input.backups?.advance(request.kind, request.id);
             const pending = await input.connection.db.execute<{ pending: boolean }>(
               request.kind === 'backup'
-                ? sql`SELECT record->'state'->>'kind' = 'pending' OR (work->>'kind' = 'stored' AND work->>'guestCleanup' = 'pending' AND (work->>'attempts')::int < 5) AS pending FROM backups WHERE id = ${request.id}`
+                ? sql`SELECT record->'state'->>'kind' = 'pending' OR (record->'state'->>'kind' = 'captured' AND work->>'kind' = 'stored' AND work->>'guestCleanup' = 'pending' AND (work->>'attempts')::int < 5) AS pending FROM backups WHERE id = ${request.id}`
                 : sql`SELECT record->'state'->>'kind' = 'pending' AS pending FROM backup_restores WHERE id = ${request.id}`,
             );
             if (pending.rows[0]?.pending)
@@ -121,7 +121,7 @@ export function createTasks(input: {
           id: string;
         }>(sql`
           SELECT 'backup' AS kind, id FROM backups WHERE record->'state'->>'kind' = 'pending'
-            OR (work->>'kind' = 'stored' AND work->>'guestCleanup' = 'pending' AND (work->>'attempts')::int < 5)
+            OR (record->'state'->>'kind' = 'captured' AND work->>'kind' = 'stored' AND work->>'guestCleanup' = 'pending' AND (work->>'attempts')::int < 5)
           UNION ALL SELECT 'restore' AS kind, id FROM backup_restores WHERE record->'state'->>'kind' = 'pending' LIMIT 1000`);
         for (const row of pending.rows) await enqueueBackup(input.connection.db, row.kind, row.id);
       }

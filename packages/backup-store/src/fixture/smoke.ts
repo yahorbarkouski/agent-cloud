@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { build } from 'esbuild';
 import { z } from 'zod';
+import { createFixtureDeleterPolicy } from './policies.js';
 
 // Official multiarch releases; pulls are pinned, while fixture containers have no external network.
 const image = 'minio/minio@sha256:d249d1fb6966de4d8ad26c04754b545205ff15a62e4fd19ebd0f26fa5baacbc0';
@@ -20,6 +21,10 @@ const administrator = {
 };
 const writer = { accessKeyId: 'fixture-writer', secretAccessKey: randomBytes(24).toString('hex') };
 const reader = { accessKeyId: 'fixture-reader', secretAccessKey: randomBytes(24).toString('hex') };
+const deleter = {
+  accessKeyId: 'fixture-deleter',
+  secretAccessKey: randomBytes(24).toString('hex'),
+};
 const bucket = 'protected-backups';
 let container: string | undefined;
 let runner: string | undefined;
@@ -62,7 +67,7 @@ try {
   );
   await writeFile(
     join(directory, 'identities.json'),
-    JSON.stringify({ administrator, writer, reader }),
+    JSON.stringify({ administrator, writer, reader, deleter }),
     { mode: 0o600 },
   );
   await build({
@@ -129,30 +134,34 @@ try {
   for (const [role, identity] of [
     ['writer', writer],
     ['reader', reader],
+    ['deleter', deleter],
   ] satisfies Array<[string, typeof writer]>) {
-    const policy = {
-      Version: '2012-10-17',
-      Statement: [
-        {
-          Effect: 'Allow',
-          Action: [
-            's3:GetBucketVersioning',
-            's3:GetBucketObjectLockConfiguration',
-            ...(role === 'writer' ? ['s3:ListBucketVersions'] : []),
-          ],
-          Resource: [`arn:aws:s3:::${bucket}`],
-        },
-        {
-          Effect: 'Allow',
-          Action: [
-            's3:GetObjectVersion',
-            's3:GetObjectRetention',
-            ...(role === 'writer' ? ['s3:PutObject', 's3:PutObjectRetention'] : []),
-          ],
-          Resource: [`arn:aws:s3:::${bucket}/protected/*`],
-        },
-      ],
-    };
+    const policy =
+      role === 'deleter'
+        ? createFixtureDeleterPolicy(bucket, 'protected')
+        : {
+            Version: '2012-10-17',
+            Statement: [
+              {
+                Effect: 'Allow',
+                Action: [
+                  's3:GetBucketVersioning',
+                  's3:GetBucketObjectLockConfiguration',
+                  ...(role === 'writer' ? ['s3:ListBucketVersions'] : []),
+                ],
+                Resource: [`arn:aws:s3:::${bucket}`],
+              },
+              {
+                Effect: 'Allow',
+                Action: [
+                  's3:GetObjectVersion',
+                  's3:GetObjectRetention',
+                  ...(role === 'writer' ? ['s3:PutObject', 's3:PutObjectRetention'] : []),
+                ],
+                Resource: [`arn:aws:s3:::${bucket}/protected/*`],
+              },
+            ],
+          };
     await writeFile(join(directory, `${role}.json`), JSON.stringify(policy), { mode: 0o600 });
     await mc(['admin', 'user', 'add', 'fixture', identity.accessKeyId, identity.secretAccessKey]);
     await mc(['admin', 'policy', 'create', 'fixture', role, `/fixture/${role}.json`]);
@@ -211,6 +220,12 @@ if (passed)
       separateCredentials: true,
       exactVersionDeletionDenied: true,
       readerWriteDenied: true,
+      exactVersionPurgeVerified: true,
+      retentionExtensionsHonored: true,
+      writerDeleteDenied: true,
+      deleterWriteDenied: true,
+      deleterBypassDenied: true,
+      deleterUnversionedDeleteDenied: true,
       cleanup: true,
       providerProof: false,
     }) + '\n',

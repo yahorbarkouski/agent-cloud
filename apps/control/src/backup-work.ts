@@ -197,7 +197,7 @@ export function createBackupWorker(input: {
     const [row] = await db.select().from(backups).where(eq(backups.id, id));
     if (!row) return;
     const record = backupRecord(row);
-    if (record.state.kind === 'blocked') return;
+    if (record.state.kind !== 'pending' && record.state.kind !== 'captured') return;
     let work = backupWorkSchema.parse(row.work);
     const scope = {
       accountId: record.accountId,

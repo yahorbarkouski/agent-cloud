@@ -8,6 +8,7 @@ import { z } from 'zod';
 import type { Connection } from '../../packages/db/src/index.js';
 import type { MachineProvider } from '../../packages/contracts/dist/index.js';
 import type { Signer } from '../../packages/pki/dist/index.js';
+import { createFixtureDeleterPolicy } from '../../packages/backup-store/src/fixture/policies.js';
 import { createBackupRuntime } from '../../apps/control/src/backup-runtime.js';
 
 const image = 'minio/minio@sha256:d249d1fb6966de4d8ad26c04754b545205ff15a62e4fd19ebd0f26fa5baacbc0';
@@ -19,6 +20,29 @@ export async function prepareBackupStoreFixture(input: {
   signer: Signer;
   scratch: string;
 }) {
+  const fixture = await prepareProtectedStoreFixture({ scratch: input.scratch });
+  try {
+    const runtime = await createBackupRuntime({
+      connection: input.connection,
+      provider: input.provider,
+      signer: () => Promise.resolve(input.signer),
+      path: fixture.configFile,
+    });
+    return {
+      runtime,
+      rotateWrappingKey: () => fixture.rotateWrappingKey(),
+      stop: async () => {
+        await runtime.close();
+        await fixture.stop();
+      },
+    };
+  } catch (error) {
+    await fixture.stop();
+    throw error;
+  }
+}
+
+export async function prepareProtectedStoreFixture(input: { scratch: string }) {
   const id = randomUUID();
   const name = `agent-cloud-backup-${id.slice(0, 8)}`;
   const ownership = resolve(`.local/backup-store-${id}.json`);
@@ -36,9 +60,12 @@ export async function prepareBackupStoreFixture(input: {
     accessKeyId: 'fixture-reader',
     secretAccessKey: randomBytes(32).toString('hex'),
   };
+  const deleter = {
+    accessKeyId: 'fixture-deleter',
+    secretAccessKey: randomBytes(32).toString('hex'),
+  };
   const bucket = 'protected-backups';
   let container: string | undefined;
-  let runtime: Awaited<ReturnType<typeof createBackupRuntime>> | undefined;
   async function docker(args: string[]) {
     try {
       return (
@@ -49,7 +76,6 @@ export async function prepareBackupStoreFixture(input: {
     }
   }
   async function stop() {
-    await runtime?.close();
     if (container) {
       const actual = z
         .array(
@@ -144,30 +170,34 @@ export async function prepareBackupStoreFixture(input: {
     for (const [role, identity] of [
       ['writer', writer],
       ['reader', reader],
+      ['deleter', deleter],
     ] satisfies Array<[string, typeof writer]>) {
-      const policy = {
-        Version: '2012-10-17',
-        Statement: [
-          {
-            Effect: 'Allow',
-            Action: [
-              's3:GetBucketVersioning',
-              's3:GetBucketObjectLockConfiguration',
-              ...(role === 'writer' ? ['s3:ListBucketVersions'] : []),
-            ],
-            Resource: [`arn:aws:s3:::${bucket}`],
-          },
-          {
-            Effect: 'Allow',
-            Action: [
-              's3:GetObjectVersion',
-              's3:GetObjectRetention',
-              ...(role === 'writer' ? ['s3:PutObject', 's3:PutObjectRetention'] : []),
-            ],
-            Resource: [`arn:aws:s3:::${bucket}/protected/*`],
-          },
-        ],
-      };
+      const policy =
+        role === 'deleter'
+          ? createFixtureDeleterPolicy(bucket, 'protected')
+          : {
+              Version: '2012-10-17',
+              Statement: [
+                {
+                  Effect: 'Allow',
+                  Action: [
+                    's3:GetBucketVersioning',
+                    's3:GetBucketObjectLockConfiguration',
+                    ...(role === 'writer' ? ['s3:ListBucketVersions'] : []),
+                  ],
+                  Resource: [`arn:aws:s3:::${bucket}`],
+                },
+                {
+                  Effect: 'Allow',
+                  Action: [
+                    's3:GetObjectVersion',
+                    's3:GetObjectRetention',
+                    ...(role === 'writer' ? ['s3:PutObject', 's3:PutObjectRetention'] : []),
+                  ],
+                  Resource: [`arn:aws:s3:::${bucket}/protected/*`],
+                },
+              ],
+            };
       await writeFile(join(directory, `${role}-policy.json`), JSON.stringify(policy), {
         mode: 0o600,
       });
@@ -216,14 +246,9 @@ export async function prepareBackupStoreFixture(input: {
       }),
       { mode: 0o600 },
     );
-    runtime = await createBackupRuntime({
-      connection: input.connection,
-      provider: input.provider,
-      signer: () => Promise.resolve(input.signer),
-      path: configFile,
-    });
     return {
-      runtime,
+      configFile,
+      deleterCredentialsFile: join(directory, 'deleter-credentials.json'),
       stop,
       async rotateWrappingKey() {
         const keyring = z

@@ -379,6 +379,6 @@ it('registers backup commands in the actual CLI entry point', async () => {
   );
   expect(stdout).toContain('capture');
   expect(stdout).toContain('restore-wait');
-  expect(stdout).not.toContain('purge');
+  expect(stdout).toContain('purge-inspect');
   expect(stdout).not.toContain(token);
 });

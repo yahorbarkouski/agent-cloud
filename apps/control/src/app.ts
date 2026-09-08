@@ -36,6 +36,8 @@ import {
   hostnameSchema,
   domainCreateSchema,
   backupCaptureRequestSchema,
+  backupPurgeRequestSchema,
+  backupPurgeIdSchema,
   backupScheduleRequestSchema,
   backupScheduleIdSchema,
   backupIdSchema,
@@ -308,6 +310,26 @@ export function createApp(input: {
   app.get('/v1/catalog', (c) => c.json(input.catalog()));
   if (input.backups && input.customerAccess !== 'disabled') {
     const backups = input.backups;
+    app.post('/v1/backups/:id/purge', async (c) =>
+      c.json(
+        {
+          purge: await backups.purges.request(
+            c.get('principal'),
+            backupIdSchema.parse(c.req.param('id')),
+            backupPurgeRequestSchema.parse(await c.req.json<unknown>()),
+          ),
+        },
+        202,
+      ),
+    );
+    app.get('/v1/backup-purges/:id', async (c) =>
+      c.json({
+        purge: await backups.purges.inspect(
+          c.get('principal'),
+          backupPurgeIdSchema.parse(c.req.param('id')),
+        ),
+      }),
+    );
     app.post('/v1/machines/:machineId/backup-schedules', async (c) =>
       c.json(
         {

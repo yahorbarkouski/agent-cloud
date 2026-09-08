@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   BackupStoreError,
+  createBackupDeleter,
   createBackupReader,
   createBackupWriter,
   type BackupObjectReceipt,
@@ -34,6 +35,10 @@ const xml = (value: string) =>
 const md5 = (value: Buffer) => createHash('md5').update(value).digest('base64');
 const writerCredentials = { accessKeyId: 'writer-key', secretAccessKey: 'private-writer-secret' };
 const readerCredentials = { accessKeyId: 'reader-key', secretAccessKey: 'private-reader-secret' };
+const deleterCredentials = {
+  accessKeyId: 'deleter-key',
+  secretAccessKey: 'private-deleter-secret',
+};
 async function bytes(request: IncomingMessage) {
   const chunks: Buffer[] = [];
   for await (const chunk of request) {
@@ -53,6 +58,12 @@ async function fixture() {
     objectLock: 'Enabled',
     deny: '',
     losePutReply: false,
+    loseDeleteReply: false,
+    loseDeleteBeforeApply: false,
+    ignoreDelete: false,
+    denyHeadAfterDelete: false,
+    disconnectHead: false,
+    missingRetention: false,
     rejectConditional: false,
     latestDeleteMarker: false,
     corruptDownload: false,
@@ -82,6 +93,10 @@ async function fixture() {
               : method;
       if (faults.deny === operation) {
         error(403, 'AccessDenied');
+        return;
+      }
+      if (method === 'HEAD' && faults.disconnectHead) {
+        request.socket.destroy();
         return;
       }
       if (method === 'PUT') {
@@ -163,9 +178,36 @@ async function fixture() {
         return;
       }
       if (operation === 'retention') {
+        if (faults.missingRetention) {
+          error(404, 'NoSuchVersion');
+          return;
+        }
         response.end(
           `<Retention xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Mode>${version.mode}</Mode><RetainUntilDate>${version.retainUntil}</RetainUntilDate></Retention>`,
         );
+        return;
+      }
+      if (method === 'DELETE') {
+        if (
+          !request.headers.authorization?.includes('Credential=deleter-key/') ||
+          'x-amz-bypass-governance-retention' in request.headers ||
+          Date.parse(version.retainUntil) > Date.now()
+        ) {
+          error(403, 'AccessDenied');
+          return;
+        }
+        if (faults.loseDeleteBeforeApply) {
+          request.socket.destroy();
+          return;
+        }
+        if (!faults.ignoreDelete) versions.splice(versions.indexOf(version), 1);
+        if (faults.loseDeleteReply) {
+          request.socket.destroy();
+          return;
+        }
+        if (faults.denyHeadAfterDelete) faults.deny = 'HEAD';
+        response.writeHead(204);
+        response.end();
         return;
       }
       response.setHeader('x-amz-version-id', version.versionId);
@@ -198,16 +240,19 @@ async function fixture() {
   };
   const writer = createBackupWriter(config, writerCredentials);
   const reader = createBackupReader(config, readerCredentials);
+  const deleter = createBackupDeleter(config, deleterCredentials);
   return {
     config,
     writer,
     reader,
+    deleter,
     versions,
     calls,
     faults,
     close: async () => {
       writer.close();
       reader.close();
+      deleter.close();
       server.closeAllConnections();
       await new Promise<void>((resolve, reject) =>
         server.close((error) => {
@@ -250,6 +295,176 @@ const prepare = () =>
     retention: { mode: 'GOVERNANCE', retainUntil: new Date(Date.now() + 86_400_000).toISOString() },
   });
 const putCalls = () => f.calls.filter((call) => call.method === 'PUT');
+const deleteCalls = () => f.calls.filter((call) => call.method === 'DELETE');
+async function expiredReceipt() {
+  const receipt = await f.writer.upload({ intent: await prepare(), file });
+  vi.spyOn(Date, 'now').mockReturnValue(Date.parse(receipt.retention.retainUntil) + 1000);
+  f.calls.length = 0;
+  return receipt;
+}
+
+it.each(['GOVERNANCE', 'COMPLIANCE'] satisfies Array<'GOVERNANCE' | 'COMPLIANCE'>)(
+  'leaves a %s version retained without a delete request',
+  async (mode) => {
+    const intent = await f.writer.prepareUpload({
+      attemptId: randomUUID(),
+      file,
+      retention: { mode, retainUntil: new Date(Date.now() + 86_400_000).toISOString() },
+    });
+    const receipt = await f.writer.upload({ intent, file });
+    expect(await f.deleter.checkProtection()).toMatchObject({ versioning: true, objectLock: true });
+    expect(await f.deleter.purge(receipt)).toEqual({
+      kind: 'retained',
+      retainUntil: receipt.retention.retainUntil,
+    });
+    expect(deleteCalls()).toHaveLength(0);
+    expect(f.deleter).not.toHaveProperty('upload');
+    expect(f.deleter).not.toHaveProperty('download');
+    expect(f.writer).not.toHaveProperty('purge');
+    expect(f.reader).not.toHaveProperty('purge');
+  },
+);
+
+it('honors an extended actual retention date after the recorded minimum expires', async () => {
+  const receipt = await expiredReceipt();
+  const version = f.versions[0];
+  if (!version) throw new Error('Missing stored fixture.');
+  version.retainUntil = new Date(Date.now() + 86_400_000).toISOString();
+  expect(await f.deleter.purge(receipt)).toEqual({
+    kind: 'retained',
+    retainUntil: version.retainUntil,
+  });
+  expect(deleteCalls()).toHaveLength(0);
+});
+
+it('deletes only the owned expired version and verifies absence while another version survives', async () => {
+  const receipt = await expiredReceipt();
+  const original = f.versions[0];
+  if (!original) throw new Error('Missing stored fixture.');
+  const replacement = { ...original, versionId: randomUUID(), body: randomBytes(32) };
+  f.versions.push(replacement);
+  expect(await f.deleter.purge(receipt)).toEqual({ kind: 'absent' });
+  expect(f.versions).toEqual([replacement]);
+  const calls = deleteCalls();
+  expect(calls).toHaveLength(1);
+  expect(new URL(calls[0]?.path ?? '', f.config.endpoint).searchParams.get('versionId')).toBe(
+    receipt.versionId,
+  );
+  expect(calls[0]?.headers.authorization).toContain('Credential=deleter-key/');
+  expect(f.calls.some((call) => 'x-amz-bypass-governance-retention' in call.headers)).toBe(false);
+  expect(f.calls.at(-1)?.method).toBe('HEAD');
+  expect(await f.deleter.purge(receipt)).toEqual({ kind: 'absent' });
+  expect(deleteCalls()).toHaveLength(1);
+});
+
+it('recovers a lost delete reply by HEAD without deleting a surviving replacement', async () => {
+  const receipt = await expiredReceipt();
+  const original = f.versions[0];
+  if (!original) throw new Error('Missing stored fixture.');
+  const replacement = { ...original, versionId: randomUUID() };
+  f.versions.push(replacement);
+  f.faults.loseDeleteReply = true;
+  await expect(f.deleter.purge(receipt)).rejects.toThrow('Backup storage purge failed.');
+  expect(deleteCalls()).toHaveLength(1);
+  expect(await f.deleter.purge(receipt)).toEqual({ kind: 'absent' });
+  expect(deleteCalls()).toHaveLength(1);
+  expect(f.versions).toEqual([replacement]);
+});
+
+it('can explicitly retry an unapplied delete using only the same recorded version', async () => {
+  const receipt = await expiredReceipt();
+  f.faults.loseDeleteBeforeApply = true;
+  await expect(f.deleter.purge(receipt)).rejects.toThrow(BackupStoreError);
+  expect(f.versions).toHaveLength(1);
+  f.faults.loseDeleteBeforeApply = false;
+  expect(await f.deleter.purge(receipt)).toEqual({ kind: 'absent' });
+  expect(deleteCalls()).toHaveLength(2);
+  for (const call of deleteCalls())
+    expect(new URL(call.path, f.config.endpoint).searchParams.get('versionId')).toBe(
+      receipt.versionId,
+    );
+});
+
+it.each(['versioning', 'object-lock', 'HEAD', 'retention', 'DELETE'])(
+  'never treats denied %s permission as absence and sanitizes purge failures',
+  async (operation) => {
+    const receipt = await expiredReceipt();
+    f.faults.deny = operation;
+    await expect(f.deleter.purge(receipt)).rejects.toMatchObject({
+      name: 'BackupStoreError',
+      operation: 'purge',
+      message: 'Backup storage purge failed.',
+    });
+    expect(f.versions).toHaveLength(1);
+    expect(deleteCalls()).toHaveLength(operation === 'DELETE' ? 1 : 0);
+  },
+);
+
+it('requires successful bucket protection before interpreting a missing version', async () => {
+  const receipt = await expiredReceipt();
+  f.versions.length = 0;
+  f.faults.objectLock = 'Disabled';
+  await expect(f.deleter.purge(receipt)).rejects.toThrow(BackupStoreError);
+  expect(f.calls.some((call) => call.method === 'HEAD')).toBe(false);
+  f.faults.objectLock = 'Enabled';
+  expect(await f.deleter.purge(receipt)).toEqual({ kind: 'absent' });
+  expect(deleteCalls()).toHaveLength(0);
+});
+
+it('does not accept a retention 404 or interrupted HEAD as exact-version absence', async () => {
+  const receipt = await expiredReceipt();
+  f.faults.missingRetention = true;
+  await expect(f.deleter.purge(receipt)).rejects.toThrow(BackupStoreError);
+  f.faults.missingRetention = false;
+  f.faults.disconnectHead = true;
+  await expect(f.deleter.purge(receipt)).rejects.toThrow(BackupStoreError);
+  expect(deleteCalls()).toHaveLength(0);
+});
+
+it('does not claim absence when deletion verification is denied or still finds the version', async () => {
+  const receipt = await expiredReceipt();
+  f.faults.ignoreDelete = true;
+  await expect(f.deleter.purge(receipt)).rejects.toThrow(BackupStoreError);
+  expect(f.versions).toHaveLength(1);
+  f.faults.ignoreDelete = false;
+  f.faults.denyHeadAfterDelete = true;
+  await expect(f.deleter.purge(receipt)).rejects.toThrow(BackupStoreError);
+  expect(f.versions).toHaveLength(0);
+  f.faults.deny = '';
+  expect(await f.deleter.purge(receipt)).toEqual({ kind: 'absent' });
+  expect(deleteCalls()).toHaveLength(2);
+});
+
+it('refuses foreign receipts and ownership metadata mismatch before deleting', async () => {
+  const receipt = await expiredReceipt();
+  await expect(f.deleter.purge({ ...receipt, storeId: '0'.repeat(64) })).rejects.toThrow(
+    BackupStoreError,
+  );
+  await expect(
+    f.deleter.purge({ ...receipt, key: `foreign/${receipt.attemptId}.enc` }),
+  ).rejects.toThrow(BackupStoreError);
+  await expect(f.deleter.purge({ ...receipt, versionId: 'null' })).rejects.toThrow(
+    BackupStoreError,
+  );
+  expect(f.calls).toHaveLength(0);
+  const version = f.versions[0];
+  if (!version) throw new Error('Missing stored fixture.');
+  version.metadata['acld-intent'] = '0'.repeat(64);
+  await expect(f.deleter.purge(receipt)).rejects.toThrow(BackupStoreError);
+  expect(deleteCalls()).toHaveLength(0);
+});
+
+it('refuses shortened or changed retention even after recorded expiry', async () => {
+  const receipt = await expiredReceipt();
+  const version = f.versions[0];
+  if (!version) throw new Error('Missing stored fixture.');
+  version.retainUntil = new Date(Date.parse(receipt.retention.retainUntil) - 1000).toISOString();
+  await expect(f.deleter.purge(receipt)).rejects.toThrow(BackupStoreError);
+  version.retainUntil = receipt.retention.retainUntil;
+  version.mode = 'COMPLIANCE';
+  await expect(f.deleter.purge(receipt)).rejects.toThrow(BackupStoreError);
+  expect(deleteCalls()).toHaveLength(0);
+});
 
 it('uploads, verifies and downloads an exact retained ciphertext version with separate credentials', async () => {
   expect(await f.writer.checkProtection()).toMatchObject({ versioning: true, objectLock: true });

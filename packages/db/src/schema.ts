@@ -793,6 +793,32 @@ export const backupRestores = pgTable(
   ],
 );
 
+export const backupPurges = pgTable(
+  'backup_purges',
+  {
+    id: text('id').primaryKey(),
+    accountId: text('account_id').notNull(),
+    backupId: text('backup_id').notNull().unique(),
+    grantId: text('grant_id'),
+    record: jsonb('record').notNull(),
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.accountId, t.backupId],
+      foreignColumns: [backups.accountId, backups.id],
+    }),
+    foreignKey({
+      columns: [t.accountId, t.grantId],
+      foreignColumns: [grants.accountId, grants.id],
+    }),
+    index('backup_purges_due')
+      .on(t.nextAttemptAt)
+      .where(sql`${t.nextAttemptAt} IS NOT NULL`),
+  ],
+);
+
 export const backupSchedules = pgTable(
   'backup_schedules',
   {

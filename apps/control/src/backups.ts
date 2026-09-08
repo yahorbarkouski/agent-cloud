@@ -20,6 +20,7 @@ import {
 } from '@agent-cloud/db';
 import type { z } from 'zod';
 import { authorize, loadAuthority } from './auth.js';
+import { createBackupPurges } from './backup-purges.js';
 import { createBackupSchedules } from './backup-schedules.js';
 import { admit, lockAccount } from './lifecycle.js';
 import {
@@ -261,7 +262,16 @@ export function createBackups(input: {
     return record;
   }
   const schedules = createBackupSchedules({ db: input.db, capture: captureInTransaction });
-  return { capture, list, inspect, restore, inspectRestore, schedules, advance: input.advance };
+  return {
+    capture,
+    list,
+    inspect,
+    restore,
+    inspectRestore,
+    schedules,
+    purges: createBackupPurges(input.db),
+    advance: input.advance,
+  };
 }
 export type BackupService = ReturnType<typeof createBackups>;
 

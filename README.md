@@ -2,7 +2,7 @@
 
 An open-source cloud that customers operate through their existing coding agents. The product supplies machines, credentials, lifecycle operations, application deployment and recovery. It does not contain an AI agent.
 
-**Current status:** the internal reference application passed the complete CLI/API path on a cheap Hetzner VM: frontend/backend/PostgreSQL, public HTTPS, disconnect/reconnect, logs, an update preserving data, and verified infrastructure cleanup. See [the verification record](docs/reference-deployment-verification.json). GitHub device sign-in, delegated access and revocation are verified. Managed HTTPS routing, protected backups, isolated restore and public restore cutover are native verified; daily scheduled capture is native verified. Automatic backup pruning remains unfinished. Stripe is excluded. See [the current handoff](docs/CONTEXT.md) and [internal reference commands](docs/architecture/internal-reference.md).
+**Current status:** the internal reference application passed the complete CLI/API path on a cheap Hetzner VM: frontend/backend/PostgreSQL, public HTTPS, disconnect/reconnect, logs, an update preserving data, and verified infrastructure cleanup. See [the verification record](docs/reference-deployment-verification.json). GitHub device sign-in, delegated access and revocation are verified. Managed HTTPS routing, protected backups, isolated restore and public restore cutover are native verified; daily scheduled capture is native verified. Backup retention and explicit purge are verified through local S3 and a separate operator process. Stripe is excluded. See [the current handoff](docs/CONTEXT.md) and [internal reference commands](docs/architecture/internal-reference.md).
 
 Project-scoped delegation is available with `acld grant create`, `grant list` and `grant revoke`. Issued secrets are saved to an owner-only file; see [the agent instructions](skills/agent-cloud/SKILL.md#delegate-access). Customer SSH and SFTP are connected through a separate access gateway. See [customer access](docs/architecture/customer-ssh.md) for commands, source restrictions and operator configuration. Durable `run submit/inspect/logs/cancel` commands also work through that authenticated path; [the command guide](docs/architecture/durable-commands.md) explains retries and recovery. GitHub device sign-in is connected for operator-admitted customers. Use `acld login --server <url>`; see [customer authentication](docs/architecture/customer-authentication.md) for setup, delegation and interrupted-login recovery.
 
@@ -107,6 +107,7 @@ pnpm smoke:runs
 pnpm smoke:compose
 pnpm smoke:hosting
 pnpm smoke:backup-store
+pnpm smoke:backup-retention
 pnpm smoke:backups
 pnpm smoke:image
 pnpm smoke:builder

@@ -23,4 +23,5 @@ export * from './compose.js';
 export * from './login.js';
 export * from './hosting.js';
 export * from './backups.js';
+export * from './backup-purges.js';
 export * from './backup-schedules.js';

@@ -1,14 +1,22 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { setTimeout } from 'node:timers/promises';
 import { z } from 'zod';
 import {
   CreateBucketCommand,
   DeleteObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
+  PutObjectRetentionCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
-import { backupStoreCredentialsSchema, createBackupReader, createBackupWriter } from '../index.js';
+import {
+  backupStoreCredentialsSchema,
+  createBackupDeleter,
+  createBackupReader,
+  createBackupWriter,
+} from '../index.js';
 
 async function denied(work: Promise<unknown>, objectLock = false) {
   try {
@@ -49,6 +57,7 @@ async function prove() {
       administrator: backupStoreCredentialsSchema,
       writer: backupStoreCredentialsSchema,
       reader: backupStoreCredentialsSchema,
+      deleter: backupStoreCredentialsSchema,
     })
     .parse(JSON.parse(await readFile(join(directory, 'identities.json'), 'utf8')));
   const config = {
@@ -81,8 +90,23 @@ async function prove() {
       secretAccessKey: identities.reader.secretAccessKey,
     },
   });
+  const writerClient = new S3Client({
+    ...options,
+    credentials: {
+      accessKeyId: identities.writer.accessKeyId,
+      secretAccessKey: identities.writer.secretAccessKey,
+    },
+  });
+  const deleterClient = new S3Client({
+    ...options,
+    credentials: {
+      accessKeyId: identities.deleter.accessKeyId,
+      secretAccessKey: identities.deleter.secretAccessKey,
+    },
+  });
   const writer = createBackupWriter(config, identities.writer);
   const reader = createBackupReader(config, identities.reader);
+  const deleter = createBackupDeleter(config, identities.deleter);
   try {
     stage = 'bucket creation';
     await administrator.send(
@@ -92,6 +116,8 @@ async function prove() {
     await writer.checkProtection();
     stage = 'reader protection';
     await reader.checkProtection();
+    stage = 'deleter protection';
+    await deleter.checkProtection();
     const file = join(directory, 'opaque-ciphertext');
     await writeFile(file, randomBytes(65_536), { mode: 0o600 });
     for (const mode of ['GOVERNANCE', 'COMPLIANCE'] satisfies Array<'GOVERNANCE' | 'COMPLIANCE'>) {
@@ -99,7 +125,8 @@ async function prove() {
       const intent = await writer.prepareUpload({
         attemptId: randomUUID(),
         file,
-        retention: { mode, retainUntil: new Date(Date.now() + 86_400_000).toISOString() },
+        // Short retention is confined to this disposable, network-isolated fixture.
+        retention: { mode, retainUntil: new Date(Date.now() + 4000).toISOString() },
       });
       stage = `${mode} upload`;
       const receipt = await writer.upload({ intent, file });
@@ -124,6 +151,81 @@ async function prove() {
         ),
         true,
       );
+      stage = `${mode} retained purge`;
+      const retained = await deleter.purge(receipt);
+      if (retained.kind !== 'retained' || retained.retainUntil !== receipt.retention.retainUntil)
+        throw new Error('Fixture did not preserve retention.');
+      const extendedUntil = new Date(Date.parse(receipt.retention.retainUntil) + 2000);
+      await administrator.send(
+        new PutObjectRetentionCommand({
+          Bucket: config.bucket,
+          Key: receipt.key,
+          VersionId: receipt.versionId,
+          Retention: { Mode: mode, RetainUntilDate: extendedUntil },
+        }),
+      );
+      stage = `${mode} extended retention`;
+      const extended = await deleter.purge(receipt);
+      if (extended.kind !== 'retained' || extended.retainUntil !== extendedUntil.toISOString())
+        throw new Error('Fixture did not honor extended retention.');
+      // A new version at the same key must survive deletion of the recorded old version.
+      const body = await readFile(file);
+      const replacement = await administrator.send(
+        new PutObjectCommand({
+          Bucket: config.bucket,
+          Key: receipt.key,
+          Body: body,
+          ContentMD5: createHash('md5').update(body).digest('base64'),
+          ObjectLockMode: mode,
+          ObjectLockRetainUntilDate: new Date(Date.now() + 86_400_000),
+        }),
+      );
+      const replacementVersion = z.string().min(1).parse(replacement.VersionId);
+      if (replacementVersion === receipt.versionId)
+        throw new Error('Fixture version did not change.');
+      stage = 'deleter unversioned delete denial';
+      await denied(
+        deleterClient.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: receipt.key })),
+      );
+      if (mode === 'GOVERNANCE') {
+        stage = 'deleter bypass denial';
+        // A negative IAM test only: the adapter never exposes or sets this option.
+        await denied(
+          deleterClient.send(
+            new DeleteObjectCommand({
+              Bucket: config.bucket,
+              Key: receipt.key,
+              VersionId: replacementVersion,
+              BypassGovernanceRetention: true,
+            }),
+          ),
+        );
+      }
+      await setTimeout(Math.max(0, extendedUntil.getTime() - Date.now()) + 100);
+      stage = `${mode} expired writer delete denial`;
+      await denied(
+        writerClient.send(
+          new DeleteObjectCommand({
+            Bucket: config.bucket,
+            Key: receipt.key,
+            VersionId: receipt.versionId,
+          }),
+        ),
+      );
+      stage = `${mode} exact expired purge`;
+      if ((await deleter.purge(receipt)).kind !== 'absent')
+        throw new Error('Fixture expired version was not removed.');
+      if ((await deleter.purge(receipt)).kind !== 'absent')
+        throw new Error('Fixture repeated purge did not confirm absence.');
+      const survivor = await administrator.send(
+        new HeadObjectCommand({
+          Bucket: config.bucket,
+          Key: receipt.key,
+          VersionId: replacementVersion,
+        }),
+      );
+      if (survivor.VersionId !== replacementVersion || survivor.ContentLength !== body.length)
+        throw new Error('Fixture removed another version.');
     }
     stage = 'reader write denial';
     await denied(
@@ -135,11 +237,24 @@ async function prove() {
         }),
       ),
     );
+    stage = 'deleter write denial';
+    await denied(
+      deleterClient.send(
+        new PutObjectCommand({
+          Bucket: config.bucket,
+          Key: `protected/${randomUUID()}.enc`,
+          Body: 'fixture write must be rejected',
+        }),
+      ),
+    );
   } finally {
     writer.close();
     reader.close();
+    deleter.close();
     administrator.destroy();
     readerClient.destroy();
+    writerClient.destroy();
+    deleterClient.destroy();
   }
 }
 void prove().then(

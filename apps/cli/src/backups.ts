@@ -3,6 +3,8 @@ import type { CloudClient } from '@agent-cloud/sdk';
 import { z } from 'zod';
 import {
   backupCaptureRequestSchema,
+  backupPurgeRequestSchema,
+  backupPurgeIdSchema,
   backupScheduleIdSchema,
   backupIdSchema,
   backupRecipeSchema,
@@ -86,6 +88,22 @@ export function registerBackups(input: {
         await (await input.client()).disableBackupSchedule(backupScheduleIdSchema.parse(id)),
       );
     });
+  backup
+    .command('purge <backup>')
+    .description(
+      'Irreversibly schedule deletion after Object Lock expires. This stops new restores and survives grant revocation.',
+    )
+    .requiredOption('--id <uuid>', 'Stable purge ID; inspect after a lost response')
+    .requiredOption('--allow-data-loss', 'Acknowledge permanent loss of this recovery point')
+    .action(async (id: string, raw: unknown) => {
+      const request = backupPurgeRequestSchema.parse(raw);
+      input.output(
+        await (await input.client()).purgeBackup({ backupId: backupIdSchema.parse(id), request }),
+      );
+    });
+  backup.command('purge-inspect <id>').action(async (id: string) => {
+    input.output(await (await input.client()).backupPurge(backupPurgeIdSchema.parse(id)));
+  });
   backup.command('list <machine>').action(async (machine: string) => {
     input.output(await (await input.client()).backups(machineIdSchema.parse(machine)));
   });
