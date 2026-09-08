@@ -1,7 +1,8 @@
 # Documentation map
 
 - `CONTEXT.md`: compact handoff state and next action. Read this first when continuing work.
-- `PROGRESS.md`: milestone status and verification evidence.
+- `COMPLETION_PLAN.md`: remaining customer capabilities, acceptance scenarios, implementation order, file ownership, budgets and dependencies.
+- `PROGRESS.md`: pointer to the current handoff and archived milestone history.
 - `architecture/overview.md`: implemented boundaries, types, and operational semantics, added with the first design checkpoint.
 - `DECISIONS.tsv`: append-only decision and evidence trail.
 - `operations/`: setup, self-hosting, safe live tests, cleanup, and recovery procedures as implemented.
