@@ -8,6 +8,8 @@ Updated 2026-09-08. Work on `yahor/agent-cloud` under AGENTS.md. Continue the ex
 
 `0737a78` packages existing setup commands, private CA, supervision and the example. `c2ea540` fixes the live SQL rejection of customer SSH image identity/proof and excludes SQL parameters from worker logs. Login, lifecycle, SSH/SFTP, durable commands, Compose, hosting, recipes, protected backups, restore, usage and control recovery already have connected implementations. Reuse them.
 
+The [architecture overview](architecture/overview.md) now describes the current implementation and command examples instead of the old M0/M1 sketch. This is a documentation-only walkthrough; no runtime or provider state changed. Compose bundles use JSON over SSH, while file put/get uses SFTP. `machine:exec` is root-equivalent and must not be described as a narrow deployment sandbox.
+
 Local source checks passed: typecheck/lint, 764 tests, formatting and focused failing-before/passing-after regressions. The live run used that runtime. `pnpm db:check` matched all 29 migrations against an isolated restored copy of the final hosted DB; that copy was deleted. CI 0737 run 34225198701 and CI c2ea run 34228723656 passed, including required integration checks. The following documentation checkpoint uses lightweight CI. Do not rerun unchanged comprehensive local checks.
 
 ## What remains and next acceptance
