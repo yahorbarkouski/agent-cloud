@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width" /><title>
+    Agent cloud reference</title
+  ><style>
+    body {
+      font: 18px system-ui;
+      max-width: 44rem;
+      margin: 12vh auto;
+      padding: 1rem;
+      color: #172521;
+      background: #f4f7f5;
+    }
+    button {
+      font: inherit;
+      padding: 0.6rem 1rem;
+    }
+    output {
+      display: block;
+      margin: 1rem 0;
+    }
+  </style>
+  <h1>Your application is running</h1>
+  <p>Frontend, TypeScript backend and PostgreSQL on one VM. Release 1.</p>
+  <output id="counter">Loading persisted count…</output
+  ><button id="visit">Record a visit</button>
+  <script>
+    const show = async (method = 'GET') => {
+      const response = await fetch('/api/visits', { method });
+      if (!response.ok) throw Error('Application unavailable');
+      const value = await response.json();
+      document.querySelector('#counter').textContent =
+        'Persisted visits: ' + value.count + ' · backend release ' + value.revision;
+    };
+    document.querySelector('#visit').onclick = () =>
+      show('POST').catch(() => (document.querySelector('#counter').textContent = 'Request failed'));
+    show().catch(() => (document.querySelector('#counter').textContent = 'Request failed'));
+  </script>
+</html>

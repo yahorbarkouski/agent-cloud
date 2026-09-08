@@ -19,17 +19,20 @@ x-control: &control
   environment:
     ACLD_CONTAINER_ENV_FILE: /run/agent-cloud/control/control.env
   volumes:
-    - type: bind
+    - &control-config
+      type: bind
       source: ${ACLD_CUSTOMER_DIRECTORY:?Set the absolute private configuration directory}/control
       target: /run/agent-cloud/control
       read_only: true
       bind: { create_host_path: false }
-    - type: bind
+    - &control-generation
+      type: bind
       source: ${ACLD_CUSTOMER_DIRECTORY}/generation
       target: /run/agent-cloud/generation
       read_only: true
       bind: { create_host_path: false }
-    - type: bind
+    - &control-identity
+      type: bind
       source: ${ACLD_CUSTOMER_DIRECTORY}/identity
       target: /run/agent-cloud/identity
       bind: { create_host_path: false }
@@ -37,6 +40,7 @@ x-control: &control
   networks: [database, egress]
 services:
   postgres:
+    restart: unless-stopped
     image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
     environment:
       POSTGRES_USER: agentcloud
@@ -63,7 +67,21 @@ services:
       options: { max-size: 5m, max-file: '2' }
   api:
     <<: *control
+    restart: unless-stopped
     command: [api]
+    environment:
+      ACLD_CONTAINER_ENV_FILE: /run/agent-cloud/control/control.env
+      ACLD_GITHUB_CONFIG: /run/agent-cloud/auth/github.json
+    volumes:
+      - *control-config
+      - *control-generation
+      - *control-identity
+      - scratch:/var/lib/agent-cloud/scratch
+      - type: bind
+        source: ${ACLD_CUSTOMER_DIRECTORY}/auth
+        target: /run/agent-cloud/auth
+        read_only: true
+        bind: { create_host_path: false }
     ports: ['80:80', '443:443']
     sysctls: { net.ipv4.ip_unprivileged_port_start: '0' }
     healthcheck:
@@ -79,13 +97,16 @@ services:
       retries: 30
     depends_on:
       postgres: { condition: service_healthy }
+      ca: { condition: service_healthy }
   worker:
     <<: *control
+    restart: unless-stopped
     command: [worker]
     depends_on:
       api: { condition: service_healthy }
   public-gateway:
     <<: *runtime
+    restart: unless-stopped
     command: [public-gateway]
     network_mode: service:api
     environment:
@@ -99,6 +120,7 @@ services:
       api: { condition: service_healthy }
   access-gateway:
     <<: *runtime
+    restart: unless-stopped
     command: [access-gateway]
     network_mode: service:api
     environment:
@@ -147,6 +169,42 @@ services:
         read_only: true
         bind: { create_host_path: false }
     networks: [database, egress]
+  ca:
+    image: smallstep/step-ca:0.30.2@sha256:a2b17872915c193259b75a5474c398326f41bd199f0842093e52cf4182bc8270
+    restart: unless-stopped
+    user: '1000:1000'
+    entrypoint: [step-ca]
+    command: [/home/step/config/ca.json, --password-file, /home/step/password]
+    volumes:
+      - type: bind
+        source: ${ACLD_CUSTOMER_DIRECTORY}/ca
+        target: /home/step
+        bind: { create_host_path: false }
+    networks: [egress]
+    healthcheck:
+      test:
+        [
+          CMD,
+          step,
+          ca,
+          health,
+          --ca-url,
+          'https://localhost:9000',
+          --root,
+          /home/step/certs/root_ca.crt,
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    logging:
+      driver: local
+      options: { max-size: 5m, max-file: '2' }
 volumes:
   database:
   scratch:

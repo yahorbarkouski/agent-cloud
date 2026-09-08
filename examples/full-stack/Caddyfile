@@ -1,0 +1,12 @@
+http://:80 {
+	handle /api/* {
+		reverse_proxy backend:3000
+	}
+	handle {
+		root * /srv
+		file_server
+	}
+}
+http://:8080 {
+	respond /ready 200
+}

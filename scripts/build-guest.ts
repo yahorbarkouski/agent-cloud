@@ -99,10 +99,11 @@ try {
       js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);",
     },
   });
+  const publicTrust = resolve(process.env.ACLD_IMAGE_TRUST_DIRECTORY ?? '.local/pki/public');
   const trust = guestManifestSchema.shape.trust.parse({
-    sshHostCa: (await readFile('.local/pki/public/ssh_host_ca_key.pub', 'utf8')).trim(),
-    sshUserCa: (await readFile('.local/pki/public/ssh_user_ca_key.pub', 'utf8')).trim(),
-    tlsRoot: await readFile('.local/pki/public/root_ca.crt', 'utf8'),
+    sshHostCa: (await readFile(join(publicTrust, 'ssh_host_ca_key.pub'), 'utf8')).trim(),
+    sshUserCa: (await readFile(join(publicTrust, 'ssh_user_ca_key.pub'), 'utf8')).trim(),
+    tlsRoot: await readFile(join(publicTrust, 'root_ca.crt'), 'utf8'),
   });
   await writeFile(join(staging, 'artifacts.json'), JSON.stringify(pins) + '\n', { mode: 0o644 });
   await writeFile(join(staging, 'trust.json'), JSON.stringify(trust) + '\n', { mode: 0o644 });

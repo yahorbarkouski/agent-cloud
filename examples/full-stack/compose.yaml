@@ -1,0 +1,76 @@
+x-service: &service
+  restart: unless-stopped
+  pids_limit: 100
+  security_opt: [no-new-privileges:true]
+  logging:
+    driver: local
+    options: { max-size: 1m, max-file: '2' }
+services:
+  database:
+    <<: *service
+    image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    mem_limit: 384m
+    cpus: 0.5
+    environment:
+      POSTGRES_USER: reference
+      POSTGRES_DB: reference
+      POSTGRES_PASSWORD_FILE: /run/secrets/database_password
+    secrets: [database_password]
+    volumes: [database:/var/lib/postgresql/data]
+    networks: [private]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U reference -d reference]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  backend:
+    <<: *service
+    build: .
+    mem_limit: 256m
+    cpus: 0.5
+    read_only: true
+    cap_drop: [ALL]
+    environment:
+      APP_REVISION: '1'
+      APP_HOSTNAME: example.invalid
+    secrets: [database_password]
+    networks: [private]
+    depends_on:
+      database: { condition: service_healthy }
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  frontend:
+    <<: *service
+    image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+    mem_limit: 128m
+    cpus: 0.25
+    ports: ['127.0.0.1:3000:80']
+    networks: [private, public]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./index.html:/srv/index.html:ro
+      - certificates:/data
+      - caddy_config:/config
+    depends_on:
+      backend: { condition: service_healthy }
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:8080/ready']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+secrets:
+  database_password: { file: ./database-password }
+volumes:
+  database: {}
+  certificates: {}
+  caddy_config: {}
+networks:
+  private: { internal: true }
+  public: {}

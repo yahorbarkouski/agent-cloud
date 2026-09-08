@@ -79,6 +79,9 @@ async function main() {
     'backup-retention': 'control/dist/backup-retention-main.js',
     'control-recover': 'control/dist/control-recovery-main.js',
     customer: 'control/dist/customer-main.js',
+    'image-build': 'control/dist/image-main.js',
+    'runtime-identity': 'control/dist/runtime-identity-main.js',
+    'setup-gateway': 'public-gateway/dist/setup-main.js',
   };
   if (!Object.hasOwn(entries, command)) throw new Error('Unknown runtime command.');
   const path = await realpath(`/opt/agent-cloud/${entries[command]}`);

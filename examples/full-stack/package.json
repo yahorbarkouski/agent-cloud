@@ -1,0 +1,23 @@
+{
+  "name": "agent-cloud-full-stack-example",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24 <27"
+  },
+  "scripts": {
+    "start": "node backend.ts",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pg": "8.23.0",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "@types/pg": "8.23.1",
+    "typescript": "6.0.3"
+  }
+}
