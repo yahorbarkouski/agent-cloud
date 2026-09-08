@@ -6,7 +6,7 @@ Prepared on 2026-09-08 against source `705101eb4a990948f31fd57e1c16f28aefe176af`
 
 An admitted owner can give an existing coding agent a normal project containing a frontend, backend and PostgreSQL. With the published CLI, a public API origin and scoped customer credentials, that agent can deploy the project onto one cheap Hetzner VM, return a working HTTPS URL, inspect it, update it without losing its data, recover it from a protected backup and remove the infrastructure. The operator prepares the cloud once; deploying each customer application must not require operator database edits, private scripts or access to the platform source checkout.
 
-The customer deployment path is already implemented and connected in the production code. It is not currently available through a running, configured hosted service. An internal reference application passed a real Hetzner deployment, but its infrastructure was deliberately deleted. Customer Compose and recovery have connected native and container evidence. The final public customer deployment/recovery run is still unverified. These are different gaps: deploying the service, improving its first-use experience, and establishing provider evidence. Do not interpret them as missing login, provisioning, SSH, Compose or routing implementations.
+The customer deployment path is implemented and now has [real hosted customer evidence](customer-deployment-verification.json). On 2026-09-08, the released CLI completed GitHub login, provisioning, ordinary frontend/backend/PostgreSQL deployment, public HTTPS, persistent update, failed-build recovery, customer/platform reboots, restricted delegation, revocation and exact cleanup. The [customer walkthrough](customer-quickstart.md) covers the tested commands. All disposable resources were deleted; an ongoing usable preview and protected provider backup recovery remain open. Do not interpret those gaps as missing login, provisioning, SSH, Compose or routing implementations.
 
 There are two delivery points:
 
@@ -48,12 +48,12 @@ Evidence below is scoped to the recorded implementation. Native/container proof 
 
 | Customer capability                | Reuse                                                                               | Remaining acceptance gap                                                                                                                         |
 | ---------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Install the product interface      | Signed `cli-v0.1.0`, offline skill/recipes, tamper-checked download                 | Use the downloaded artifact against the deployed service; publish a new immutable version only if customer code changes                          |
-| Sign in and delegate               | Real GitHub device login, admission operator, ancestry checks, revocation           | Configure the public service, admit the owner, authenticate there, exercise a project-limited grant and admission renewal                        |
-| Get a real machine                 | Provider journals, costs, signed image selection, enrollment, cleanup               | Publish a current retained image and use customer identity for creation through the final service; verify automated VM backups actually enabled  |
-| Upload and deploy a normal project | SFTP, durable commands, `compose apply/wait/inspect/logs/recover`                   | Ship an ordinary public example without fixture code; run it through the real customer access gateway                                            |
-| Keep it running and update it      | Detached Compose, named volumes, pinned release history                             | Verify public app behavior after client exit, guest reboot, update and failed-release recovery on the customer VM                                |
-| Publish HTTPS and custom domains   | Managed routes, DNS challenges, hostname ownership, persisted gateway state         | Configure real DNS/ACME and verify generated and custom hostnames on the deployed gateway                                                        |
+| Install the product interface      | Signed `cli-v0.1.0`, offline skill/recipes, tamper-checked download                 | Verified against the hosted service; publish a new immutable CLI version only when customer code changes                                         |
+| Sign in and delegate               | Real GitHub device login, admission operator, ancestry checks, revocation           | Real hosted login, project-limited read access, denied creation and revocation passed; admission renewal remains                                 |
+| Get a real machine                 | Provider journals, costs, signed image selection, enrollment, cleanup               | Image publication, real customer creation/cleanup and automated-backup activation passed; no scheduled backup/restore was exercised              |
+| Upload and deploy a normal project | SFTP, durable commands, `compose apply/wait/inspect/logs/recover`                   | Ordinary public example deployed through the released CLI and real access gateway; retain its context limits                                     |
+| Keep it running and update it      | Detached Compose, named volumes, pinned release history                             | Client exit, guest/platform reboot, update, failed-build recovery and a new browser write passed on the customer VM                              |
+| Publish HTTPS and custom domains   | Managed routes, DNS challenges, hostname ownership, persisted gateway state         | Generated hostnames and trusted public ACME passed; customer-supplied domain proof remains                                                       |
 | Install PostgreSQL and analytics   | Packaged PostgreSQL 17/Umami recipes, real local/native browser behavior            | Install through the customer CLI, instrument the public example and observe a real pageview/event                                                |
 | Back up and restore                | Encrypted versioned objects, schedules, quotas, isolated restore, promotion/cutover | Configure protected Hetzner storage and independent keys; prove permissions and source-loss recovery against that provider                       |
 | Know cost and capacity             | Account/grant/global reservations, history, backup-byte limits                      | Show live VM/IP/automated-backup rates, enforce concurrency caps, account for platform/storage/traffic costs outside customer reservation totals |
@@ -61,9 +61,9 @@ Evidence below is scoped to the recorded implementation. Native/container proof 
 | Self-host                          | Pinned runtime container and customer Compose topology                              | Connect first installation, CA/image setup, private configuration, upgrade and recovery into one usable operator procedure                       |
 | Use an existing agent unaided      | CLI help, JSON results, skill, API discovery                                        | Complete the published customer walkthrough from a fresh environment without repository internals or operator help during deployment             |
 
-## Concrete gaps found in the current tree
+## Initial gaps and delivery progress
 
-These are work items, not reasons to redesign the platform.
+The following list records the initial work items. Items 1, 3 and 4 are delivered and live verified in 0737a78/c2ea540: the ordinary example, service supervision/private CA and separated OAuth mount. Item 2 has a tested installation and customer walkthrough, but the complete fresh operator experience remains open. Item 5 is covered by the example's explicit private context and documented limits. Items 6 and 7 remain operating/recovery work. The historical descriptions below explain each original gap; do not rebuild completed behavior.
 
 1. **Example packaging.** The frontend, backend and PostgreSQL recipe exist. `scripts/support/compose-scenario.ts` constructs their deployment using an ignored guest-build pointer and a copied `guestctl` bundle. Expose the same application as a normal customer context and reuse it in acceptance. The absence of an example folder does not block arbitrary supported customer Compose source.
 2. **Operator configuration and first-use documentation.** `docs/self-host-customer.md` starts with private directories, an image publication, runtime identity, signer configuration, generation and firewall. Existing setup commands provide the functionality; complete the selected host's configuration using them and record their order. A single-input installer or new installation journal is optional later simplification, not required for delivery 1.
@@ -303,10 +303,10 @@ Cleanup after a test is not the same as leaving a service available for the user
 
 ## Completion checklist
 
-- [ ] A public customer endpoint runs independently of the developer laptop.
-- [ ] The owner signs in using real GitHub identity and can delegate one project without internal access.
-- [ ] A normal published frontend/backend/PostgreSQL example deploys through the released CLI to a real Hetzner VM.
-- [ ] Trusted HTTPS, client disconnection, logs, update and persistence work; the user receives an actual usable walkthrough.
+- [ ] A persistent customer endpoint is available within an approved lifetime/budget. The disposable hosted endpoint passed independently of the laptop and was cleaned up.
+- [x] The owner signs in using real GitHub identity and can delegate one project without internal access.
+- [x] A normal published frontend/backend/PostgreSQL example deploys through the released CLI to a real Hetzner VM.
+- [x] Trusted HTTPS, client disconnection, logs, update and persistence work; the user receives a walkthrough of the tested commands.
 - [ ] SFTP, durable commands, grant revocation, competing mutations and failed-release recovery have connected evidence.
 - [ ] Managed/custom domains, private PostgreSQL and actual Umami instrumentation work through customer access.
 - [ ] Provider automated backups and protected Hetzner storage permissions are verified; daily protection and retained-byte limits are observable.
@@ -316,4 +316,4 @@ Cleanup after a test is not the same as leaving a service available for the user
 - [ ] A fresh existing-agent session completes the agreed workflow from published artifacts and customer authority alone.
 - [ ] Active resources, any retained objects, actual blockers and unsupported behaviors are accurately recorded; no required blocked capability is called complete.
 
-Start with milestone 1: configure and run the existing customer stack, package the existing reference app for ordinary use, and verify the existing CLI path through a real customer login. Deliver that usable result before expanding the remaining recovery work.
+The disposable customer deployment is verified. Keep a preview available only within an approved ongoing lifetime/budget, and continue the remaining provider recovery and agent/operator usability acceptance using the existing implementation.

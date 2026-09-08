@@ -4,6 +4,10 @@
 
 This is the customer topology. The [simulated quickstart](self-host.md) remains separate. There is no internal bootstrap service or unauthenticated customer admission. Stripe is excluded.
 
+The [2026-09-08 hosted verification](customer-deployment-verification.json) exercised this topology on CPX12, including real GitHub login, public ACME and restart of all persistent services after a host reboot. That installation was disposable and has been deleted. A first installation still needs the explicit private inputs below.
+
+Worker runtime logs intentionally omit SQL bodies, parameters and error metadata. Use the bounded task/job ID to inspect the retained operation or image journal. PostgreSQL suppresses failed statements and extended error details; primary error messages remain. Do not enable verbose database/vendor logging where it can expose bootstrap or customer data.
+
 ## Prepare the existing configuration
 
 Build and retain the immutable runtime image as described in the quickstart. Set `ACLD_CUSTOMER_IMAGE` to its image ID and `ACLD_CUSTOMER_DIRECTORY` to an absolute private directory on the Linux host. Prepare these subdirectories before starting Compose; missing bind sources fail instead of creating empty directories:

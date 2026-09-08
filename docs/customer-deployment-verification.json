@@ -1,0 +1,253 @@
+{
+  "scenario": "Published CLI and real GitHub customer deploy frontend/backend/PostgreSQL through a hosted Hetzner cloud",
+  "verifiedAt": "2026-09-08T13:00:51.279Z",
+  "availability": "Disposable test completed. All provider resources deleted. No persistent public endpoint.",
+  "source": {
+    "packagingCommit": "0737a78c73a3246ade2d0bcc37c60dbe8ba1cefa",
+    "runtimeFixCommit": "c2ea540b8063d6d66a0c06847355ba9c8f914448",
+    "runtimeOciManifest": "sha256:266b2d302ea58d4b9586d01ae6e226ffd522dbe6c790eecc3d2269ddc074a686",
+    "guestManifest": "3be19009da79b7620a5e93910d3330d528633277e7f96298fa2d51407ae96a84",
+    "liveSchema": {
+      "applied": 29,
+      "expected": 29,
+      "allChecksumsMatch": true,
+      "method": "pnpm db:check against an isolated restored copy of the final hosted database; temporary copy deleted"
+    }
+  },
+  "client": {
+    "release": "cli-v0.1.0",
+    "commit": "ce9a0d8264ab3b10352fe82860e150fd8e75832c",
+    "archiveSha256": "9b47030be2db94369f691891bedd69c6f274a8f5a497a853931ee72a6fd3c4da",
+    "extractedOutsideCheckout": true,
+    "bundledSkillInstalled": true,
+    "realGithubDeviceApproval": true,
+    "internalGrantUsed": false,
+    "operatorInterventionDuringApplicationDeployment": false
+  },
+  "topology": {
+    "provider": "hetzner",
+    "serverType": "cpx12",
+    "region": "nbg1",
+    "platformRunsOnProvider": true,
+    "laptopTunnelUsed": false,
+    "machineId": "vm_237612dd-422a-44a0-9d95-b4eb07514aad",
+    "createOperationId": "op_762a491a-0eba-46c3-82e5-c2ae821b4523",
+    "customerProvider": {
+      "serverId": 165144231,
+      "primaryIpId": 148637711,
+      "automatedBackupWindow": "06-10",
+      "verifiedAt": "2026-09-08T12:55:06.283Z"
+    },
+    "imageBuildId": "9210534e-eb35-4fb5-a512-59c4341ac7b3"
+  },
+  "acceptance": {
+    "trustedPublicHttps": true,
+    "browserWrite": {
+      "revision": "1",
+      "count": "1"
+    },
+    "applicationSurvivedCliExit": true,
+    "statusAndBackendLogsAfterReconnect": true,
+    "update": {
+      "before": {
+        "revision": "1",
+        "count": "1"
+      },
+      "after": {
+        "revision": "2",
+        "count": "1"
+      }
+    },
+    "failedBuildRecovery": {
+      "injectedFailure": "Dockerfile RUN exit 42",
+      "observedPhase": "failed",
+      "duringFailure": {
+        "revision": "2",
+        "count": "1"
+      },
+      "command": "acld compose recover",
+      "afterRecovery": {
+        "revision": "2",
+        "count": "1"
+      }
+    },
+    "customerReboot": {
+      "revision": "2",
+      "count": "1"
+    },
+    "platformReboot": {
+      "verifiedAt": "2026-09-08T12:55:06.155Z",
+      "newBrowserWrite": {
+        "revision": "2",
+        "count": "2"
+      }
+    },
+    "delegation": {
+      "projectScoped": true,
+      "readSucceeded": true,
+      "creationForbidden": true,
+      "revokedDenied": true,
+      "grantId": "grant_c91e45a4-e161-4568-8e21-3f5ce5ed0240"
+    },
+    "logout": {
+      "revoked": true,
+      "credentialsRemoved": true
+    },
+    "destroy": {
+      "operationId": "op_354af140-da09-41aa-9bf3-2920dbd1a8c4",
+      "state": {
+        "kind": "destroyed",
+        "destroyedAt": "2026-09-08T12:55:50.712Z"
+      },
+      "sameRequestRetriedAfterResourceBusy": true
+    },
+    "usageAfterDestroy": {
+      "activeReservations": 0,
+      "hourlyMicros": 0
+    }
+  },
+  "cleanup": {
+    "imageState": {
+      "kind": "cleaned",
+      "at": "2026-09-08T12:57:04.415Z"
+    },
+    "imageAccessRemovedAt": "2026-09-08T12:42:44.473Z",
+    "verifiedAt": "2026-09-08T13:00:51.279Z",
+    "resources": [
+      {
+        "kind": "firewall",
+        "id": "11592451",
+        "httpStatus": 404,
+        "code": "not_found"
+      },
+      {
+        "kind": "primary_ip",
+        "id": "148634736",
+        "httpStatus": 404,
+        "code": "not_found"
+      },
+      {
+        "kind": "primary_ip",
+        "id": "148636898",
+        "httpStatus": 404,
+        "code": "not_found"
+      },
+      {
+        "kind": "server",
+        "id": "165140567",
+        "httpStatus": 404,
+        "code": "not_found"
+      },
+      {
+        "kind": "server",
+        "id": "165143466",
+        "httpStatus": 404,
+        "code": "not_found"
+      },
+      {
+        "kind": "snapshot",
+        "id": "429563896",
+        "httpStatus": 404,
+        "code": "not_found"
+      },
+      {
+        "kind": "ssh_key",
+        "id": "118512199",
+        "httpStatus": 404,
+        "code": "not_found"
+      },
+      {
+        "kind": "server",
+        "id": "165139597",
+        "httpStatus": 404,
+        "code": "not_found"
+      },
+      {
+        "kind": "primary_ip",
+        "id": "148634002",
+        "httpStatus": 404,
+        "code": "not_found"
+      },
+      {
+        "kind": "firewall",
+        "id": "11592430",
+        "httpStatus": 404,
+        "code": "not_found"
+      },
+      {
+        "kind": "firewall",
+        "id": "11592456",
+        "httpStatus": 404,
+        "code": "not_found"
+      },
+      {
+        "kind": "server",
+        "id": "165144231",
+        "httpStatus": 404,
+        "code": "not_found"
+      },
+      {
+        "kind": "primary_ip",
+        "id": "148637711",
+        "httpStatus": 404,
+        "code": "not_found"
+      }
+    ],
+    "backupImages": 0,
+    "providerInventory": {
+      "servers": 0,
+      "primaryIps": 0,
+      "snapshots": 0,
+      "firewalls": 0,
+      "backupImages": 0
+    }
+  },
+  "budget": {
+    "basis": "Existing disposable-test authorization; 24-hour extension remains pending",
+    "currency": "USD",
+    "sharedPlatformAndImageCapMicros": 120000,
+    "customerCapMicros": 60000,
+    "snapshotMonthlyCapMicros": 1000000,
+    "platformReservedMicros": 33112,
+    "imageReservedMicros": 66224,
+    "customerReservedMicros": 33112,
+    "deadlineAt": "2026-09-08T13:10:07.440Z",
+    "completedBeforeDeadline": true,
+    "note": "Reservation limits and quotes are not an invoice. No ongoing provider resource remains."
+  },
+  "fixes": [
+    "Package existing setup commands and CA in supervised customer services.",
+    "Ship an ordinary private full-stack source context.",
+    "Preserve customerSsh=1 in SQL image bootstrap and verifier proof guards.",
+    "Exclude SQL bodies/metadata from worker logs and suppress PostgreSQL failed statement/detail logging."
+  ],
+  "limitations": [
+    "No persistent hosted endpoint or approved preview retention lifetime.",
+    "Hetzner protected Object Storage and source-loss restore remain unverified.",
+    "Automated VM backups were enabled; scheduled backup creation and restoration were not exercised in this short run.",
+    "Custom customer DNS, public analytics instrumentation, live durable-command interruption/revocation and full platform loss recovery remain separate acceptance work.",
+    "Release recovery does not undo database migrations.",
+    "A fresh independent-agent usability run remains open."
+  ],
+  "privateEvidence": {
+    "directory": ".local/customer-preview",
+    "sha256": {
+      "customer-login.json": "2a997a84478d31b393a1df0cbccaf6a69bddae1042953c21f159cc5ff16587fc",
+      "customer-provision.log": "47cf12955ccd3d8dfd061c5c080643a280330cfe07da3779e7b71a07e4ffb86b",
+      "customer-deploy.log": "87073d98f9d393c14f1385fd9b7dad27bd92b531c40afaf0c23209a03b492357",
+      "customer-update.log": "17540c020979428b996d2757e5deccb31c4a20c956f0872e018742203e3bb866",
+      "customer-recovery.log": "45b6321d8f919cc56b18deb16d53a70dd66c654d79ebcd39566e6b445f71d92f",
+      "customer-reboot.log": "da6250c5c36631ebe88db9982cf9e1bcda1286d07fdcd3b95ab4db67a692d493",
+      "customer-delegation-2.log": "599273e4a6424b0dc79c41dd47e6a88c9ebdd6e436a7a1a66cc9870d1e552a46",
+      "platform-after-reboot.log": "fb568212df81e0c0cabda2d03a0283333e23cccc0fa448c6d3cf20c282b67f5d",
+      "customer-cleanup-2.log": "5f8371518cf2fc4bf4e375eefe60f40aea7089e624b5f52e28b0d4670ad8a5ec",
+      "customer-logout.json": "30b6d939820a96696e607864a43c9b1e6d09ba61898d741f63bc95c2538c3342",
+      "agent-install.json": "22ffc35ee4c4416b22657729d8e8a6792d75f8eb2414e012121c879624152bd9",
+      "image-final.json": "925318ae0f34d835c0b5a0d495c394a81183b9040604134dd920989946a45995",
+      "live-schema-check.log": "d863ed5a68012ee10c8b9f0e871760c6b91fc8af2537a696fbe094a45b3aa7ec",
+      "capability-check-3.log": "f2135962a7db7b2ea3be1787d43220f92fcc3240b04e0d6175a2b21c378ff590",
+      "capability-format.log": "1d66faad74f5e8709353f7288592866bd3a9095da1174a916e7aa632949971e2"
+    },
+    "note": "Owner-only continuation records, command receipts and a private control snapshot remain local. They are not required for customer deployments or published."
+  }
+}
