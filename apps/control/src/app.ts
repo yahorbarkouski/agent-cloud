@@ -76,6 +76,7 @@ import type { Config } from './config.js';
 import type { GuestRenewalService } from './guest-renewal.js';
 import type { EnrollmentService } from './guest-enrollment.js';
 import type { ImageVerifierEnrollment } from './image-verifier-enrollment.js';
+import { customerApiDescription, customerLlmsText } from './customer-api-description.js';
 
 export function createApp(input: {
   db: Database;
@@ -146,6 +147,16 @@ export function createApp(input: {
     ),
   );
   app.get('/healthz', (c) => c.json({ status: 'ok' }));
+  if (input.customerAccess !== 'disabled') {
+    const description = customerApiDescription({
+      login: Boolean(input.login),
+      access: Boolean(input.access),
+      routing: Boolean(input.hosting),
+      protectedBackups: Boolean(input.backups),
+    });
+    app.get('/openapi.json', (c) => c.json(description));
+    app.get('/llms.txt', (c) => c.text(customerLlmsText));
+  }
   if (input.login && input.customerAccess !== 'disabled') {
     const login = input.login;
     app.get('/auth/config', (c) => c.json(login.config));
