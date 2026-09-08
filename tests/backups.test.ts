@@ -62,6 +62,9 @@ let loseRestoreReply = true;
 let failRestorePreparation = true;
 let restored: ReturnType<typeof restoreCompletedStateSchema.parse> | undefined;
 let blockCapture: Promise<void> | undefined;
+let availableScratchBytes = 8_589_934_592n;
+let readEffects = 0;
+let downloadEffects = 0;
 const guest: BackupGuest = {
   capture: async (request) => {
     effects.captures++;
@@ -84,7 +87,10 @@ const guest: BackupGuest = {
       },
     };
   },
-  read: (_id, _maximum, work) => work(Readable.from([plaintext])),
+  read: (_id, _maximum, work) => {
+    readEffects++;
+    return work(Readable.from([plaintext]));
+  },
   remove: () => {
     effects.cleanup++;
     return Promise.resolve();
@@ -199,6 +205,7 @@ beforeAll(async () => {
     connection: fixture.connection,
     config,
     withGuest,
+    availableScratchBytes: () => Promise.resolve(availableScratchBytes),
     keyring: () => Promise.resolve(keyring),
     writer: {
       checkProtection: () =>
@@ -251,6 +258,7 @@ beforeAll(async () => {
         }),
       inspect: (receipt) => Promise.resolve(receipt),
       download: async ({ receipt, destination }) => {
+        downloadEffects++;
         const object = objects.get(receipt.attemptId);
         if (!object) throw new Error('Object missing');
         await writeFile(destination, object.bytes, { flag: 'wx', mode: 0o600 });
@@ -511,4 +519,89 @@ it('reconciles an exhausted upload without another PUT, keeps failures reserved,
     kind: 'stored',
     guestCleanup: 'done',
   });
+});
+
+it('waits for scratch capacity before transfer without consuming capture or restore attempts, then resumes', async () => {
+  await fixture.connection.db
+    .update(grants)
+    .set({ revokedAt: null })
+    .where(eq(grants.id, owner.principal.grantId));
+  const [previous] = await fixture.connection.db.select().from(backupRestores).limit(1);
+  if (!previous) throw new Error('Missing verified source.');
+  const source = (await service.inspectRestore(owner.principal, previous.id)).machineId;
+  const capture = request();
+  await service.capture(owner.principal, source, capture);
+  const reads = readEffects;
+  availableScratchBytes = 0n;
+  for (let i = 0; i < 6; i++)
+    await expect(worker.advance('backup', capture.id)).rejects.toMatchObject(
+      failure('resource_busy'),
+    );
+  const [waiting] = await fixture.connection.db
+    .select()
+    .from(backups)
+    .where(eq(backups.id, capture.id));
+  expect(waiting?.work).toMatchObject({ kind: 'encrypt', attempts: 0 });
+  expect(readEffects).toBe(reads);
+  availableScratchBytes = 8_589_934_592n;
+  await worker.advance('backup', capture.id);
+  expect(readEffects).toBe(reads + 1);
+  expect((await service.inspect(owner.principal, capture.id)).state.kind).toBe('captured');
+  const restoreRequest = restoreRequestSchema.parse({
+    id: randomUUID(),
+    backupId: capture.id,
+    app: 'capacity-check',
+    machine: { name: 'capacity-restore', size: 'small', region: 'fsn1' },
+  });
+  const restore = await service.restore(owner.principal, restoreRequest, {
+    provider: 'simulated',
+    catalog: () => simulatedCatalog('EUR'),
+    limits: { currency: 'EUR', maxMachines: 20, maxHourlyMicros: 1_000_000 },
+  });
+  const [allocation] = await fixture.connection.db
+    .select()
+    .from(allocations)
+    .where(eq(allocations.machineId, restore.machineId));
+  if (!allocation) throw new Error('Missing owned restore allocation.');
+  await fixture.connection.db
+    .update(machines)
+    .set({
+      state: {
+        kind: 'allocated',
+        allocationId: allocation.id,
+        serverId: '3',
+        power: 'running',
+        guest: {
+          kind: 'ssh',
+          verifiedAt: new Date().toISOString(),
+          imageVersion: 'fixture',
+          manifestDigest: 'a'.repeat(64),
+          bootId: randomUUID(),
+        },
+      },
+    })
+    .where(eq(machines.id, restore.machineId));
+  await fixture.connection.db
+    .update(operations)
+    .set({ progress: { kind: 'succeeded', completedAt: new Date().toISOString() } })
+    .where(eq(operations.id, restore.operationId));
+  const downloads = downloadEffects;
+  const restores = effects.restores;
+  availableScratchBytes = 0n;
+  for (let i = 0; i < 6; i++)
+    await expect(worker.advance('restore', restore.id)).rejects.toMatchObject(
+      failure('resource_busy'),
+    );
+  const [blocked] = await fixture.connection.db
+    .select()
+    .from(backupRestores)
+    .where(eq(backupRestores.id, restore.id));
+  expect(blocked?.work).toMatchObject({ kind: 'prepare', attempts: 0 });
+  expect(downloadEffects).toBe(downloads);
+  expect(effects.restores).toBe(restores);
+  availableScratchBytes = 8_589_934_592n;
+  await worker.advance('restore', restore.id);
+  expect(downloadEffects).toBe(downloads + 1);
+  expect(effects.restores).toBe(restores + 1);
+  expect((await service.inspectRestore(owner.principal, restore.id)).state.kind).toBe('restored');
 });

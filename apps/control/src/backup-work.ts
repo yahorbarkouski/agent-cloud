@@ -1,5 +1,5 @@
 import { constants, createReadStream } from 'node:fs';
-import { lstat, mkdir, open, readdir, rm } from 'node:fs/promises';
+import { lstat, mkdir, open, readdir, rm, statfs } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { Readable } from 'node:stream';
 import { and, eq } from 'drizzle-orm';
@@ -162,7 +162,20 @@ export function createBackupWorker(input: {
   reader: ReturnType<typeof createBackupReader>;
   keyring: () => Promise<z.infer<typeof backupKeyringSchema>>;
   withGuest: WithBackupGuest;
+  availableScratchBytes?: (directory: string) => Promise<bigint>;
 }) {
+  async function requireScratchSpace(directory: string, maxBytes: number) {
+    const available = input.availableScratchBytes
+      ? await input.availableScratchBytes(directory)
+      : await statfs(directory, { bigint: true }).then((space) => space.bavail * space.bsize);
+    // Restore holds ciphertext and authenticated plaintext. Keep the same conservative floor for capture.
+    if (available < 2n * BigInt(maxBytes) + 268_435_456n)
+      throw new CloudError(
+        'resource_busy',
+        'Backup worker scratch needs room for two bounded archives and 256 MiB of headroom. No transfer started; retry after freeing operator disk space.',
+        true,
+      );
+  }
   async function save(db: Executor, id: string, work: BackupWork) {
     await db.update(backups).set({ work }).where(eq(backups.id, id));
   }
@@ -229,14 +242,15 @@ export function createBackupWorker(input: {
         return block(
           'Captured bytes could not be encrypted and verified. No object upload was submitted.',
         );
-      const attempt = { ...work, attempts: work.attempts + 1 };
-      await authorizeEffect(db, row, 'backup:create', (tx) => save(tx, id, attempt));
       const directory = await scratch(input.config.directory, 'backup', id);
       const ciphertext = join(directory, 'archive.enc');
-      // This phase proves no PUT was submitted. An orphan from a crash before its envelope receipt is safe to replace.
+      // This phase proves no PUT was submitted. An orphan without a saved envelope is safe to replace.
       await removeScratchFile(ciphertext);
-      const keyring = await input.keyring();
       const limits = backupGuestCaptureSchema.parse(row.request).limits;
+      await requireScratchSpace(directory, limits.maxBytes);
+      const attempt = { ...work, attempts: work.attempts + 1 };
+      await authorizeEffect(db, row, 'backup:create', (tx) => save(tx, id, attempt));
+      const keyring = await input.keyring();
       const encryption = await input.withGuest(scope, (guest) =>
         guest.read(id, limits.maxBytes, (source) =>
           encryptBackup({
@@ -398,6 +412,9 @@ export function createBackupWorker(input: {
       return block(
         'Restore preparation could not verify its encrypted backup. No database restore was submitted.',
       );
+    const directory = await scratch(input.config.directory, 'restore', id);
+    await cleanupRestoreScratch(input.config.directory, id);
+    await requireScratchSpace(directory, input.config.limits.maxBytes);
     const attempts = work.attempts + 1;
     await authorizeEffect(db, row, 'backup:restore', (tx) =>
       saveWork({ kind: 'prepare', attempts }, tx),
@@ -411,10 +428,8 @@ export function createBackupWorker(input: {
     const source = backupWorkSchema.parse(sourceRow.work);
     if (source.kind !== 'stored')
       throw new Error('Restore source has no protected object version.');
-    const directory = await scratch(input.config.directory, 'restore', id);
     const ciphertext = join(directory, 'archive.enc');
     const plaintext = join(directory, 'archive.tar');
-    await cleanupRestoreScratch(input.config.directory, id);
     try {
       await input.reader.download({ receipt: source.receipt, destination: ciphertext });
       await decryptBackup({
