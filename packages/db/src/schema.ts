@@ -4,6 +4,7 @@ import {
   primaryKey,
   text,
   integer,
+  bigserial,
   timestamp,
   jsonb,
   unique,
@@ -291,6 +292,37 @@ export const allocations = pgTable(
     unique('allocation_account_identity').on(t.accountId, t.id),
     unique('allocation_machine_identity').on(t.accountId, t.machineId, t.id),
     check('allocation_price', sql`${t.hourlyMicros} >= 0`),
+  ],
+);
+
+export const allocationReservations = pgTable(
+  'allocation_reservations',
+  {
+    id: bigserial('id', { mode: 'bigint' }).primaryKey(),
+    accountId: text('account_id').notNull(),
+    machineId: text('machine_id').notNull(),
+    allocationId: text('allocation_id').notNull(),
+    kind: text('kind').notNull(),
+    hourlyMicros: integer('hourly_micros').notNull(),
+    currency: text('currency').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true })
+      .notNull()
+      .default(sql`clock_timestamp()`),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.accountId, t.machineId, t.allocationId],
+      foreignColumns: [allocations.accountId, allocations.machineId, allocations.id],
+    }),
+    index('allocation_reservation_history').on(t.accountId, t.id),
+    check(
+      'allocation_reservation_kind',
+      sql`${t.kind} IN ('admitted', 'changed', 'released', 'baseline')`,
+    ),
+    check(
+      'allocation_reservation_price',
+      sql`${t.hourlyMicros} >= 0 AND (${t.kind} <> 'released' OR ${t.hourlyMicros} = 0)`,
+    ),
   ],
 );
 

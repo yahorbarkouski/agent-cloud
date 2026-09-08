@@ -5,6 +5,7 @@ export * from './lifecycle.js';
 export * from './auth.js';
 export * from './provider.js';
 export * from './client.js';
+export * from './usage.js';
 export * from './money.js';
 export * from './guest.js';
 export * from './guest-subject.js';

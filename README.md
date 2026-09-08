@@ -14,6 +14,8 @@ Manual `backup capture/wait/inspect/restore/restore-wait` commands protect Postg
 
 [PostgreSQL and Umami recipes](docs/recipes.md) prepare ordinary Compose contexts with pinned images, generated credentials and resource limits. Their local Docker checks cover SQL persistence, safe administrator setup and visitor/event collection. Customer-site analytics instrumentation still needs deployment verification.
 
+The [self-host quickstart](docs/self-host.md) packages the API, worker, CLI and PostgreSQL in a pinned runtime image. Its local simulated scenario verifies persisted identity and machines across a restart. Live customer configuration and control disaster recovery remain separate verification steps.
+
 ## Run locally
 
 Requires Node.js 24+, Docker, and pnpm 12.3.4. If your global pnpm is older, run commands through `npm exec --yes --package=pnpm@12.3.4 -- pnpm ...`.
@@ -54,6 +56,7 @@ To destroy a machine and its disk after authorizing data loss:
 pnpm acld machine destroy <machine-id> --expected-version <version> --allow-data-loss --key <another-stable-key>
 pnpm acld operation wait <operation-id>
 pnpm acld usage
+pnpm acld usage history
 ```
 
 The same destroy command accepts blocked provisioning and retained failed allocations. Cancelling an active create returns its original operation; `cancelled` means cleanup finished. A terminal failed create keeps its result while a new destroy operation handles cleanup. Unknown provider submissions and exhausted deletion retries remain blocked with reservations retained. See [machine cleanup](docs/architecture/machine-cleanup.md).
@@ -71,6 +74,8 @@ pnpm smoke:local
 ```
 
 Integration tests create a uniquely named temporary database on the development PostgreSQL instance, apply real migrations, and remove that database afterward. Set `TEST_DATABASE_URL` to use another dedicated PostgreSQL server whose role can create databases. Tests do not truncate the database named in that URL. No cloud credentials are used.
+
+`acld usage` reports account/credential limits, retained backup bytes and current VM reservations. `acld usage history` preserves rate changes through resize and cleanup. Read [usage semantics](docs/architecture/usage.md) before interpreting these reservations as costs.
 
 The smoke test invokes the actual CLI against the HTTP server and Graphile worker. It requires the simulated provider and deletes the machine it creates. Tests cover quota races, tenant isolation, revoked grants, lost responses, delayed inventory, duplicate resources, worker crashes, and cleanup after a failed provider action.
 

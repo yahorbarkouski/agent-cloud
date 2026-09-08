@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { secureHeaders } from 'hono/secure-headers';
 import { ZodError, z } from 'zod';
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import {
   referenceInputSchema,
   accessSessionIdSchema,
@@ -41,6 +41,7 @@ import {
   backupScheduleRequestSchema,
   backupScheduleIdSchema,
   backupIdSchema,
+  reservationCursorSchema,
   restoreRequestSchema,
   restoreIdSchema,
 } from '@agent-cloud/contracts';
@@ -48,7 +49,6 @@ import {
   projects,
   machines,
   operations,
-  allocations,
   operationRecord,
   machineRecord,
   projectRecord,
@@ -67,6 +67,7 @@ import {
   loadPrincipal,
   revokeGrant,
 } from './auth.js';
+import { readUsage, readReservationHistory } from './usage.js';
 import { admit, lockAccount } from './lifecycle.js';
 import type { ImageReleaseSelection } from './allocation-image.js';
 import type { Config } from './config.js';
@@ -548,27 +549,24 @@ export function createApp(input: {
     });
     return c.json({ revoked: true });
   });
-  app.get('/v1/usage', async (c) => {
-    const principal = c.get('principal');
-    authorize(principal, 'usage:read');
-    const rows = await input.db
-      .select()
-      .from(allocations)
-      .where(and(eq(allocations.accountId, principal.accountId), isNull(allocations.retiredAt)));
-    if (rows.some((row) => row.currency !== principal.policy.currency))
-      throw new CloudError(
-        'internal_error',
-        'Stored reservations do not match the credential currency.',
-      );
-    return c.json({
-      usage: {
-        activeReservations: rows.length,
-        hourlyMicros: rows.reduce((sum, row) => sum + row.hourlyMicros, 0),
-        currency: principal.policy.currency,
-        pricing: 'reservation',
-        poweredOffMachinesRemainBillable: true,
-      },
-    });
+  app.get('/v1/usage', async (c) =>
+    c.json(
+      await readUsage({
+        db: input.db,
+        principal: c.get('principal'),
+        ...(input.backups ? { backupLimits: input.backups.limits } : {}),
+      }),
+    ),
+  );
+  app.get('/v1/usage/history', async (c) => {
+    const before = reservationCursorSchema.optional().parse(c.req.query('before'));
+    return c.json(
+      await readReservationHistory({
+        db: input.db,
+        principal: c.get('principal'),
+        ...(before === undefined ? {} : { before }),
+      }),
+    );
   });
   return app;
 }

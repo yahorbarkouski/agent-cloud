@@ -6,6 +6,8 @@ import { eq, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   operationResponseSchema,
+  reservationHistoryResponseSchema,
+  usageResponseSchema,
   machineResponseSchema,
   operationSchema,
   newId,
@@ -434,6 +436,21 @@ describe('observable machine lifecycle', () => {
       await fixture.connection.db.select().from(allocations).where(isNull(allocations.retiredAt)),
     ).toHaveLength(0);
     expect(await fixture.connection.db.select().from(simulatedServers)).toHaveLength(0);
+    const history = reservationHistoryResponseSchema.parse(
+      await (await request('/v1/usage/history')).json(),
+    );
+    expect(history.history.map(({ kind, hourlyMicros }) => ({ kind, hourlyMicros }))).toEqual([
+      { kind: 'released', hourlyMicros: 0 },
+      { kind: 'changed', hourlyMicros: 14400 },
+      { kind: 'admitted', hourlyMicros: 9600 },
+    ]);
+    expect(
+      usageResponseSchema.parse(await (await request('/v1/usage')).json()).usage,
+    ).toMatchObject({
+      activeReservations: 0,
+      hourlyMicros: 0,
+      limits: { remainingMachines: 20 },
+    });
   });
 
   it('keeps a failed creation allocation visible to explicit cleanup', async () => {

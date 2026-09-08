@@ -15,6 +15,7 @@ import {
 import {
   migrate,
   allocations,
+  allocationReservations,
   attempts,
   operations,
   grants,
@@ -208,7 +209,20 @@ it.each([
           },
         });
       }
+      const migrationStarted = await fixture.connection.pool.query<{ at: Date }>(
+        'SELECT clock_timestamp() AS at',
+      );
       await migrate(fixture.connection);
+      const baseline = await fixture.connection.db.select().from(allocationReservations);
+      expect(baseline).toHaveLength(1);
+      expect(baseline[0]).toMatchObject({
+        kind: 'baseline',
+        hourlyMicros: kind === 'resize' ? 14400 : 9600,
+      });
+      expect(baseline[0]?.occurredAt.getTime()).toBeGreaterThanOrEqual(
+        migrationStarted.rows[0]?.at.getTime() ?? Infinity,
+      );
+
       const principal = await authenticate(fixture.connection.db, `Bearer ${token}`);
       expect(principal.policy).toMatchObject({ currency: 'EUR', maxHourlyMicros: 20000 });
       const [account] = await fixture.connection.db.select().from(accounts);

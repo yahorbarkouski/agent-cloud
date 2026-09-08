@@ -26,6 +26,8 @@
     "dev": "pnpm build && node --env-file=.env apps/control/dist/api.js",
     "worker": "pnpm build && node --env-file=.env apps/control/dist/worker.js",
     "acld": "node --env-file-if-exists=.env apps/cli/dist/index.js",
+    "smoke:self-host": "node scripts/self-host-smoke.mjs",
+    "smoke:usage": "pnpm build && tsx scripts/smoke-usage.ts",
     "smoke:local": "pnpm build && tsx scripts/smoke-local.ts",
     "setup:hetzner": "node scripts/receive-hetzner-token.ts",
     "hetzner:check": "pnpm build && tsx scripts/check-hetzner.ts",

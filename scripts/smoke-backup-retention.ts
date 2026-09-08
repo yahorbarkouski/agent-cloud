@@ -12,6 +12,7 @@ import { serve } from '@hono/node-server';
 import { z } from 'zod';
 import {
   backupResponseSchema,
+  usageResponseSchema,
   backupPurgeResponseSchema,
   newId,
   simulatedCatalog,
@@ -268,11 +269,19 @@ try {
   const work = backupWorkSchema.parse(row.work);
   assert.equal(work.kind, 'stored');
   await reader.inspect(work.receipt);
+  const retainedUsage = usageResponseSchema.parse(JSON.parse(await cli(['usage']))).usage.backups;
+  assert.equal(retainedUsage.reservedBytes, row.reservedBytes);
+  assert.equal(retainedUsage.retainedCount, 1);
+  assert.equal(retainedUsage.limits?.maxAccountBytes, config.maxAccountBytes);
   stage = recoveryScenario
     ? 'purge after expired upload recovery'
     : 'CLI purge and separate retention process while Object Lock is active';
   const purgeId = randomUUID();
   await cli(['backup', 'purge', id, '--id', purgeId, '--allow-data-loss']);
+  assert.equal(
+    usageResponseSchema.parse(JSON.parse(await cli(['usage']))).usage.backups.purgePendingCount,
+    1,
+  );
   const retentionConfig = join(scratch, 'retention.json');
   await writeFile(
     retentionConfig,
@@ -334,6 +343,13 @@ try {
   const [after] = await database.connection.db.select().from(backups).where(eq(backups.id, id));
   assert.ok(after);
   assert.equal(after.reservedBytes, 0);
+  assert.deepEqual(usageResponseSchema.parse(JSON.parse(await cli(['usage']))).usage.backups, {
+    ...retainedUsage,
+    reservedBytes: 0,
+    retainedCount: 0,
+    purgePendingCount: 0,
+    limits: { ...retainedUsage.limits, remainingBytes: config.maxAccountBytes },
+  });
   assert.equal(backupRecord(after).state.kind, 'purged');
   assert.equal((await run()).advanced, 0);
   process.stdout.write(

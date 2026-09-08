@@ -183,6 +183,13 @@
       "when": 1788829435814,
       "tag": "0025_backup_purges",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1788832726439,
+      "tag": "0026_allocation_reservations",
+      "breakpoints": true
     }
   ]
 }

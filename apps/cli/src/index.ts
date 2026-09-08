@@ -94,9 +94,19 @@ program
 program.command('catalog').action(async () => {
   output(await (await client()).catalog());
 });
-program.command('usage').action(async () => {
-  output(await (await client()).usage());
-});
+const usage = program
+  .command('usage')
+  .description('Account reservations and limits, not an invoice.')
+  .action(async () => {
+    output(await (await client()).usage());
+  });
+usage
+  .command('history')
+  .description('Reservation changes in accessible projects, newest first.')
+  .option('--before <cursor>', 'Read the next older page.')
+  .action(async (options: { before?: string }) => {
+    output(await (await client()).reservationHistory(options.before));
+  });
 const project = program.command('project');
 project.command('list').action(async () => {
   output(await (await client()).projects());

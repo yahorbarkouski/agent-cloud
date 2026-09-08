@@ -47,6 +47,8 @@ import {
   machineActionSchema,
   operationResponseSchema,
   usageResponseSchema,
+  reservationCursorSchema,
+  reservationHistoryResponseSchema,
   grantInputSchema,
   grantsResponseSchema,
   issuedGrantResponseSchema,
@@ -385,6 +387,13 @@ export class CloudClient {
   }
   operation(operationId: OperationId) {
     return this.request({ path: `/v1/operations/${operationId}`, schema: operationResponseSchema });
+  }
+  reservationHistory(before?: string) {
+    const query = before === undefined ? '' : `?before=${reservationCursorSchema.parse(before)}`;
+    return this.request({
+      path: `/v1/usage/history${query}`,
+      schema: reservationHistoryResponseSchema,
+    });
   }
   usage() {
     return this.request({ path: '/v1/usage', schema: usageResponseSchema });

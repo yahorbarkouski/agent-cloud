@@ -1,0 +1,115 @@
+name: agent-cloud-local
+x-runtime: &runtime
+  image: ${ACLD_SELF_HOST_IMAGE:?Build the runtime image and set ACLD_SELF_HOST_IMAGE to its image ID}
+  pull_policy: never
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp:size=128m,mode=1777
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  pids_limit: 128
+  mem_limit: 512m
+  cpus: 1
+  environment: &environment
+    ACLD_LOCAL_QUICKSTART: '1'
+    PROVIDER: simulated
+    HOST: 0.0.0.0
+    PORT: '4319'
+    PUBLIC_URL: http://127.0.0.1:4319
+    LOG_LEVEL: warn
+    MAX_LIVE_MACHINES: '2'
+    PROVIDER_CURRENCY: EUR
+    MAX_PROVIDER_HOURLY: '0.02'
+  volumes:
+    - configuration:/run/agent-cloud:ro
+  logging:
+    driver: local
+    options:
+      max-size: 5m
+      max-file: '2'
+services:
+  initialize:
+    <<: *runtime
+    profiles: [setup]
+    command: [initialize-local]
+    volumes:
+      - configuration:/run/agent-cloud
+  postgres:
+    image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    environment:
+      POSTGRES_USER: agentcloud
+      POSTGRES_DB: agentcloud
+      POSTGRES_PASSWORD_FILE: /run/agent-cloud/postgres-password
+    volumes:
+      - database:/var/lib/postgresql/data
+      - configuration:/run/agent-cloud:ro
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U agentcloud -d agentcloud]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 128
+    logging:
+      driver: local
+      options:
+        max-size: 5m
+        max-file: '2'
+  migrate:
+    <<: *runtime
+    profiles: [setup]
+    command: [migrate]
+    depends_on:
+      postgres: { condition: service_healthy }
+  bootstrap:
+    <<: *runtime
+    profiles: [setup]
+    command: [bootstrap-internal, --allow-internal-development]
+    volumes:
+      - configuration:/run/agent-cloud:ro
+      - operator:/work/.local
+    depends_on:
+      postgres: { condition: service_healthy }
+  api:
+    <<: *runtime
+    command: [api]
+    ports:
+      - '127.0.0.1:${ACLD_SELF_HOST_PORT:-4319}:4319'
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          'fetch("http://127.0.0.1:4319/healthz").then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))',
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    depends_on:
+      postgres: { condition: service_healthy }
+  worker:
+    <<: *runtime
+    command: [worker]
+    depends_on:
+      postgres: { condition: service_healthy }
+  cli:
+    <<: *runtime
+    profiles: [tools]
+    command: [cli, whoami]
+    network_mode: service:api
+    environment:
+      ACLD_CREDENTIALS: /work/.local/admin.credentials.json
+    volumes:
+      - operator:/work/.local:ro
+    depends_on:
+      api: { condition: service_healthy }
+volumes:
+  database:
+  configuration:
+  operator:
+networks:
+  default:
+    internal: true

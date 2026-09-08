@@ -263,6 +263,10 @@ export function createBackups(input: {
   }
   const schedules = createBackupSchedules({ db: input.db, capture: captureInTransaction });
   return {
+    limits: {
+      maxAccountBytes: input.config.maxAccountBytes,
+      maxCaptureBytes: input.config.limits.maxBytes,
+    },
     capture,
     list,
     inspect,
