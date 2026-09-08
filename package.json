@@ -68,7 +68,8 @@
     "smoke:backup-store": "tsx packages/backup-store/src/fixture/smoke.ts",
     "smoke:recipes": "pnpm build && node --import tsx recipes/smoke.mjs",
     "smoke:self-host-wal": "node scripts/self-host-smoke.mjs --restore --wal",
-    "smoke:agent-instructions": "pnpm build && node scripts/smoke-agent-instructions.mjs"
+    "smoke:agent-instructions": "pnpm build && node scripts/smoke-agent-instructions.mjs",
+    "smoke:self-host-gateway": "node scripts/self-host-smoke.mjs --gateway"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

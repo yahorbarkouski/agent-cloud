@@ -22,6 +22,7 @@ Read `docs/CONTEXT.md` for the single current handoff. Architecture documentatio
 - Never put provider credentials in guests. Never print secrets, raw CA logs, customer commands or application data into service logs. Avoid full process listings: process titles can contain inherited credentials; inspect PID/command-name fields only. Smallstep access logging remains disabled. Private files are owner-only; use explicit SSH credentials and verified host trust, never inherited SSH configuration or agents.
 - Keep the probe account restricted to identity and inspection. Internal deployment access must be explicitly configured, separate from public customer access and unavailable to delegated/customer grants by default.
 - Applied migrations and published image inputs are immutable. Run `pnpm db:check` before claiming deployed schema matches source. Preserve original identity keys on retries; runtime and cleanup must survive missing fresh-provisioning credentials.
+- Restored control state may contain stale grants and intents. Keep real mutators externally fenced until current provider ownership and authority are reconciled.
 
 ## Cost and verification
 

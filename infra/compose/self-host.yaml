@@ -75,6 +75,7 @@ services:
   api:
     <<: *runtime
     command: [api]
+    networks: [default, ingress]
     ports:
       - '127.0.0.1:${ACLD_SELF_HOST_PORT:-4319}:4319'
     healthcheck:
@@ -113,3 +114,4 @@ volumes:
 networks:
   default:
     internal: true
+  ingress: {}

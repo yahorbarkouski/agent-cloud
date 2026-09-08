@@ -1,3 +1,4 @@
+import { verifyPackagedGateway } from './support/packaged-gateway.mjs';
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
@@ -14,11 +15,13 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const flags = process.argv.slice(2);
 if (
   new Set(flags).size !== flags.length ||
-  flags.some((flag) => !['--restore', '--wal'].includes(flag))
+  flags.some((flag) => !['--restore', '--wal', '--gateway'].includes(flag))
 )
-  throw new Error('Usage: node scripts/self-host-smoke.mjs [--restore] [--wal]');
+  throw new Error('Usage: node scripts/self-host-smoke.mjs [--restore] [--wal] [--gateway]');
 const restoreScenario = flags.includes('--restore');
 const walScenario = flags.includes('--wal');
+const gatewayScenario = flags.includes('--gateway');
+let gatewayEvidence;
 const startedAt = new Date().toISOString();
 const project = `acld-self-host-${randomUUID()}`;
 const restoreProject = restoreScenario ? `acld-self-host-restore-${randomUUID()}` : undefined;
@@ -916,6 +919,18 @@ try {
   ]);
   stage = 'api and worker';
   await compose(['up', '--detach', '--wait', 'api', 'worker']);
+  stage = 'host loopback API authentication';
+  const hostApi = await compose(['port', 'api', '4319']);
+  requireFact(/^127\.0\.0\.1:\d+$/u.test(hostApi));
+  const health = await globalThis.fetch(`http://${hostApi}/healthz`, {
+    signal: globalThis.AbortSignal.timeout(5000),
+  });
+  requireFact(health.status === 200 && (await health.json()).status === 'ok');
+  const denied = await globalThis.fetch(`http://${hostApi}/v1/whoami`, {
+    signal: globalThis.AbortSignal.timeout(5000),
+  });
+  requireFact(denied.status === 401);
+  await denied.body?.cancel();
   await compose([
     'exec',
     '-T',
@@ -931,6 +946,10 @@ try {
   requireFact(offers.provider === 'simulated');
   const { projects } = await cli(['project', 'list']);
   requireFact(projects.length === 1 && typeof projects[0].id === 'string');
+  if (gatewayScenario) {
+    stage = 'packaged public gateway';
+    gatewayEvidence = await verifyPackagedGateway({ image, docker });
+  }
   stage = 'create simulated machine';
   const { operation } = await cli([
     'machine',
@@ -1054,6 +1073,8 @@ if (passed)
       ...(walEvidence ? { wal: walEvidence } : {}),
       provider: 'simulated',
       packagedCli: true,
+      hostLoopbackApi: true,
+      ...(gatewayEvidence ? { gateway: gatewayEvidence } : {}),
       persistedAcrossRestart: true,
       machineDestroyed: true,
       cleanup: true,
