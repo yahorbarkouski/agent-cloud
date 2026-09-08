@@ -5,7 +5,7 @@ import { fileURLToPath, URL } from 'node:url';
 import { promisify } from 'node:util';
 
 /** Deploy only allowlisted built inputs. pnpm --prod must never prune the source checkout. */
-export async function packageCli(directory) {
+export async function packageCli(directory: string) {
   const source = fileURLToPath(new URL('../../', import.meta.url));
   const packaging = join(directory, 'workspace');
   await mkdir(packaging, { mode: 0o700 });

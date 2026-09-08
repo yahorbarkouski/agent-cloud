@@ -32,7 +32,7 @@ The parent directory must already exist. Installation writes a private `SKILL.md
 
 `capabilities` calls authenticated `GET /v1/capabilities`; the SDK exposes `capabilities()`. The response separates the provider and protocol version from `configured` service flags. A configured gateway or backup service may be unhealthy, and the selected machine may lack a required guest helper. `whoami` reports the credential's policy; it is still enforced on every operation. The image factory rejects customer discovery along with all other customer API calls. No internal operator shortcuts or private service addresses appear in discovery.
 
-Release artifacts are not published yet. The runtime image bundles the CLI and skill; development uses `pnpm acld`. `pnpm smoke:agent-instructions` verifies the production package outside the checkout with no credentials, installs its skill, checks exact content and refuses overwriting edited/symlink destinations.
+A standalone CLI archive can now be built with bundled dependencies, recipes, agent instructions, license notices and SHA-256 checksums. Follow [CLI installation](docs/cli-install.md) to verify and unpack it without cloning the repository. Artifacts are not published publicly yet. `pnpm smoke:cli-release` verifies extraction outside the checkout, offline assets, private login, authenticated API commands and revocation. Development uses `pnpm acld`.
 
 ## Run locally
 

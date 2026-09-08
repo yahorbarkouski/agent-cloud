@@ -25,7 +25,8 @@ if (args[0] === ${JSON.stringify(kind)}) process.stdout.write('pre-existing-fixt
           process.execPath,
           ['--import', 'tsx', 'recipes/smoke.mjs', 'postgres'],
           {
-            env: { ...process.env, PATH: `${scratch}:${process.env.PATH ?? ''}` },
+            // This subprocess needs only executables, not inherited worker hooks or credentials.
+            env: { PATH: `${scratch}:${process.env.PATH ?? ''}` },
             timeout: 30_000,
             maxBuffer: 65_536,
           },

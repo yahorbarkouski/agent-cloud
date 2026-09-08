@@ -63,7 +63,7 @@ jobs:
         run: npm exec --yes --package=pnpm@12.3.4 -- pnpm format:check
       - if: needs.scope.outputs.code_changed == 'true'
         timeout-minutes: 3
-        run: node scripts/smoke-agent-instructions.mjs
+        run: node --import tsx scripts/smoke-cli-release.ts
       - if: needs.scope.outputs.code_changed == 'true'
         timeout-minutes: 2
         env:

@@ -6,7 +6,7 @@ import { createServer } from 'node:net';
 import { join } from 'node:path';
 import process from 'node:process';
 import { promisify } from 'node:util';
-import { packageCli } from '../scripts/support/packaged-cli.mjs';
+import { packageCli } from '../scripts/support/packaged-cli.ts';
 import { isolatedBackupConfig } from '../packages/guestctl/src/backup-system.ts';
 
 const exec = promisify(execFile);
