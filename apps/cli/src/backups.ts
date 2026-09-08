@@ -3,6 +3,7 @@ import type { CloudClient } from '@agent-cloud/sdk';
 import { z } from 'zod';
 import {
   backupCaptureRequestSchema,
+  backupScheduleIdSchema,
   backupIdSchema,
   backupRecipeSchema,
   composeAppSchema,
@@ -19,42 +20,70 @@ export function registerBackups(input: {
   const backup = input.program
     .command('backup')
     .description('Capture protected backups and restore them into a new isolated machine.');
-  backup
-    .command('capture <machine> <app>')
-    .description('Capture a consistent PostgreSQL dump and explicitly listed application files.')
-    .requiredOption('--id <uuid>', 'Stable backup ID; inspect this ID after a lost response')
-    .requiredOption('--release <uuid>', 'Exact deployed Compose release')
-    .requiredOption('--service <name>', 'Compose PostgreSQL service')
-    .requiredOption('--database <name>', 'PostgreSQL database')
-    .requiredOption('--user <name>', 'PostgreSQL user')
-    .option('--files <paths...>', 'Explicit regular files beneath the customer directory')
-    .action(async (machine: string, app: string, raw: unknown) => {
-      const options = z
-        .object({
-          id: backupIdSchema,
-          release: backupRecipeSchema.shape.releaseId,
-          service: backupRecipeSchema.shape.service,
-          database: backupRecipeSchema.shape.database,
-          user: backupRecipeSchema.shape.user,
-          files: backupRecipeSchema.shape.files,
-        })
-        .parse(raw);
-      const request = backupCaptureRequestSchema.parse({
-        id: options.id,
-        recipe: {
-          kind: 'compose-postgres',
-          app: composeAppSchema.parse(app),
-          releaseId: options.release,
-          service: options.service,
-          database: options.database,
-          user: options.user,
-          files: options.files,
-        },
+  for (const command of ['capture', 'schedule'] satisfies Array<'capture' | 'schedule'>)
+    backup
+      .command(`${command} <machine> <app>`)
+      .description(
+        command === 'capture'
+          ? 'Capture a consistent PostgreSQL dump and explicitly listed application files.'
+          : 'Back up this exact recipe daily, starting on the next worker tick. The admitting grant must remain valid.',
+      )
+      .requiredOption('--id <uuid>', 'Stable backup ID; inspect this ID after a lost response')
+      .requiredOption('--release <uuid>', 'Exact deployed Compose release')
+      .requiredOption('--service <name>', 'Compose PostgreSQL service')
+      .requiredOption('--database <name>', 'PostgreSQL database')
+      .requiredOption('--user <name>', 'PostgreSQL user')
+      .option('--files <paths...>', 'Explicit regular files beneath the customer directory')
+      .action(async (machine: string, app: string, raw: unknown) => {
+        const options = z
+          .object({
+            id: backupIdSchema,
+            release: backupRecipeSchema.shape.releaseId,
+            service: backupRecipeSchema.shape.service,
+            database: backupRecipeSchema.shape.database,
+            user: backupRecipeSchema.shape.user,
+            files: backupRecipeSchema.shape.files,
+          })
+          .parse(raw);
+        const request = backupCaptureRequestSchema.parse({
+          id: options.id,
+          recipe: {
+            kind: 'compose-postgres',
+            app: composeAppSchema.parse(app),
+            releaseId: options.release,
+            service: options.service,
+            database: options.database,
+            user: options.user,
+            files: options.files,
+          },
+        });
+        input.output(
+          command === 'capture'
+            ? await (
+                await input.client()
+              ).captureBackup({ machineId: machineIdSchema.parse(machine), request })
+            : await (
+                await input.client()
+              ).createBackupSchedule({
+                machineId: machineIdSchema.parse(machine),
+                request: { ...request, id: backupScheduleIdSchema.parse(options.id) },
+              }),
+        );
       });
+  backup.command('schedule-inspect <id>').action(async (id: string) => {
+    input.output(await (await input.client()).backupSchedule(backupScheduleIdSchema.parse(id)));
+  });
+  backup.command('schedule-list <machine>').action(async (machine: string) => {
+    input.output(await (await input.client()).backupSchedules(machineIdSchema.parse(machine)));
+  });
+  backup
+    .command('schedule-disable <id>')
+    .description(
+      'Stop future daily admissions; already admitted captures and retained backups remain.',
+    )
+    .action(async (id: string) => {
       input.output(
-        await (
-          await input.client()
-        ).captureBackup({ machineId: machineIdSchema.parse(machine), request }),
+        await (await input.client()).disableBackupSchedule(backupScheduleIdSchema.parse(id)),
       );
     });
   backup.command('list <machine>').action(async (machine: string) => {

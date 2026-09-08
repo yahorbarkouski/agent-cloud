@@ -1,0 +1,36 @@
+services:
+  database:
+    image: postgres:17.11-alpine3.24@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    restart: unless-stopped
+    mem_limit: 384m
+    cpus: 0.5
+    pids_limit: 100
+    shm_size: 128m
+    security_opt: [no-new-privileges:true]
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_DB: app
+      POSTGRES_PASSWORD_FILE: /run/secrets/database_password
+      TZ: UTC
+      PGTZ: UTC
+    command: [postgres, -c, max_connections=50, -c, shared_buffers=128MB]
+    secrets: [database_password]
+    volumes: [database:/var/lib/postgresql/data]
+    networks: [private]
+    healthcheck:
+      test: [CMD, pg_isready, -U, app, -d, app]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+    logging:
+      driver: local
+      options: { max-size: 1m, max-file: '2' }
+secrets:
+  database_password:
+    file: ./secrets/database-password
+volumes:
+  database: {}
+networks:
+  private:
+    internal: true

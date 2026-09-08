@@ -2,7 +2,7 @@
 
 The implemented path captures one supported Compose application with PostgreSQL 17 and explicitly declared regular files. The control worker encrypts it outside the guest and stores one exact, retained S3 object version. Restore provisions a new machine through the existing budget and ownership checks. It never overwrites the source machine or changes a route.
 
-The manual capture/isolated-restore path is native verified. The customer CLI/API/worker scenario in `.local/backup-native-5.log` restored count `1` and identical declared-file contents on a second Ubuntu VM after wrapping-key rotation. It verified quarantine, idempotent admission, unchanged source, zero reservations after destruction and backup availability after source destruction. Both exact-owned VMs were removed. API/worker recovery checks and real local MinIO protection checks also pass. Hetzner Object Storage has not been verified or provisioned. Network promotion and existing-hostname movement passed the combined native scenario in `.local/restore-cutover-native-4.log`: source writes fenced, count `1` restored, the same public HTTPS hostname moved, count `2` written/read, route removed, both allocations destroyed with zero reservations, and both exact-owned physical VMs deleted. This is local MinIO/native VM proof, not Hetzner provider proof. Scheduled capture, automatic retention pruning, provider automated backups and a customer purge command remain pending.
+The manual capture/isolated-restore path is native verified. The customer CLI/API/worker scenario in `.local/backup-native-5.log` restored count `1` and identical declared-file contents on a second Ubuntu VM after wrapping-key rotation. It verified quarantine, idempotent admission, unchanged source, zero reservations after destruction and backup availability after source destruction. Both exact-owned VMs were removed. API/worker recovery checks and real local MinIO protection checks also pass. Hetzner Object Storage has not been verified or provisioned. Network promotion and existing-hostname movement passed the combined native scenario in `.local/restore-cutover-native-4.log`: source writes fenced, count `1` restored, the same public HTTPS hostname moved, count `2` written/read, route removed, both allocations destroyed with zero reservations, and both exact-owned physical VMs deleted. This is local MinIO/native VM proof, not Hetzner provider proof. Daily capture is implemented through the existing worker. Its real cron/native scenario passed `.local/backup-schedules-native-1.log`: the CLI exited, the minute cron admitted capture, the encrypted backup restored on a separate VM, public HTTPS cutover preserved and accepted data, and both VMs were removed. The 24-hour admission policy and outage/revocation/quota cases are database-time integration checks; this proof did not wait a real day. Automatic retention pruning, provider automated backups and a customer purge command remain pending.
 
 ## Customer commands
 
@@ -24,6 +24,28 @@ acld backup restore-inspect <restore-uuid>
 Generate and retain each UUID before submission. A disconnected CLI does not stop worker execution. Inspect or wait with that UUID after a lost response; replaying the identical admission returns the same record. Different input with the same UUID conflicts. Restore also requires `backup:restore` and `machine:create` within the original project's size, region and spending policy. Its result includes the new machine and provisioning operation IDs, including when recovery fails and cleanup is still necessary.
 
 The API exposes `POST/GET /v1/machines/:machineId/backups`, `GET /v1/backups/:id`, and `POST/GET /v1/restores[/:id]`. Mutation bodies use `backupCaptureRequestSchema` and `restoreRequestSchema`. No object-store credentials, wrapping keys, ciphertext paths or private encryption envelopes appear in these responses.
+
+## Daily capture
+
+Configure daily capture using the same explicit recipe flags as a manual capture:
+
+```sh
+acld backup schedule <machine> sample --id <schedule-uuid> --release <release-uuid> \
+  --service database --database reference --user reference --files uploads/receipt.txt
+acld backup schedule-inspect <schedule-uuid>
+acld backup schedule-list <machine>
+acld backup schedule-disable <schedule-uuid>
+```
+
+The CLI can exit after configuration. The worker's minute reconciliation admits the first capture when next available, then one capture every 24 hours. After an outage it admits one current capture; it does not replay missed daily jobs. The API returns the last attempt, its live backup state, the latest successful backup and the next due time. Inspect the backup's actual timestamp and retention deadline. A failed capture or storage refusal leaves prior recovery points intact; no pruning is currently automatic.
+
+A schedule pins both the original VM allocation and the exact recipe release. After deploying a new release, disable the old schedule and create a new schedule UUID with the successful release ID. Reusing an existing schedule UUID with different inputs conflicts. A disabled schedule stays disabled on replay. Source replacement never silently transfers a schedule. Only one enabled schedule per machine/app is permitted, with ten active schedules and thirty new schedule admissions per account per hour.
+
+The admitting grant must remain valid with `backup:create` for the source project. Use an explicitly authorized grant whose expiry covers the intended protection period. Expiry/revocation disables the schedule on its next attempted admission. The worker rechecks current ancestry and quotas under the existing account/capacity locks. Disabling prevents future admissions; a capture already admitted remains a separate durable operation, and its effect checks still honor revocation. No guest receives an automation token or storage credentials.
+
+Storage reservations and capture limits are identical to manual capture. An exhausted allowance refuses the new daily admission and reports it without deleting a previous backup. The service does not promise continuous protection when authority, storage or the pinned source recipe is unavailable. Check `lastAttempt` and `lastSuccessfulBackup`; their timestamps expose degraded protection.
+
+The API provides `POST/GET /v1/machines/:machineId/backup-schedules` and `GET/DELETE /v1/backup-schedules/:id`. Schedule creation and first capture are separate admissions. The schedule, each run's backup ID and next due time survive worker restarts in PostgreSQL.
 
 ## Capture and recovery guarantees
 

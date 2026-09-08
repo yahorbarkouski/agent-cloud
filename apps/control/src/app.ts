@@ -36,6 +36,8 @@ import {
   hostnameSchema,
   domainCreateSchema,
   backupCaptureRequestSchema,
+  backupScheduleRequestSchema,
+  backupScheduleIdSchema,
   backupIdSchema,
   restoreRequestSchema,
   restoreIdSchema,
@@ -306,6 +308,42 @@ export function createApp(input: {
   app.get('/v1/catalog', (c) => c.json(input.catalog()));
   if (input.backups && input.customerAccess !== 'disabled') {
     const backups = input.backups;
+    app.post('/v1/machines/:machineId/backup-schedules', async (c) =>
+      c.json(
+        {
+          schedule: await backups.schedules.create(
+            c.get('principal'),
+            machineIdSchema.parse(c.req.param('machineId')),
+            backupScheduleRequestSchema.parse(await c.req.json<unknown>()),
+          ),
+        },
+        202,
+      ),
+    );
+    app.get('/v1/machines/:machineId/backup-schedules', async (c) =>
+      c.json({
+        schedules: await backups.schedules.list(
+          c.get('principal'),
+          machineIdSchema.parse(c.req.param('machineId')),
+        ),
+      }),
+    );
+    app.get('/v1/backup-schedules/:id', async (c) =>
+      c.json({
+        schedule: await backups.schedules.inspect(
+          c.get('principal'),
+          backupScheduleIdSchema.parse(c.req.param('id')),
+        ),
+      }),
+    );
+    app.delete('/v1/backup-schedules/:id', async (c) =>
+      c.json({
+        schedule: await backups.schedules.disable(
+          c.get('principal'),
+          backupScheduleIdSchema.parse(c.req.param('id')),
+        ),
+      }),
+    );
     app.post('/v1/machines/:machineId/backups', async (c) =>
       c.json(
         {

@@ -123,6 +123,9 @@ export async function exerciseCustomerAccess(input: {
   });
   handle = (request) => app.fetch(request);
   const worker = await run({
+    ...(process.env.AGENT_CLOUD_BACKUP_SCHEDULE_SCENARIO === '1'
+      ? { crontab: '* * * * * reconcile_operations' }
+      : {}),
     pgPool: input.connection.pool,
     concurrency: 2,
     pollInterval: 100,

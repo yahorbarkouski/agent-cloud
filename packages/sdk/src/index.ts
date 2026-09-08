@@ -3,6 +3,10 @@ export { loginConfiguration, exchangeGithubLogin, readLoginJson } from './login.
 import { z } from 'zod';
 import {
   backupCaptureRequestSchema,
+  backupScheduleIdSchema,
+  backupScheduleRequestSchema,
+  backupScheduleResponseSchema,
+  backupSchedulesResponseSchema,
   backupIdSchema,
   backupResponseSchema,
   backupsResponseSchema,
@@ -169,6 +173,36 @@ export class CloudClient {
       method: 'POST',
       body: backupCaptureRequestSchema.parse(input.request),
       schema: backupResponseSchema,
+    });
+  }
+  createBackupSchedule(input: {
+    machineId: MachineId;
+    request: z.input<typeof backupScheduleRequestSchema>;
+  }) {
+    return this.request({
+      path: `/v1/machines/${machineIdSchema.parse(input.machineId)}/backup-schedules`,
+      method: 'POST',
+      body: backupScheduleRequestSchema.parse(input.request),
+      schema: backupScheduleResponseSchema,
+    });
+  }
+  backupSchedule(id: string) {
+    return this.request({
+      path: `/v1/backup-schedules/${backupScheduleIdSchema.parse(id)}`,
+      schema: backupScheduleResponseSchema,
+    });
+  }
+  backupSchedules(machineId: MachineId) {
+    return this.request({
+      path: `/v1/machines/${machineIdSchema.parse(machineId)}/backup-schedules`,
+      schema: backupSchedulesResponseSchema,
+    });
+  }
+  disableBackupSchedule(id: string) {
+    return this.request({
+      path: `/v1/backup-schedules/${backupScheduleIdSchema.parse(id)}`,
+      method: 'DELETE',
+      schema: backupScheduleResponseSchema,
     });
   }
   backups(machineId: MachineId) {

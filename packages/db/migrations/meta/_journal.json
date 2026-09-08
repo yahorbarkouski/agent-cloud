@@ -169,6 +169,13 @@
       "when": 1788820220864,
       "tag": "0023_protected_backups",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1788827471195,
+      "tag": "0024_backup_schedules",
+      "breakpoints": true
     }
   ]
 }

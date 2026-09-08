@@ -792,3 +792,67 @@ export const backupRestores = pgTable(
     index('backup_restores_account_time').on(t.accountId, t.createdAt),
   ],
 );
+
+export const backupSchedules = pgTable(
+  'backup_schedules',
+  {
+    id: text('id').primaryKey(),
+    accountId: text('account_id').notNull(),
+    projectId: text('project_id').notNull(),
+    machineId: text('machine_id').notNull(),
+    allocationId: text('allocation_id').notNull(),
+    grantId: text('grant_id').notNull(),
+    digest: text('digest').notNull(),
+    recipe: jsonb('recipe').notNull(),
+    nextRunAt: timestamp('next_run_at', { withTimezone: true }).notNull(),
+    disabledAt: timestamp('disabled_at', { withTimezone: true }),
+    lastAttempt: jsonb('last_attempt').notNull().default({ kind: 'none' }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique().on(t.accountId, t.id),
+    foreignKey({
+      columns: [t.accountId, t.projectId],
+      foreignColumns: [projects.accountId, projects.id],
+    }),
+    foreignKey({
+      columns: [t.accountId, t.machineId],
+      foreignColumns: [machines.accountId, machines.id],
+    }),
+    foreignKey({
+      columns: [t.accountId, t.allocationId],
+      foreignColumns: [allocations.accountId, allocations.id],
+    }),
+    foreignKey({
+      columns: [t.accountId, t.grantId],
+      foreignColumns: [grants.accountId, grants.id],
+    }),
+    uniqueIndex('backup_schedule_active_app')
+      .on(t.machineId, sql`(${t.recipe}->>'app')`)
+      .where(sql`${t.disabledAt} IS NULL`),
+    index('backup_schedule_due')
+      .on(t.nextRunAt)
+      .where(sql`${t.disabledAt} IS NULL`),
+  ],
+);
+
+export const backupScheduleRuns = pgTable(
+  'backup_schedule_runs',
+  {
+    accountId: text('account_id').notNull(),
+    scheduleId: text('schedule_id').notNull(),
+    backupId: text('backup_id').primaryKey(),
+    dueAt: timestamp('due_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    unique().on(t.scheduleId, t.dueAt),
+    foreignKey({
+      columns: [t.accountId, t.scheduleId],
+      foreignColumns: [backupSchedules.accountId, backupSchedules.id],
+    }),
+    foreignKey({
+      columns: [t.accountId, t.backupId],
+      foreignColumns: [backups.accountId, backups.id],
+    }),
+  ],
+);

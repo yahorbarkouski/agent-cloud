@@ -7,6 +7,7 @@ import { setTimeout } from 'node:timers/promises';
 import { z } from 'zod';
 import {
   backupResponseSchema,
+  backupScheduleResponseSchema,
   restoreResponseSchema,
   machineResponseSchema,
   operationResponseSchema,
@@ -122,11 +123,13 @@ export async function exerciseBackups(input: {
   const content = `declared backup data ${randomUUID()}\n`;
   await writeFile(declared, content, { mode: 0o600 });
   await cli(['file', 'put', input.machine, declared, '/var/lib/agent-customer/declared.txt']);
-  const backupId = randomUUID();
+  const scheduled = process.env.AGENT_CLOUD_BACKUP_SCHEDULE_SCENARIO === '1';
+  let backupId: string = randomUUID();
+  const scheduleId = backupId;
   progress('capturing PostgreSQL and declared files into protected encrypted S3');
   const captureArguments = [
     'backup',
-    'capture',
+    scheduled ? 'schedule' : 'capture',
     input.machine,
     'sample',
     '--id',
@@ -142,17 +145,42 @@ export async function exerciseBackups(input: {
     '--files',
     'declared.txt',
   ];
-  const admitted = backupResponseSchema.parse(JSON.parse(await cli(captureArguments)));
-  assert.equal(admitted.backup.id, backupId);
+  const admission: unknown = JSON.parse(await cli(captureArguments));
+  if (scheduled) {
+    let schedule = backupScheduleResponseSchema.parse(admission).schedule;
+    assert.equal(schedule.id, scheduleId);
+    progress('CLI exited; waiting for the real worker cron to admit its first daily capture');
+    const deadline = Date.now() + 90_000;
+    while (schedule.lastAttempt.kind === 'none' && Date.now() < deadline) {
+      await setTimeout(1000);
+      schedule = backupScheduleResponseSchema.parse(
+        JSON.parse(await cli(['backup', 'schedule-inspect', scheduleId])),
+      ).schedule;
+    }
+    assert.equal(schedule.lastAttempt.kind, 'admitted');
+    backupId = schedule.lastAttempt.backup.id;
+  } else assert.equal(backupResponseSchema.parse(admission).backup.id, backupId);
   // The admission CLI exits; the worker performs capture independently of that process.
   const captured = backupResponseSchema.parse(
     JSON.parse(await cli(['backup', 'wait', backupId, '--timeout', '900'])),
   );
   assert.equal(captured.backup.state.kind, 'captured');
-  assert.equal(
-    backupResponseSchema.parse(JSON.parse(await cli(captureArguments))).backup.id,
-    backupId,
-  );
+  if (scheduled) {
+    const replay = backupScheduleResponseSchema.parse(
+      JSON.parse(await cli(captureArguments)),
+    ).schedule;
+    assert.equal(replay.lastSuccessfulBackup?.id, backupId);
+    assert.equal(replay.lastAttempt.kind, 'admitted');
+    const disabled = backupScheduleResponseSchema.parse(
+      JSON.parse(await cli(['backup', 'schedule-disable', scheduleId])),
+    ).schedule;
+    assert.equal(disabled.state.kind, 'disabled');
+    assert.equal(disabled.lastSuccessfulBackup?.id, backupId);
+  } else
+    assert.equal(
+      backupResponseSchema.parse(JSON.parse(await cli(captureArguments))).backup.id,
+      backupId,
+    );
   assert.deepEqual(JSON.parse(await source.application('/api/visits')), {
     revision: '1',
     count: '1',
@@ -372,6 +400,7 @@ export async function exerciseBackups(input: {
       reservationsAfterDestroy: 0,
       backupSurvivesSourceDestroy: true,
       networkPromotion: Boolean(route),
+      dailyCaptureAfterCliExit: scheduled,
       publicHttpsCutover: Boolean(route),
       sourceWritesFenced: Boolean(route),
       restoredWritesVerified: Boolean(route),

@@ -115,6 +115,7 @@ export function createTasks(input: {
     },
     reconcile_operations: async () => {
       if (input.backups) {
+        await input.backups.schedules.reconcile();
         const pending = await input.connection.db.execute<{
           kind: 'backup' | 'restore';
           id: string;

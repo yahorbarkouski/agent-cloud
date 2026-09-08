@@ -1,0 +1,77 @@
+services:
+  database:
+    image: postgres:17.11-alpine3.24@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    restart: unless-stopped
+    mem_limit: 384m
+    cpus: 0.5
+    pids_limit: 100
+    shm_size: 128m
+    security_opt: [no-new-privileges:true]
+    environment:
+      POSTGRES_USER: umami
+      POSTGRES_DB: umami
+      POSTGRES_PASSWORD_FILE: /run/secrets/database_password
+      TZ: UTC
+      PGTZ: UTC
+    command: [postgres, -c, max_connections=50, -c, shared_buffers=128MB]
+    secrets: [database_password]
+    volumes: [database:/var/lib/postgresql/data]
+    networks: [private]
+    healthcheck:
+      test: [CMD, pg_isready, -U, umami, -d, umami]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+    logging:
+      driver: local
+      options: { max-size: 1m, max-file: '2' }
+  umami:
+    image: ghcr.io/umami-software/umami:3.3.1@sha256:fa32d116cf20cad52cbc3fad9a63b46e7fa02299d8f967168eb453d49c476b4a
+    init: true
+    restart: unless-stopped
+    mem_limit: 768m
+    cpus: 1
+    pids_limit: 100
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    env_file: [./secrets/umami.env]
+    environment:
+      HOSTNAME: 0.0.0.0
+      PORT: '3000'
+      TZ: UTC
+      DISABLE_TELEMETRY: '1'
+      DISABLE_UPDATES: '1'
+      PRIVATE_MODE: '1'
+    command:
+      - sh
+      - -c
+      - node /app/recipe-bootstrap.mjs && unset RECIPE_ADMIN_PASSWORD && exec node server.js
+    volumes: [./bootstrap.mjs:/app/recipe-bootstrap.mjs:ro]
+    ports: ['127.0.0.1:3000:3000']
+    networks: [private, edge]
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/heartbeat').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 60s
+    logging:
+      driver: local
+      options: { max-size: 1m, max-file: '2' }
+secrets:
+  database_password:
+    file: ./secrets/database-password
+volumes:
+  database: {}
+networks:
+  private:
+    internal: true
+  edge: {}
