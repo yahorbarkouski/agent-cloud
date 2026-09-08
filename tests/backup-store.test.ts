@@ -286,7 +286,6 @@ it('restores an exact historical version after its promised retention expires wi
   expect(await f.reader.download({ receipt, destination })).toEqual(receipt);
   expect(await readFile(destination)).toEqual(await readFile(file));
   expect(await f.reader.inspect(receipt)).toEqual(receipt);
-  await expect(f.writer.recover(intent)).rejects.toThrow(BackupStoreError);
 });
 const prepare = () =>
   f.writer.prepareUpload({
@@ -546,6 +545,61 @@ it('recovers a lost PUT reply by reading the original version behind a delete ma
   expect(putCalls()).toHaveLength(1);
 });
 
+it.each(['GOVERNANCE', 'COMPLIANCE'] satisfies Array<'GOVERNANCE' | 'COMPLIANCE'>)(
+  'recovers a lost %s upload reply after retention expires using only reads',
+  async (mode) => {
+    const intent = await f.writer.prepareUpload({
+      attemptId: randomUUID(),
+      file,
+      retention: { mode, retainUntil: new Date(Date.now() + 86_400_000).toISOString() },
+    });
+    f.faults.losePutReply = true;
+    await expect(f.writer.upload({ intent, file })).rejects.toThrow('unresolved');
+    const version = f.versions[0];
+    if (!version) throw new Error('Missing stored fixture.');
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse(intent.retention.retainUntil) + 60_000);
+    f.faults.latestDeleteMarker = true;
+    f.calls.length = 0;
+    expect(await f.writer.recover(intent)).toEqual({
+      kind: 'found',
+      receipt: { ...intent, versionId: version.versionId },
+    });
+    expect(f.calls.every((call) => call.method === 'GET' || call.method === 'HEAD')).toBe(true);
+    expect(f.calls.some((call) => call.path.includes(`versionId=${version.versionId}`))).toBe(true);
+    // Historical recovery does not authorize a new upload with expired protection.
+    await expect(f.writer.upload({ intent, file })).rejects.toThrow(BackupStoreError);
+    await expect(
+      f.writer.prepareUpload({ attemptId: randomUUID(), file, retention: intent.retention }),
+    ).rejects.toThrow(BackupStoreError);
+    expect(putCalls()).toHaveLength(0);
+  },
+);
+
+it('still verifies expired recovery ownership, minimum retention, mode and ciphertext', async () => {
+  const intent = await prepare();
+  const receipt = await f.writer.upload({ intent, file });
+  const version = f.versions[0];
+  if (!version) throw new Error('Missing stored fixture.');
+  vi.spyOn(Date, 'now').mockReturnValue(Date.parse(intent.retention.retainUntil) + 60_000);
+  f.calls.length = 0;
+  await expect(f.writer.recover({ ...intent, storeId: '0'.repeat(64) })).rejects.toThrow(
+    BackupStoreError,
+  );
+  expect(f.calls).toHaveLength(0);
+  version.retainUntil = new Date(Date.parse(intent.retention.retainUntil) - 1000).toISOString();
+  await expect(f.writer.recover(intent)).rejects.toThrow(BackupStoreError);
+  version.retainUntil = receipt.retention.retainUntil;
+  version.mode = 'COMPLIANCE';
+  await expect(f.writer.recover(intent)).rejects.toThrow(BackupStoreError);
+  version.mode = intent.retention.mode;
+  f.faults.corruptDownload = true;
+  await expect(f.writer.recover(intent)).rejects.toThrow(BackupStoreError);
+  f.faults.corruptDownload = false;
+  version.metadata['acld-intent'] = '0'.repeat(64);
+  await expect(f.writer.recover(intent)).rejects.toThrow(BackupStoreError);
+  expect(putCalls()).toHaveLength(0);
+});
+
 it('keeps a missing or ambiguous upload unresolved and never converts recovery into a PUT', async () => {
   const intent = await prepare();
   expect(await f.writer.recover(intent)).toEqual({ kind: 'unresolved' });
@@ -554,6 +608,7 @@ it('keeps a missing or ambiguous upload unresolved and never converts recovery i
   const version = f.versions[0];
   if (!version) throw new Error('Missing stored fixture.');
   f.versions.push({ ...version, versionId: randomUUID() });
+  vi.spyOn(Date, 'now').mockReturnValue(Date.parse(intent.retention.retainUntil) + 60_000);
   expect(await f.writer.recover(intent)).toEqual({ kind: 'unresolved' });
   expect(putCalls()).toHaveLength(1);
 });

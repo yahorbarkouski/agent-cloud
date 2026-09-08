@@ -108,6 +108,7 @@ pnpm smoke:compose
 pnpm smoke:hosting
 pnpm smoke:backup-store
 pnpm smoke:backup-retention
+pnpm smoke:backup-recovery
 pnpm smoke:backups
 pnpm smoke:image
 pnpm smoke:builder

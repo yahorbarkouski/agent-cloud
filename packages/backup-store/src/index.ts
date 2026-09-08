@@ -287,7 +287,7 @@ export function createBackupWriter(
       value: BackupUploadIntent,
     ): Promise<{ kind: 'found'; receipt: BackupObjectReceipt } | { kind: 'unresolved' }> =>
       sanitized('recover', async () => {
-        const intent = s3.bind(value);
+        const intent = s3.bind(value, false);
         await s3.checkProtection();
         let keyMarker: string | undefined;
         let versionMarker: string | undefined;
@@ -328,8 +328,8 @@ export function createBackupWriter(
             const versionId = candidates[0];
             if (!versionId) return { kind: 'unresolved' };
             const receipt = backupObjectReceiptSchema.parse({ ...intent, versionId });
-            await s3.inspectMetadata(receipt);
-            await s3.readVersion(receipt);
+            await s3.inspectMetadata(receipt, false);
+            await s3.readVersion(receipt, undefined, false);
             return { kind: 'found', receipt };
           }
           if (

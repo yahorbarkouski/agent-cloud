@@ -7,6 +7,7 @@ import {
   CreateBucketCommand,
   DeleteObjectCommand,
   HeadObjectCommand,
+  ListObjectVersionsCommand,
   PutObjectCommand,
   PutObjectRetentionCommand,
   S3Client,
@@ -202,6 +203,21 @@ async function prove() {
         );
       }
       await setTimeout(Math.max(0, extendedUntil.getTime() - Date.now()) + 100);
+      stage = `${mode} expired read-only recovery`;
+      const historical = await writer.recover(intent);
+      if (historical.kind !== 'found' || historical.receipt.versionId !== receipt.versionId)
+        throw new Error('Fixture did not recover its exact expired version.');
+      const afterRecovery = await writerClient.send(
+        new ListObjectVersionsCommand({ Bucket: config.bucket, Prefix: receipt.key, MaxKeys: 32 }),
+      );
+      const versions = afterRecovery.Versions?.filter((version) => version.Key === receipt.key);
+      if (
+        afterRecovery.IsTruncated !== false ||
+        versions?.length !== 2 ||
+        !versions.some((version) => version.VersionId === receipt.versionId) ||
+        !versions.some((version) => version.VersionId === replacementVersion)
+      )
+        throw new Error('Fixture recovery changed stored versions.');
       stage = `${mode} expired writer delete denial`;
       await denied(
         writerClient.send(

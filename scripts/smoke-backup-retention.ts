@@ -34,6 +34,7 @@ import { createApp } from '../apps/control/src/app.js';
 import { prepareProtectedStoreFixture } from './support/backup-store-fixture.js';
 import { seedAccount, testDatabase } from '../tests/database.js';
 
+const recoveryScenario = process.env.AGENT_CLOUD_BACKUP_RECOVERY_SCENARIO === '1';
 const scratch = await mkdtemp(join(tmpdir(), 'acld-retention-cli-'));
 const database = await testDatabase();
 let fixture: Awaited<ReturnType<typeof prepareProtectedStoreFixture>> | undefined;
@@ -123,10 +124,18 @@ try {
       restore: () => Promise.reject(new Error('Retention smoke does not restore a guest.')),
       inspectRestore: () => Promise.resolve(null),
     });
+  const storageWriter = writer;
   const worker = createBackupWorker({
     connection: database.connection,
     config,
-    writer,
+    writer: {
+      ...writer,
+      upload: async (input) => {
+        const receipt = await storageWriter.upload(input);
+        if (recoveryScenario) throw new Error('Fixture lost upload acknowledgement');
+        return receipt;
+      },
+    },
     reader,
     withGuest,
     keyring: async () =>
@@ -191,7 +200,65 @@ try {
     .update(backups)
     .set({ record: { ...captured, retainUntil } })
     .where(eq(backups.id, id));
-  await worker.advance('backup', id);
+  if (recoveryScenario) {
+    await assert.rejects(worker.advance('backup', id), /lost upload acknowledgement/);
+    const [pending] = await database.connection.db.select().from(backups).where(eq(backups.id, id));
+    assert.ok(pending);
+    const pendingWork = backupWorkSchema.parse(pending.work);
+    assert.equal(pendingWork.kind, 'upload_submitted');
+    await database.connection.db
+      .update(backups)
+      .set({ work: { ...pendingWork, attempts: 5 } })
+      .where(eq(backups.id, id));
+    await worker.advance('backup', id);
+    assert.equal((await service.inspect(owner.principal, id)).state.kind, 'blocked');
+    while (Date.now() <= Date.parse(retainUntil) + 500) await setTimeout(100);
+    stage = 'operator CLI recovery after protection expiry without repeating PUT';
+    const operator = async (args: string[], configured = false) => {
+      try {
+        return (
+          await promisify(execFile)(
+            process.execPath,
+            ['--import', 'tsx', 'scripts/backup-recover.ts', ...args],
+            {
+              env: {
+                DATABASE_URL: database.databaseUrl,
+                ...(configured ? { ACLD_BACKUP_CONFIG: fixture?.configFile } : {}),
+              },
+              timeout: 30_000,
+              maxBuffer: 65536,
+            },
+          )
+        ).stdout;
+      } catch {
+        throw new Error('Operator backup recovery CLI failed.');
+      }
+    };
+    const inspected = z
+      .object({
+        receiptDigest: z.string().regex(/^[a-f0-9]{64}$/),
+        canResolveUpload: z.literal(true),
+      })
+      .parse(JSON.parse(await operator(['inspect', id])));
+    const recoveryRequest = join(scratch, 'recovery-request.json');
+    await writeFile(
+      recoveryRequest,
+      JSON.stringify({ backupId: id, expectedReceiptDigest: inspected.receiptDigest }),
+      { mode: 0o600 },
+    );
+    // Recovery only needs read/list privileges and the persisted envelope, not the wrapping key or reader file.
+    await Promise.all([config.readerCredentialsFile, config.keyringFile].map((path) => rm(path)));
+    const recovered = backupResponseSchema.parse(
+      JSON.parse(await operator(['apply', recoveryRequest], true)),
+    ).backup;
+    assert.equal(recovered.state.kind, 'captured');
+    assert.deepEqual(
+      backupResponseSchema.parse(JSON.parse(await operator(['apply', recoveryRequest], true)))
+        .backup,
+      recovered,
+    );
+    await worker.advance('backup', id);
+  } else await worker.advance('backup', id);
   const result = backupResponseSchema.parse(
     JSON.parse(await cli(['backup', 'inspect', id])),
   ).backup;
@@ -201,7 +268,9 @@ try {
   const work = backupWorkSchema.parse(row.work);
   assert.equal(work.kind, 'stored');
   await reader.inspect(work.receipt);
-  stage = 'CLI purge and separate retention process while Object Lock is active';
+  stage = recoveryScenario
+    ? 'purge after expired upload recovery'
+    : 'CLI purge and separate retention process while Object Lock is active';
   const purgeId = randomUUID();
   await cli(['backup', 'purge', id, '--id', purgeId, '--allow-data-loss']);
   const retentionConfig = join(scratch, 'retention.json');
@@ -242,15 +311,17 @@ try {
       throw new Error('Separate retention process failed.');
     }
   };
-  assert.equal((await run()).advanced, 0);
-  assert.equal((await service.purges.inspect(owner.principal, purgeId)).state.kind, 'waiting');
-  await reader.inspect(work.receipt);
+  if (!recoveryScenario) {
+    assert.equal((await run()).advanced, 0);
+    assert.equal((await service.purges.inspect(owner.principal, purgeId)).state.kind, 'waiting');
+    await reader.inspect(work.receipt);
+  }
   // Retention must not load writer, reader or wrapping-key files.
   writer.close();
   reader.close();
   await Promise.all(
     [config.writerCredentialsFile, config.readerCredentialsFile, config.keyringFile].map((path) =>
-      rm(path),
+      rm(path, { force: true }),
     ),
   );
   while (Date.now() <= Date.parse(retainUntil) + 500) await setTimeout(100);
@@ -271,7 +342,7 @@ try {
       encryptedProtectedUpload: true,
       purgeAfterCliExit: true,
       separateDeletionProcess: true,
-      retentionEnforced: true,
+      ...(recoveryScenario ? { recoveredExpiredUpload: true } : { retentionEnforced: true }),
       exactVersionAbsent: true,
       reservedBytes: 0,
       providerResourcesCreated: 0,

@@ -165,6 +165,23 @@ Run the command periodically, for example hourly from an operator timer. It perf
 
 The deleter needs bucket protection reads, object-version metadata/retention reads, and deletion restricted to the configured prefix and an explicit version. `ListBucket` lets a missing HEAD return404 instead of403. The pinned MinIO fixture requires both `DeleteObject` and `DeleteObjectVersion`, conditioned on a nonempty, non-null lowercase `s3:versionid`; the policy is in `packages/backup-store/src/fixture/policies.ts`. It denies unversioned deletion, writes, retention changes and bypass. This is tested MinIO policy, not a verified Hetzner IAM recipe. Verify equivalent provider restrictions before deployment.
 
+### Recover an unresolved upload
+
+A lost upload acknowledgement can remain blocked after the automatic verification attempts are exhausted. The operator can reconcile that existing intent through a separate command with database access:
+
+```sh
+pnpm backup:recover inspect <backup-uuid>
+pnpm backup:recover apply /absolute/private/recovery.json
+```
+
+Inspection works without storage keys. It returns the backup state, phase, reservation, a receipt digest and whether upload resolution applies. The owner-only request file contains `{ "backupId": "<uuid>", "expectedReceiptDigest": "<digest-from-inspect>" }`. Apply uses `ACLD_BACKUP_CONFIG` and its writer identity's read/list permissions. It does not load the reader file, wrapping keyring, guest runtime or provider credentials.
+
+Apply only resolves an existing pending/blocked `upload_submitted` intent. It never repeats a capture, PUT or restore. The existing worker lock excludes capture/restore/purge while it verifies the original object identity, metadata, bytes and recorded minimum retention. It can recover an exact historical version after the protection interval expires; this establishes readability, not ongoing deletion protection. An absent, ambiguous or invalid object leaves the state and full storage reservation unchanged.
+
+A successful reconciliation atomically records the verified ciphertext size and `captured` state, audits the receipt digest, and queues ordinary source-staging cleanup. The original grant may have expired or been revoked: reconciliation preserves the result of an already submitted upload and grants no customer access. Repeating the same receipt returns the captured result. Changed receipt inputs conflict, and a backup already admitted for purge cannot be recovered through this command.
+
+`pnpm smoke:backup-recovery` exercises a lost actual MinIO upload acknowledgement, exhausted automatic recovery, expired Object Lock, inspection and apply through separate operator processes without the reader/keyring files, idempotent completion, then customer CLI purge and exact cleanup. The archive bytes are a fixture; native PostgreSQL capture and isolated restore are verified separately.
+
 ## Verification and failure lessons
 
 `pnpm smoke:backup-store` uses a pinned, network-isolated local MinIO fixture to verify exact-version reads, both retention modes, denied protected deletion and separate writer/reader permissions. It also verifies expired exact-version deletion, extension handling, preserved newer versions and denied writer/deleter operations. `pnpm smoke:backup-retention` exercises real CLI capture/purge/inspection, encryption, local S3 and a separately spawned retention process without writer/reader/keyring files. Its short Object Lock interval is fixture-only; production capture requires at least one day. Neither creates a provider bucket. `pnpm smoke:backups` exercises customer CLI/API/worker, source Compose/PostgreSQL, encrypted local S3 storage, wrapping-key rotation and a second native Ubuntu guest. These VM fixtures run sequentially with other VM smokes and retain exact ownership records after a failure.

@@ -222,6 +222,7 @@ if (passed)
       readerWriteDenied: true,
       exactVersionPurgeVerified: true,
       retentionExtensionsHonored: true,
+      expiredReadOnlyRecoveryVerified: true,
       writerDeleteDenied: true,
       deleterWriteDenied: true,
       deleterBypassDenied: true,

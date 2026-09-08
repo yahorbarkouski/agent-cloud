@@ -34,7 +34,12 @@ import {
   type BackupGuest,
   type WithBackupGuest,
 } from '../apps/control/src/backup-work.js';
-import { backupControlConfigSchema } from '../apps/control/src/backup-records.js';
+import { createBackupRecovery } from '../apps/control/src/backup-recovery.js';
+import {
+  backupControlConfigSchema,
+  backupRecord,
+  backupWorkSchema,
+} from '../apps/control/src/backup-records.js';
 import { seedAccount, testDatabase } from './database.js';
 
 let fixture: Awaited<ReturnType<typeof testDatabase>>;
@@ -434,4 +439,76 @@ it('rechecks revoked authority before capture and prevents concurrent workers fr
     await first;
   }
   expect(effects.captures).toBe(2);
+});
+
+it('reconciles an exhausted upload without another PUT, keeps failures reserved, and survives grant revocation', async () => {
+  const [restoredTarget] = await fixture.connection.db.select().from(backupRestores).limit(1);
+  if (!restoredTarget) throw new Error('Expected verified target.');
+  const target = restoreResponseSchema.parse(
+    await (await api(`/v1/restores/${restoredTarget.id}`)).json(),
+  ).restore.machineId;
+  const capture = request();
+  await service.capture(owner.principal, target, capture);
+  const beforeUploads = effects.uploads;
+  loseUploadReply = true;
+  await expect(worker.advance('backup', capture.id)).rejects.toThrow('Lost S3 reply');
+  const [pending] = await fixture.connection.db
+    .select()
+    .from(backups)
+    .where(eq(backups.id, capture.id));
+  if (!pending) throw new Error('Missing upload intent.');
+  const work = backupWorkSchema.parse(pending.work);
+  if (work.kind !== 'upload_submitted') throw new Error('Expected unresolved upload.');
+  await fixture.connection.db
+    .update(backups)
+    .set({ work: { ...work, attempts: 5 } })
+    .where(eq(backups.id, capture.id));
+  await worker.advance('backup', capture.id);
+  let failRead = true;
+  let calls = 0;
+  const recovery = createBackupRecovery({
+    connection: fixture.connection,
+    recover: (intent) => {
+      calls++;
+      if (failRead) return Promise.reject(new Error('Storage unavailable'));
+      const object = objects.get(intent.attemptId);
+      return Promise.resolve(
+        object ? { kind: 'found', receipt: object.receipt } : { kind: 'unresolved' },
+      );
+    },
+  });
+  const inspection = await recovery.inspect(capture.id);
+  expect(inspection.canResolveUpload).toBe(true);
+  expect(inspection.backup.state.kind).toBe('blocked');
+  if (!inspection.receiptDigest) throw new Error('Missing immutable receipt digest.');
+  const input = { backupId: capture.id, expectedReceiptDigest: inspection.receiptDigest };
+  await expect(
+    recovery.apply({ ...input, expectedReceiptDigest: 'f'.repeat(64) }),
+  ).rejects.toMatchObject(failure('version_conflict'));
+  expect(calls).toBe(0);
+  await expect(recovery.apply(input)).rejects.toThrow('Storage unavailable');
+  expect((await recovery.inspect(capture.id)).reservedBytes).toBe(1_048_576);
+  expect((await recovery.inspect(capture.id)).backup.state.kind).toBe('blocked');
+  failRead = false;
+  await fixture.connection.db
+    .update(grants)
+    .set({ revokedAt: new Date() })
+    .where(eq(grants.id, owner.principal.grantId));
+  const result = await recovery.apply(input);
+  expect(result.state.kind).toBe('captured');
+  expect((await recovery.inspect(capture.id)).reservedBytes).toBe(plaintext.length);
+  expect(await recovery.apply(input)).toEqual(result);
+  expect(calls).toBe(2);
+  expect(effects.uploads).toBe(beforeUploads + 1);
+  await worker.advance('backup', capture.id);
+  const [finished] = await fixture.connection.db
+    .select()
+    .from(backups)
+    .where(eq(backups.id, capture.id));
+  if (!finished) throw new Error('Missing recovered backup.');
+  expect(backupRecord(finished).state.kind).toBe('captured');
+  expect(backupWorkSchema.parse(finished.work)).toMatchObject({
+    kind: 'stored',
+    guestCleanup: 'done',
+  });
 });

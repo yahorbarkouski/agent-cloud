@@ -59,6 +59,8 @@
     "setup:hosting-gateway": "pnpm build && tsx scripts/setup-hosting-gateway.ts",
     "smoke:backups": "pnpm build:guest && AGENT_CLOUD_ACCESS_SCENARIO=1 AGENT_CLOUD_BACKUP_SCENARIO=1 tsx scripts/smoke-guest.ts",
     "smoke:backup-retention": "pnpm build && tsx scripts/smoke-backup-retention.ts",
+    "smoke:backup-recovery": "pnpm build && AGENT_CLOUD_BACKUP_RECOVERY_SCENARIO=1 tsx scripts/smoke-backup-retention.ts",
+    "backup:recover": "pnpm build && tsx --env-file-if-exists=.env scripts/backup-recover.ts",
     "backup:retention": "node apps/control/dist/backup-retention-main.js",
     "smoke:backup-store": "tsx packages/backup-store/src/fixture/smoke.ts"
   },

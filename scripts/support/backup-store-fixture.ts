@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { setTimeout } from 'node:timers/promises';
 import { z } from 'zod';
@@ -46,6 +46,7 @@ export async function prepareProtectedStoreFixture(input: { scratch: string }) {
   const id = randomUUID();
   const name = `agent-cloud-backup-${id.slice(0, 8)}`;
   const ownership = resolve(`.local/backup-store-${id}.json`);
+  await mkdir(dirname(ownership), { recursive: true, mode: 0o700 });
   const directory = join(input.scratch, 'backup-store');
   await mkdir(directory, { mode: 0o700 });
   const administrator = {
