@@ -1,12 +1,12 @@
 # Finish the customer cloud
 
-Prepared on 2026-09-08 against source `705101eb4a990948f31fd57e1c16f28aefe176af`. This is the remaining delivery plan for the original non-Stripe product. It replaces the old milestone ordering, not the working implementation. [CONTEXT.md](CONTEXT.md) remains the single current-state handoff.
+Prepared on 2026-09-08 against source `705101eb4a990948f31fd57e1c16f28aefe176af`; narrowed after tracing the production code at `222dfeb`. This is the remaining delivery plan for the original non-Stripe product. It replaces the old milestone ordering, not the working implementation. [CONTEXT.md](CONTEXT.md) remains the single current-state handoff.
 
 ## The result we owe the customer
 
 An admitted owner can give an existing coding agent a normal project containing a frontend, backend and PostgreSQL. With the published CLI, a public API origin and scoped customer credentials, that agent can deploy the project onto one cheap Hetzner VM, return a working HTTPS URL, inspect it, update it without losing its data, recover it from a protected backup and remove the infrastructure. The operator prepares the cloud once; deploying each customer application must not require operator database edits, private scripts or access to the platform source checkout.
 
-Today that complete experience is unavailable. An internal reference application passed a real Hetzner deployment, but its infrastructure was deliberately deleted. Customer Compose and recovery have connected native and container evidence. No current public customer service or complete customer Hetzner recovery run is recorded. A published CLI and passing component checks do not close that gap.
+The customer deployment path is already implemented and connected in the production code. It is not currently available through a running, configured hosted service. An internal reference application passed a real Hetzner deployment, but its infrastructure was deliberately deleted. Customer Compose and recovery have connected native and container evidence. The final public customer deployment/recovery run is still unverified. These are different gaps: deploying the service, improving its first-use experience, and establishing provider evidence. Do not interpret them as missing login, provisioning, SSH, Compose or routing implementations.
 
 There are two delivery points:
 
@@ -25,6 +25,22 @@ The first point is the immediate milestone. Do not make S3, a dashboard, further
 - Operator-admitted GitHub identities with explicit capacity policies for the non-billing preview. No public internal bootstrap, payments, credit ledger or Stripe.
 
 We are not building an agent, an application framework, a universal source detector, Kubernetes, a serverless runtime, a warm pool or a shared build service. Agents can prepare ordinary Compose files. Customer builds run on their own VM or use pinned prebuilt images. A single VM is a failure domain; code recovery does not reverse arbitrary database migrations.
+
+## Production code trace: what delivery 1 does not need to rebuild
+
+The following trace was checked in source, beyond CLI help or documentation claims. It establishes connected implementation, not a claim that the final hosted configuration has passed.
+
+| Path                        | Existing connection                                                                                                                                                                                                                                                                                                              | Required delivery-1 action                                                                                                                                                         |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Customer sign-in            | [CLI login](../apps/cli/src/login.ts) and [SDK exchange](../packages/sdk/src/login.ts) call the real GitHub device flow; [API startup](../apps/control/src/api.ts) constructs the production verifier and customer login service                                                                                                 | Supply the existing OAuth configuration at the public origin and admit the owner through the existing operator command                                                             |
+| Machine lifecycle           | [CLI](../apps/cli/src/index.ts) calls the SDK/API; [customer runtime](../apps/control/src/customer-runtime.ts) constructs `HetznerProvider`, allocation-bound image selection, enrollment and readiness; [worker](../apps/control/src/worker.ts) runs the real lifecycle tasks                                                   | Deploy the runtime with current credentials, retained signed image, generation, firewall and explicit caps; no new provisioning engine                                             |
+| Customer SSH and deployment | [Compose CLI](../apps/cli/src/compose.ts) uploads the context through [invokeGuest](../apps/cli/src/guest-command.ts), which uses a revocable verified customer SSH session; [guest CLI](../packages/guestctl/src/cli.ts) dispatches to the existing Compose manager/systemd worker                                              | Configure the access gateway and compatible guest image; use existing apply/wait/inspect/logs/recover commands                                                                     |
+| HTTPS publication           | [Customer runtime](../apps/control/src/customer-runtime.ts) creates hosting when configured; [API routes](../apps/control/src/app.ts) expose customer publication, and the worker/public gateway apply the desired route                                                                                                         | Supply real domains, gateway identities/addresses and public ACME configuration; verify browser behavior                                                                           |
+| Agent support               | [CLI agent commands](../apps/cli/src/agent.ts) expose/install bundled instructions; customer discovery is wired in the API                                                                                                                                                                                                       | Put the actual service origin and a short deploy/update/cleanup walkthrough beside the existing skill; no new agent integration protocol                                           |
+| Full-stack example          | [Reference backend](../packages/guestctl/src/reference-app.ts), [frontend/Compose recipe](../packages/guestctl/src/reference-recipe.ts) and [customer hosting scenario](../scripts/support/hosting-scenario.ts) already provide the app and customer command sequence                                                            | Package these existing app sources as a normal example, with the customer gateway's loopback binding; remove dependence on the ignored guestctl build, not rewrite the application |
+| Operator deployment         | [Container entrypoint](../infra/container/entrypoint.mjs) already exposes API, worker, migration, gateways, admission and recovery; [customer Compose](../infra/compose/customer.yaml) assembles them. Existing `setup:pki`, `setup:runtime`, `setup:hosting-gateway`, `image:build` and `customer` commands supply setup pieces | Run the existing commands in a documented order and fix the specific supervision/mount/configuration issues below. A general installer is not a prerequisite                       |
+
+Most immediate work is deployment/configuration, with bounded packaging corrections and customer documentation. New implementation is justified by a specific missing behavior or a failure observed while configuring this path. Never rebuild an existing feature because its final live verification remains open.
 
 ## What exists and what must still be delivered
 
@@ -49,8 +65,8 @@ Evidence below is scoped to the recorded implementation. Native/container proof 
 
 These are work items, not reasons to redesign the platform.
 
-1. **No ordinary example directory.** `scripts/support/compose-scenario.ts` constructs its app using an ignored guest-build pointer and a copied `guestctl` bundle. This is useful verification infrastructure, but it is not a normal project a customer can clone. Publish a small independent example and use its same bytes for acceptance.
-2. **Incomplete first-install path.** `docs/self-host-customer.md` starts with several private directories, an existing image publication, runtime identity, signer configuration, generation and firewall. Existing setup commands provide pieces; the packaged installation must connect their ordering and validate their outputs.
+1. **Example packaging.** The frontend, backend and PostgreSQL recipe exist. `scripts/support/compose-scenario.ts` constructs their deployment using an ignored guest-build pointer and a copied `guestctl` bundle. Expose the same application as a normal customer context and reuse it in acceptance. The absence of an example folder does not block arbitrary supported customer Compose source.
+2. **Operator configuration and first-use documentation.** `docs/self-host-customer.md` starts with private directories, an image publication, runtime identity, signer configuration, generation and firewall. Existing setup commands provide the functionality; complete the selected host's configuration using them and record their order. A single-input installer or new installation journal is optional later simplification, not required for delivery 1.
 3. **Incomplete long-running host setup.** `infra/compose/customer.yaml` has no service restart policy and does not package CA startup. Add supervision for long-running roles and a documented CA deployment using the existing PKI tooling. One-off initialization/migration commands must never become restart loops. Verify a real host reboot.
 4. **Credential mounts need to match role claims.** The API and worker currently share the entire `control` directory. Split mount contents by the credentials each role needs, including keeping GitHub OAuth secrets out of the worker. Gateways must retain their current separation from provider/DB/signing secrets. Container separation is not protection against host-root compromise.
 5. **Deployment context needs clear preparation.** The existing uploader includes every regular file, with an 8 MiB/1,024-file limit and no implicit ignore rules. The walkthrough must prepare an explicit context and keep `.git`, dependencies and unrelated credentials out. Use prebuilt images or documented SFTP for larger projects. Do not silently raise upload limits or invent automatic framework conversion.
@@ -93,13 +109,13 @@ Use a stable control origin and a distinct application domain as required by the
 
 Work in this order, connecting each change into the same acceptance scenario:
 
-1. Add `examples/full-stack/`: an ordinary TypeScript backend, static frontend, PostgreSQL, Dockerfiles, lockfile, health checks, named database volume, restart policies and one Compose file. The UI shows a release version and lets the user save/read a note so persistence is visible. Bind only its frontend HTTP listener to VM loopback. Generate its database secret into the explicit private deployment context, preserve it on update and document exclusions. Keep this example independent of `guestctl`, `.local` and test helpers.
-2. Validate that exact context with the existing Compose implementation before allocating infrastructure. Add an example-preparation command only where needed for private secrets/reproducible context; it must not become a new application deployment abstraction. Add explicit CPU/memory/log bounds suitable for the selected small VM. Test a normal source build and document pinned-image deployment as the alternative.
-3. Connect a repeatable operator installation around the existing setup/image/recovery commands. Use one private configuration input and a durable installation receipt naming public endpoints, runtime/image digests and owned resources, never secrets. Validate paths, file ownership, ports, architecture, explicit caps and required services before paid effects. Re-running must preserve keys and resume recorded work rather than generate a second installation.
+1. Package the existing reference backend, frontend and Compose recipe under `examples/full-stack/`. Retain the visible revision, persisted visit counter, health checks, named database volume, restart policies and resource/log limits already present. Use the customer hosting scenario's loopback frontend binding, not the internal reference's direct public 80/443 bindings. Give the example its own small application entrypoint/Dockerfile and lockfile instead of copying the entire guestctl bundle. Preserve generated database secrets on update. Do not build a new note application or a new deployment abstraction.
+2. Validate the repackaged context through the existing Compose implementation before paid work. Document the current 8 MiB/1,024-file context contract, application secret handling and pinned-image alternative. Reuse the current skill and CLI; shorten the first-use instructions to installing, signing in, choosing capacity, deploying and opening HTTPS. No changes to machine/Compose/route commands are assumed necessary.
+3. Configure the selected hosted installation with the existing PKI, runtime identity, gateway, image, migration/generation and customer admission commands. Record private configuration and existing resource/operation receipts so interrupted setup resumes safely. Validate paths, file ownership, ports, architecture, caps and required services. Add only a thin configuration check/helper if a concrete manual failure justifies it; do not block delivery on a general installer, new state machine or new installation database.
 4. Install the trusted host with current code. For a new empty database, migrate and initialize its generation before creating admission or image records. For any preserved/restored installation, use the existing fenced recovery/upgrade path; do not reinitialize it. Keep the preserved development DB/CA/identity untouched unless a later migration explicitly needs them. Configure private CA reachability, public TLS, process supervision and narrow secret mounts. Make authenticated image/guest enrollment reachable at the correct setup phase; do not make the first image depend on an already-ready customer runtime. Customer login remains unavailable in factory mode.
 5. Run the image factory through the existing durable journal, build and verify a current guest image containing customer SSH, run, Compose, routing and backup helpers, and retain the signed publication. Use the existing cheap recorded type/region when available and within the current quote; no silent fallback. Remove builder/verifier resources after publication. Start customer mode with that exact release and customer firewall. Keep image-factory and customer access modes separate.
 6. Configure real GitHub identity and admit the owner's verified numeric GitHub ID with the exact project, size/region, machine count, expiry and spending policy. Start with a bounded invited preview. Use `acld login --server <actual-origin>` and issue a project-scoped deployment credential. Never return an internal bootstrap token as the customer's account.
-7. Run the command path below against the real service. Store returned IDs outside source before subsequent operations. Retry the same request/release IDs after lost replies. Open the app in a real browser, write a unique marker, exit the CLI and close the deploying session, then reconnect from a fresh process. Update the visible version and prove the marker persists.
+7. Run the command path below against the real service. Store returned IDs outside source before subsequent operations. Retry the same request/release IDs after lost replies. Open the app in a real browser, increment and read the persisted counter, exit the CLI and close the deploying session, then reconnect from a fresh process. Update the visible version and prove the counter persists. Correct concrete failures in the existing layers; a failed live check is not a reason to start a replacement subsystem.
 8. Exercise destroy on the disposable deployment and independently verify VM/IP cleanup and reservation release. Retained shared image/firewall/platform resources are separate obligations, not leaks or customer-owned deletions. For hands-on use, leave or recreate a sample only within an explicitly recorded running-cost budget and expiry; provide its URL and destroy instructions. Never present a deleted URL as a current demo.
 
 ### Customer commands we must make usable
@@ -118,21 +134,24 @@ acld machine create demo --project <project-id> --size small --region <allowed-r
 acld operation wait <operation-id>
 acld machine inspect <machine-id>
 
-acld compose apply <machine-id> demo --source <prepared-context> --file compose.yaml --release <saved-release-uuid>
-acld compose wait <machine-id> demo
 acld route publish <machine-id> --name demo --port 3000 --key <saved-route-uuid>
 acld route wait <returned-hostname>
+# Prepare the example context with APP_HOSTNAME set to the returned hostname.
+acld compose apply <machine-id> demo --source <prepared-context> --file compose.yaml --release <saved-release-uuid>
+acld compose wait <machine-id> demo
 acld compose inspect <machine-id> demo
 acld compose logs <machine-id> demo --service backend
 ```
 
-The example will expose loopback port 3000. The frontend calls the backend through the same public origin; only the backend reaches PostgreSQL. A successful route operation must be followed by an actual HTTPS read/write, because proxy configuration is not application health. Updating uses the existing `--expected-release`; cleanup uses inspected machine/route versions and explicit data-loss authorization. The final walkthrough must show those concrete commands and all returned IDs without requiring the customer to read architecture documents.
+The packaged example will expose loopback port 3000. The frontend calls the backend through the same public origin; only the backend reaches PostgreSQL. The existing reference backend checks `APP_HOSTNAME` on writes: reuse the hosting scenario's ordering by reserving/publishing the hostname before finalizing that environment value and applying Compose. A configured route can briefly return an application error before deployment succeeds. A successful route operation must be followed by an actual HTTPS read/write, because proxy configuration is not application health. Updating uses the existing `--expected-release`; cleanup uses inspected machine/route versions and explicit data-loss authorization. The final walkthrough must show those concrete commands and returned IDs without requiring architecture documents.
 
 **Delivery evidence:** exact source/image/CLI revisions, real customer principal and scoped policy without tokens, operation/release IDs, trusted URL, app version before/after, persisted marker, client disconnect/reconnect observation and ownership/cleanup inventory. Return these as product results, not a test count.
 
 ## Milestone 2: operate, interrupt and recover a deployment
 
 **Acceptance:** the same customer can transfer files, run a migration once despite disconnecting, recover a failed application release, revoke an agent, and see the correct remaining reservation. Running application services survive client and control API disconnection.
+
+The operation, recipe and recovery commands in milestones 2–4 already exist. Those milestones primarily configure their live dependencies and verify the selected deployment, with changes limited to demonstrated failures or explicitly identified operating gaps.
 
 - Exercise file put/get with a content digest and private-file handling through actual SFTP. Do not require permanent SSH keys or unverified host trust.
 - Submit a durable command, disconnect after submission, reconnect, inspect its retained result and resume logs. Re-submit the same ID to prove no second execution. An interrupted arbitrary migration stays inspectable and is not automatically replayed.
@@ -178,7 +197,7 @@ The example will expose loopback port 3000. The frontend calls the backend throu
 
 **Acceptance:** a clean operator installation can run the same customer scenario from published files, survive a host restart, perform a supported upgrade, and recover the control installation and private identities with stale authority fenced.
 
-- Finish the installer and self-host runbook introduced in milestone 1. It must work without `.local` history, a proprietary activation service or manual SQL patches. Produce private configuration and installation receipts through explicit operator commands, not an unauthenticated setup website.
+- Finish the self-host runbook using the setup commands exercised in milestone 1. It must work without `.local` history, a proprietary activation service or manual SQL patches. Add a packaged configuration helper only where repeated manual setup causes concrete errors. Preserve existing identities and operation receipts; a new general installer is not a required product component. Never expose unauthenticated public setup.
 - Verify current container/guest protocol compatibility, initialization retry behavior and recovery from an incomplete setup. Retain immutable runtime/image inputs. Upgrade the deployed checkpoint only after a protected database/configuration backup, run required migrations explicitly and verify the same customer app afterward. Do not invent an upgrade path from a version that never shipped that configuration.
 - Run control PostgreSQL backup/WAL archival and gateway configuration/certificate backups on the chosen real host. Prove restoration in isolation with independently recovered bootstrap encryption material, backup keyring, image signing metadata and CA material. A VM disk backup alone is insufficient.
 - Use the existing external generation and execution lease. Fence old processes and their provider/signing/storage mutation access, reconcile owned provider resources and post-checkpoint effects, then resume the chosen control instance. Restored revoked credentials and old backup schedules must not become live authority.
@@ -209,13 +228,12 @@ The agreed scope is complete only when this acceptance passes and the operationa
 Keep existing boundaries. Names marked **new** are proposed additions, not commands or files available today. Add a new module only when the connected change needs it.
 
 ```text
-examples/full-stack/                         NEW ordinary customer project
+examples/full-stack/                         NEW packaging of the existing reference app
   README.md, compose.yaml, Dockerfile(s)
   backend/, frontend/, private-context preparation
 apps/control/src/
-  customer-install-main.ts                   NEW packaged operator entrypoint
-  customer-install.ts                        NEW connect existing setup/recovery helpers
-  customer-main.ts, customer-login.ts         existing admission and identity
+  customer-main.ts, control-recovery-main.ts  existing operator entrypoints
+  customer-login.ts                          existing admission and identity
   customer-runtime.ts, runtime-config.ts      existing image/runtime selection
   hosting*.ts, backup*.ts, control-recovery*   existing runtime and recovery
 apps/cli/src/                                existing commands; fill demonstrated UX gaps
@@ -226,7 +244,8 @@ packages/hetzner/, backup-store/, pki/        existing provider/crypto transport
 apps/public-gateway/, access-gateway/        existing gateway ownership and renewal
 infra/compose/customer.yaml                  finish supervision and role mounts
 infra/container/                            package installer and current runtime
-scripts/customer-acceptance.ts               NEW resumable live customer scenario driver
+scripts/setup-*.ts, image-build.ts           existing operator setup/publication commands
+scripts/customer-acceptance.ts               optional thin driver reusing existing scenarios
 tests/                                      focused gap regressions, reuse current fixtures
 skills/agent-cloud/SKILL.md                   customer agent workflow
 docs/customer-quickstart.md                  NEW short real-cloud user walkthrough
@@ -297,4 +316,4 @@ Cleanup after a test is not the same as leaving a service available for the user
 - [ ] A fresh existing-agent session completes the agreed workflow from published artifacts and customer authority alone.
 - [ ] Active resources, any retained objects, actual blockers and unsupported behaviors are accurately recorded; no required blocked capability is called complete.
 
-Start with milestone 1: extract the ordinary example, connect repeatable customer installation, and deploy it through a real customer login. Deliver that usable result before expanding the remaining recovery work.
+Start with milestone 1: configure and run the existing customer stack, package the existing reference app for ordinary use, and verify the existing CLI path through a real customer login. Deliver that usable result before expanding the remaining recovery work.

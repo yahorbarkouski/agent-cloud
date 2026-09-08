@@ -4,11 +4,11 @@ Updated 2026-09-08. Work on `yahor/agent-cloud` under AGENTS.md. The original Ty
 
 ## Current task and next acceptance
 
-The user asked whether they can deploy their own project today. The answer is **not through a ready customer service yet**. They do not want local scenarios presented as the product. They then requested a comprehensive remaining plan. [COMPLETION_PLAN.md](COMPLETION_PLAN.md), based on source `705101e`, now owns delivery order, acceptance scenarios, files and budgets. This checkpoint changes documentation only; no runtime or infrastructure work was performed. Historical detail remains in git and subsystem docs.
+The user corrected the plan: most functionality already exists, so understand and reuse it. A production source trace at `222dfeb` confirms customer GitHub login, actual Hetzner lifecycle, SSH/Compose and hosting are already wired in API/worker entrypoints. **The deployment implementation exists; the ready hosted customer service is not running.** Do not describe those as the same gap. [COMPLETION_PLAN.md](COMPLETION_PLAN.md) now includes the code trace and narrows delivery 1 to configuration, small packaging corrections, customer guidance and final live verification. This checkpoint changes documentation only and reads provider inventory; no runtime or provider mutations. Historical detail remains in git and subsystem docs.
 
-**Next:** milestone 1 of that plan. Publish an ordinary `examples/full-stack` context independent of test helpers; connect repeatable customer installation; configure a stable public endpoint and current retained guest image; then use real GitHub/customer authority to deploy, disconnect, reconnect, update persistent data and verify cleanup. Deliver actual customer commands and HTTPS when usable. S3 is later and must not block first deployment.
+**Next:** milestone 1 of that plan. Configure the hosted stack using existing setup/image/admission commands, correct supervision and secret mounts, and expose the existing reference app as an ordinary `examples/full-stack` context. Then use the current CLI and real GitHub/customer authority to deploy, disconnect, reconnect, update persistent data and verify cleanup. Deliver actual customer commands and HTTPS. S3 and a general-purpose installer must not block first deployment; no new login, provisioning, deployment or routing subsystem is required.
 
-Concrete gaps: customer Compose lacks restart policy and CA setup; API/worker mount the same control-secret directory; installation ordering/configuration remain manual; the current Compose example copies guestctl from `.local`. Fix these connected gaps using existing foundations. Prepare a continuing host/demo quote and lifetime because only disposable test caps are recorded. Domain choice and independent recovery-copy destination are also unresolved.
+Concrete gaps: customer Compose lacks restart policy and CA service deployment; API/worker mount the same control-secret directory; installation ordering/configuration remain manual; the current Compose example copies guestctl from `.local`. Reuse the existing PKI setup and reference counter app, including its existing resource/health/persistence rules. Do not write a new note app or require new installer modules. The reference backend checks `APP_HOSTNAME`; reserve its route first, then set that hostname in the prepared context, as the existing hosting scenario does. Prepare a continuing host/demo quote and lifetime because only disposable test caps are recorded. Domain choice and independent recovery-copy destination remain unresolved.
 
 ## What works and evidence
 
@@ -31,7 +31,7 @@ Durable lessons: wait for an actual SSH banner before trust scanning; check fixt
 
 ## Resources, costs and cleanup
 
-No paid resources were created by this plan. Last recorded inventory `.local/hetzner-customer-read-check-2026-09-08.json` at06:53:23Z reports zero servers/IPs/snapshots/firewalls/SSH keys. Recheck before paid execution. Previous owned Docker/native fixtures were cleaned; shared caches remain.
+Read-only inventory at2026-09-08T11:39:11Z confirms zero development servers/IPs/snapshots/firewalls/SSH keys: `.local/customer-path-inventory-1788867551061.json`. No paid resources were created. Recheck before later paid execution. Previous owned Docker/native fixtures were cleaned; shared caches remain.
 
 Preserve development PG `agent-cloud-dev-postgres-1` localhost55439, CA `agent-cloud-pki-ca-1` https://localhost:9449, `.local/pki` and `.local/runtime-identity`. API15176/worker15190 were running older code at the prior checkpoint; recheck PID/command-name only. Main DB is through0026. Do not silently migrate it or replace its identity.
 
